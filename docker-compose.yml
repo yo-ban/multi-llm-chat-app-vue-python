@@ -1,0 +1,31 @@
+services:
+  frontend:
+    build: 
+      context: ./frontend
+      args:
+        - VITE_API_BASE_URL=/api
+    ports:
+      - "10000:80"
+    # environment:
+    #   - VITE_API_BASE_URL=/api  # この行を変更
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+  backend:
+    build: ./backend
+    expose:
+      - "5200"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 5200 --reload
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge

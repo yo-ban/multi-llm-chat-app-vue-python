@@ -1,0 +1,133 @@
+/* code-theme.css */
+pre.hljs {
+  position: relative;
+  padding-top: 30px;
+  margin-bottom: 1em;
+}
+
+.code-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.4em 1em 0.4em 1em;
+  background: #2b2b2b;
+  border-top-left-radius: 5px;
+  border-top-right-radius: 5px;
+  z-index: 1;
+}
+
+.language {
+  color: #dcdcdc;
+  font-size: 0.8em;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.copy-button {
+  background: none;
+  border: none;
+  color: #dcdcdc;
+  font-size: 0.8em;
+  cursor: pointer;
+}
+
+.copy-button:hover {
+  color: #ffffff;
+}
+
+pre.hljs code {
+  display: block;
+  padding: 1em;
+  padding-bottom: 0.5em;
+  overflow-x: auto;
+}
+
+.hljs {
+  display: block;
+  overflow-x: auto;
+  padding: 1em;
+  background: #3a3a3a;
+  color: #dcdcdc;
+  font-family: 'Fira Code', monospace;
+  font-size: 1em;
+  line-height: 1.4;
+  border-radius: 5px;
+  max-width: 100%;
+  box-sizing: border-box;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  word-break: break-all;
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: #2ba506;
+  font-style: italic;
+}
+
+.hljs-doctag,
+.hljs-keyword,
+.hljs-formula {
+  color: #c678dd;
+}
+
+.hljs-section,
+.hljs-name,
+.hljs-selector-tag,
+.hljs-deletion,
+.hljs-subst {
+  color: #e06c75;
+}
+
+.hljs-literal {
+  color: #56b6c2;
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-attribute,
+.hljs-meta-string {
+  color: #98c379;
+}
+
+.hljs-built_in,
+.hljs-class .hljs-title {
+  color: #e6c07b;
+}
+
+.hljs-attr,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-type,
+.hljs-selector-class,
+.hljs-selector-attr,
+.hljs-selector-pseudo,
+.hljs-number {
+  color: #d19a66;
+}
+
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link,
+.hljs-meta,
+.hljs-selector-id,
+.hljs-title {
+  color: #61aeee;
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: bold;
+}
+
+.hljs-link {
+  text-decoration: underline;
+}

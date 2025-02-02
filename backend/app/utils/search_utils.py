@@ -1,0 +1,179 @@
+import json, os
+from typing import List, Dict, Any, Optional
+import aiohttp
+from google import genai
+from google.genai.types import Tool, GenerateContentConfig, GoogleSearch, GroundingMetadata, SafetySetting, HarmCategory, HarmBlockThreshold, HarmBlockMethod
+from app.models.models import SearchResult
+from app.utils.logging_utils import get_logger, log_error, log_info, log_warning, log_debug
+
+# Get logger instance
+logger = get_logger()
+
+async def resolve_redirect_url(url: str) -> str:
+    """
+    Resolve a redirect URL to its final destination
+    
+    Args:
+        url: The redirect URL to resolve
+        
+    Returns:
+        The final destination URL
+    """
+    if not url.startswith("https://vertexaisearch.cloud.google.com/"):
+        return url
+        
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, allow_redirects=True) as response:
+                # Get the final URL after all redirects
+                final_url = str(response.url)
+                return final_url
+    except Exception as e:
+        log_error(f"Error resolving URL {url}: {str(e)}")
+        return url
+
+async def extract_sources_from_metadata(metadata: GroundingMetadata, num_results: int) -> List[SearchResult]:
+    """
+    Extract sources from Gemini's grounding metadata
+    
+    Args:
+        metadata: Grounding metadata from Gemini response
+        num_results: Maximum number of results to return
+        
+    Returns:
+        List of SearchResult objects
+    """
+    source_map: Dict[str, SearchResult] = {}
+    
+    chunks = metadata.grounding_chunks
+    supports = metadata.grounding_supports
+    
+    for index, chunk in enumerate(chunks):
+        web_info = chunk.web
+        url = web_info.uri
+        title = web_info.title
+        
+        if url and title:
+            # Resolve the redirect URL
+            resolved_url = await resolve_redirect_url(url)
+            
+            if resolved_url not in source_map:
+                # Find snippets that reference this chunk
+                snippets = []
+                for support in supports:
+                    if index in support.grounding_chunk_indices:
+                        segment = support.segment
+                        if segment and segment.text:
+                            snippets.append(segment.text)
+                
+                source_map[resolved_url] = SearchResult(
+                    title=title,
+                    link=resolved_url,
+                    snippet=" ".join(snippets) if snippets else ""
+                )
+    
+    results = list(source_map.values())[:num_results]
+    return results
+
+async def web_search(query: str, num_results: int = 5) -> List[SearchResult]:
+    """
+    Perform a web search using Gemini's built-in search capability
+    
+    Args:
+        query: Search query string
+        num_results: Number of results to return (default: 5)
+        
+    Returns:
+        List of SearchResult objects
+    """
+    try:
+        log_info(f"Performing web search", {"query": query, "num_results": num_results})
+        
+        from dotenv import load_dotenv
+        load_dotenv()
+        client = genai.Client(
+            api_key=os.getenv('GEMINI_API_KEY'),
+            http_options={'api_version': 'v1alpha'}
+        )
+        model_id = "gemini-2.0-flash-exp"
+
+        google_search_tool = Tool(
+            google_search=GoogleSearch()
+        )
+
+        safety_settings = [
+            SafetySetting(
+                category=HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
+                threshold=HarmBlockThreshold.BLOCK_NONE
+            ),
+            SafetySetting(
+                category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                threshold=HarmBlockThreshold.BLOCK_NONE
+            ),
+            SafetySetting(
+                category=HarmCategory.HARM_CATEGORY_HARASSMENT,
+                threshold=HarmBlockThreshold.BLOCK_NONE
+            ),
+            SafetySetting(
+                category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                threshold=HarmBlockThreshold.BLOCK_NONE
+            ),
+            SafetySetting(
+                category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                threshold=HarmBlockThreshold.BLOCK_NONE
+            )
+        ]
+
+        # First, get search results
+        response = client.models.generate_content(
+            model=model_id,
+            contents=f"質問の言語に合わせて検索してください。\n\n質問:{query}",
+            config=GenerateContentConfig(
+                tools=[google_search_tool],
+                response_modalities=["TEXT"],
+                safety_settings=safety_settings
+            )
+        )
+
+        # Extract and process grounding metadata
+        metadata = response.candidates[0].grounding_metadata
+        if not metadata:
+            log_warning("No search results found", {"query": query})
+            return []
+            
+        return await extract_sources_from_metadata(metadata, num_results)
+        
+    except Exception as e:
+        log_error(f"Gemini search error: {str(e)}", additional_info={"query": query, "num_results": num_results})
+        return [SearchResult(title="Error", link="", snippet="Error occurred while performing web search")]
+
+def get_search_tools() -> List[Dict[str, Any]]:
+    """
+    Get the function definitions for web search tools
+    
+    Returns:
+        List of tool definitions for OpenAI function calling
+    """
+    return [{
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "If you need information that cannot normally be answered, search the web for information. If a user's question includes words such as 「search the web.」 be sure to use this function.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The search query to find relevant information. The query is processed by taking into account the language used by the questioner."
+                    },
+                    "num_results": {
+                        "type": "integer",
+                        "description": "Number of search results to return, default is 5",
+                    }
+                },
+                "required": ["query"],
+                "additionalProperties": False
+            },
+            "strict": False
+        }
+    }] 
