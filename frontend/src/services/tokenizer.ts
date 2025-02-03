@@ -1,14 +1,14 @@
-import { Tiktoken } from 'tiktoken/lite';
+import { encode } from 'gpt-tokenizer/model/gpt-4o';
 
-import claude from '@/assets/claude.json';
-
+/**
+ * Count tokens in the given text using Claude's tokenizer
+ * @param text Text to count tokens for
+ * @returns Number of tokens in the text
+ */
 export function countTokens(text: string): number {
-  const tokenizer = getTokenizer();
-  const encoded = tokenizer.encode(text.normalize('NFKC'), 'all');
-  tokenizer.free();
-  return encoded.length;
+  // Normalize text to NFKC form for consistent token counting
+  const normalizedText = text.normalize('NFKC');
+  return encode(normalizedText).length;
 }
 
-export function getTokenizer(): Tiktoken {
-  return new Tiktoken(claude.bpe_ranks, claude.special_tokens, claude.pat_str);
-}
+// Note: getTokenizer function is removed as it's no longer needed with gpt-tokenizer
