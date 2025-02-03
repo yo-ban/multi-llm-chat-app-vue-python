@@ -39,6 +39,9 @@
           <button v-if="isEditing" @click="cancelEdit" class="action-button">
             <font-awesome-icon icon="times" />
           </button>
+          <button @click="copyMessage" class="action-button" v-if="role === 'assistant' && !isEditing && !streaming">
+            <font-awesome-icon icon="copy" />
+          </button>
           <button @click="$emit('resend-message', id)" class="action-button" v-if="role === 'user' && !isEditing && !streaming">
             <font-awesome-icon icon="redo" />
           </button>
@@ -61,8 +64,10 @@ import '@/assets/styles/code-theme.css';
 import { PERSONAS } from '@/constants/personas';
 import { usePersonaStore } from '@/store/persona';
 import { useConfirm } from 'primevue/useconfirm';
+import { useToast } from 'primevue/usetoast';
 
 const confirm = useConfirm();
+const toast = useToast();
 
 const props = defineProps({
   role: {
@@ -254,6 +259,31 @@ function handleCopyButtonClick(event: MouseEvent) {
 
 function deleteImage(index: number) {
   emit('delete-image', props.id, index);
+}
+
+function copyMessage() {
+  const messageText = props.text;
+  console.log('Copying message:', messageText.substring(0, 50) + '...');
+  navigator.clipboard.writeText(messageText).then(() => {
+    console.log('Message copied successfully, showing toast');
+    toast.add({
+      severity: 'info',
+      summary: 'Copied',
+      detail: 'Message copied to clipboard',
+      life: 1500,
+      closable: false
+    });
+    console.log('Toast add called');
+  }).catch(err => {
+    console.error('Failed to copy message:', err);
+    toast.add({
+      severity: 'error',
+      summary: 'Error',
+      detail: 'Failed to copy message',
+      life: 3000,
+      closable: true
+    });
+  });
 }
 
 onMounted(() => {

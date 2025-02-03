@@ -29,7 +29,9 @@ import {
   faCaretDown,
   faUserCircle, 
   faEye,
-  faImage } from '@fortawesome/free-solid-svg-icons';
+  faImage,
+  faCopy
+} from '@fortawesome/free-solid-svg-icons';
 import { faComment } from '@fortawesome/free-regular-svg-icons'  
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 import App from './App.vue';
@@ -63,7 +65,8 @@ library.add(
   faCaretDown,
   faUserCircle,
   faEye,
-  faImage
+  faImage,
+  faCopy
 );
 
 const app = createApp(App);
