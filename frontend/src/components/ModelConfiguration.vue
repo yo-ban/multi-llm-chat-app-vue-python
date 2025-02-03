@@ -83,19 +83,19 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import type { ModelConfiguration } from '@/types/models';
+import type { Model } from '@/types/models';
 
 const props = defineProps<{
-  modelsList: ModelConfiguration[];
+  modelsList: Model[];
 }>();
 
 const emit = defineEmits<{
-  (e: 'update:modelsList', models: ModelConfiguration[]): void;
+  (e: 'update:modelsList', models: Model[]): void;
 }>();
 
 const showAddDialog = ref(false);
 const editingIndex = ref<number | null>(null);
-const tempModel = ref<ModelConfiguration>({
+const tempModel = ref<Model>({
   id: '',
   name: '',
   contextWindow: 8192,

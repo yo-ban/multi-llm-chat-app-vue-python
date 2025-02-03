@@ -1,4 +1,6 @@
 import type { Model } from './models';
+import type { ReasoningEffort } from './common';
+import type { APISettings } from './api';
 
 export interface GlobalSettings {
   apiKeys: { [key: string]: string };
@@ -6,16 +8,11 @@ export interface GlobalSettings {
   defaultMaxTokens: number;
   defaultVendor: string;
   defaultModel: string;
-  defaultReasoningEffort?: 'low' | 'medium' | 'high';  // Default reasoning effort for models that support it
+  defaultReasoningEffort?: ReasoningEffort;
   defaultWebSearch: boolean;  // Default web search setting
   openrouterModels: Model[];
   titleGenerationVendor: string;  // Vendor for generating chat titles
   titleGenerationModel: string;   // Model for generating chat titles
 }
 
-export interface APISettings {
-  vendor: string;
-  model: string;
-  temperature: number;
-  maxTokens: number;
-} 
+export type { APISettings }; 

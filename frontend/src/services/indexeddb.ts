@@ -1,6 +1,6 @@
 import localforage from 'localforage';
-import type { Message } from '@/store/chat';
-import type { Conversation } from '@/store/conversation';
+import type { Message } from '@/types/messages';
+import type { Conversation } from '@/types/conversation';
 import type { GlobalSettings } from '@/types/settings';
 import type { UserDefinedPersona } from '@/types/personas';
 import { MODELS } from '@/constants/models';

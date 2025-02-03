@@ -11,25 +11,9 @@ import {
   updateConversationMessages
 } from '@/services/indexeddb';
 import { exportConversation, importConversation } from '@/services/conversation-export-import';
-import type { Message } from '@/store/chat';
+import type { Message } from '@/types/messages';
 import { useSettingsStore } from '@/store/settings';
-
-export interface Conversation {
-  conversationId: string;
-  title: string;
-  createdAt: string;
-  updatedAt?: string;
-  system?: string;
-  personaId?: string;
-  settings: APISettings;
-  historyLength: number; 
-  files?: { [key: string]: string };
-}
-
-export interface ConversationState {
-  currentConversationId: string | null;
-  conversationList: Conversation[];
-}
+import type { Conversation, ConversationState } from '@/types/conversation';
 
 const CONVERSATION_LIST_KEY = 'conversationList';
 

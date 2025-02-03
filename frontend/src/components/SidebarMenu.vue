@@ -130,11 +130,13 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue';
-import { useConversationStore, type Conversation } from '@/store/conversation';
+import { useConversationStore } from '@/store/conversation';
+import type { Conversation } from '@/types/conversation';
 import { useChatStore } from '@/store/chat';
 import { storeToRefs } from 'pinia';
 import { generateChatTitle } from '@/services/llm';
 import { PERSONAS } from '@/constants/personas';
+
 import { useToast } from 'primevue/usetoast';
 import { usePersonaStore } from '@/store/persona';
 import { v4 as uuidv4 } from 'uuid';

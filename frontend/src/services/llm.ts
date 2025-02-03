@@ -1,10 +1,65 @@
-import type { Message } from '@/store/chat';
+import type { Message } from '@/types/messages';
 import { API_BASE_URL, API_MESSAGES_ENDPOINT } from '@/constants/api';
 import { useSettingsStore } from '@/store/settings';
 import type { APISettings } from '@/types/api';
 import { WEB_SEARCH_TOOL_SUFFIX } from '@/constants/personas';
 // import { MODELS } from '@/constants/models';
 // import { getLastModelOfVendor } from '@/utils/model-utils';
+
+// SSEレスポンスを処理する共通関数
+async function processSSEResponse(
+  response: Response,
+  onUpdate?: (text: string, toolCall?: { type: string; status: 'start' | 'end' }, isIndicator?: boolean) => void
+): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new Error('Response body is null or undefined');
+  }
+
+  const decoder = new TextDecoder('utf-8');
+  let result = '';
+  let stopReason = '';
+  
+  let done = false;
+  while (!done) {
+    const { value, done: readerDone } = await reader.read();
+    done = readerDone;
+    if (done) break;
+
+    const chunk = decoder.decode(value);
+    const lines = chunk.split('\n');
+
+    for (const line of lines) {
+      if (line.startsWith('data:')) {
+        const data = JSON.parse(line.slice(5));
+        if (data.error) {
+          throw new Error(data.error);
+        }
+        if (data.text === '[DONE]') {
+          // Ensure the final update is reflected
+          if (onUpdate) {
+            await new Promise(resolve => {
+              onUpdate(result);
+              setTimeout(resolve, 0);
+            });
+          }
+          return result;
+        }
+        if (data.type === 'tool_call_start' && onUpdate) {
+          onUpdate(result, { type: data.tool, status: 'start' }, true);
+        } else if (data.stop_reason) {
+          stopReason = data.stop_reason;
+        } else if (data.text) {
+          result += data.text;
+          if (onUpdate) {
+            onUpdate(result);
+          }
+        }
+      }
+    }
+  }
+  return result;
+}
 
 export async function sendMessageToAPI(
   messages: Message[], 
@@ -50,51 +105,7 @@ export async function sendMessageToAPI(
       throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error}`);
     }
 
-    const reader = response.body?.getReader();
-    if (reader) {
-      const decoder = new TextDecoder('utf-8');
-      let result = '';
-      let stopReason = '';
-      
-      let done = false;
-      while (!done) {
-        const { value, done: readerDone } = await reader.read();
-        done = readerDone;
-        if (done) break;
-
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
-
-        for (const line of lines) {
-          if (line.startsWith('data:')) {
-            const data = JSON.parse(line.slice(5));
-            if (data.error) {
-              throw new Error(data.error);
-            }
-            if (data.text === '[DONE]') {
-              // onStop(stopReason);
-              // Ensure the final update is reflected
-              await new Promise(resolve => {
-                onUpdate(result);
-                setTimeout(resolve, 0);
-              });
-              return result;
-            }
-            if (data.type === 'tool_call_start') {
-              onUpdate(result, { type: data.tool, status: 'start' }, true);
-            } else if (data.stop_reason) {
-              stopReason = data.stop_reason;
-            } else if (data.text) {
-              result += data.text;
-              onUpdate(result);
-            }
-          }
-        }
-      }
-    } else {
-      console.error('Response body is null or undefined');
-      throw new Error('Response body is null or undefined');
-    }
+    return await processSSEResponse(response, onUpdate);
   } catch (error) {
     console.error('Error in sendMessage:', error);
     throw error;
@@ -146,8 +157,8 @@ export async function generateChatTitle(messages: Message[]) {
       throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error}`);
     }
 
-    const data = await response.json();
-    return data.trim();
+    const result = await processSSEResponse(response);
+    return result.trim();
 
   } catch (error) {
     console.error('Error in generateChatTitle:', error);

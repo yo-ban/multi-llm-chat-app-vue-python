@@ -34,8 +34,9 @@
           v-for="message in messages"
           :key="message.id"
           v-bind="message"
-          :images="message.images ?? undefined"
-          :streamed-text="message.streamedText"
+          :images="message.images"
+          :streamed-text="isAssistantMessage(message) ? message.streamedText : undefined"
+          :streaming="isAssistantMessage(message) ? message.streaming : undefined"
           :persona-id="currentPersonaId"
           @resend-message="resendMessage"
           @delete-message="deleteMessage"
@@ -70,9 +71,14 @@ import { DEFAULT_PERSONA } from '@/constants/personas';
 import type { APISettings } from '@/types/api';
 
 // Store
-import { useChatStore, type Message } from '@/store/chat';
-import { useConversationStore, type Conversation } from '@/store/conversation';
+import { useChatStore } from '@/store/chat';
+import { useConversationStore } from '@/store/conversation';
 import { useSettingsStore } from '@/store/settings';
+
+// Types
+import type { Message, AssistantMessage, UserMessage } from '@/types/messages';
+import type { MessageRole } from '@/types/common';
+import type { Conversation } from '@/types/conversation';
 
 // Services
 import { sendMessageToAPI, generateChatTitle } from '@/services/llm';
@@ -205,9 +211,15 @@ const selectedModel = computed(() => {
 
 const activeToolCall = ref<{ type: string; status: 'start' | 'end' } | null>(null);
 
+function isAssistantMessage(message: Message): message is AssistantMessage {
+  return message.role === 'assistant';
+}
+
 // ツール呼び出しの状態を監視・更新
 const onUpdate = async (text: string, toolCall?: { type: string; status: 'start' | 'end' }, isIndicator?: boolean) => {
-  if (!isIndicator && !chatStore.messages.some(message => message.role === 'assistant' && message.streaming)) {
+  if (!isIndicator && !chatStore.messages.some(message => 
+    isAssistantMessage(message) && message.streaming
+  )) {
     await chatStore.addMessage('assistant', '', undefined, true);
   }
   if (!isIndicator) {
@@ -253,7 +265,9 @@ watch(
 watch(
   () => {
     const lastMessage = messages.value[messages.value.length - 1];
-    return lastMessage && lastMessage.streaming ? lastMessage.streamedText : null;
+    return lastMessage && isAssistantMessage(lastMessage) && lastMessage.streaming
+      ? lastMessage.streamedText 
+      : null;
   },
   () => {
     if (!isManuallyScrolled.value) {
@@ -283,8 +297,8 @@ async function updateSystemMessageManualy(newSystemMessage: string) {
 
 function fixStreamingMessages() {
   chatStore.messages.forEach((message) => {
-    if (message.streaming) {
-      message.streaming = false;
+    if (message.role === 'assistant' && 'streaming' in message) {
+      (message as AssistantMessage).streaming = false;
     }
   });
 }
@@ -328,12 +342,7 @@ async function onSendMessage(newMessage: string, uploadedImages: string[]) {
       await conversationStore.updateConversationSystem(currentConversationId, systemMessage.value, currentPersonaId.value);
       showSystemMessageInput.value = false;
     }
-    const userMessage = {
-      role: 'user',
-      text: newMessage,
-      images: uploadedImages,
-    };
-    await chatStore.addMessage(userMessage.role, userMessage.text, userMessage.images, true);
+    await chatStore.addMessage('user' as MessageRole, newMessage, uploadedImages, false);
     await updateConversationHistory(currentConversationId, chatStore.messages);
 
     nextTick(() => {
@@ -435,9 +444,9 @@ async function resendMessage(id: string) {
   const messageIndex = chatStore.messages.findIndex(message => message.id === id);
   console.log('Resending message with id:', id, 'Index:', messageIndex);
   if (messageIndex !== -1) {
-    const resendMessage = chatStore.messages[messageIndex];
+    const resendMessage = chatStore.messages[messageIndex] as UserMessage;
     chatStore.messages.splice(messageIndex);
-    await chatStore.addMessage('user', resendMessage.text, resendMessage.images ?? undefined, true);
+    await chatStore.addMessage('user', resendMessage.text, resendMessage.images, false);
 
     nextTick(() => {
       scrollToBottom();

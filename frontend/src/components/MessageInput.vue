@@ -58,10 +58,10 @@
 import { ref, nextTick, onMounted, watch, computed } from 'vue';
 import type { APISettings } from '@/types/api';
 import FileUploader from '@/components/FileUploader.vue';
-import { useConversationStore, type Conversation } from '@/store/conversation';
+import { useConversationStore } from '@/store/conversation';
 import { useSettingsStore } from '@/store/settings';
 import { MODELS } from '@/constants/models';
-
+import type { Conversation } from '@/types/conversation';
 const props = defineProps({
   isStreaming: {
     type: Boolean,

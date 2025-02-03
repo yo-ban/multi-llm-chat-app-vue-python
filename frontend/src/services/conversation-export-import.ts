@@ -1,7 +1,7 @@
 // src/services/conversation-export-import.ts
 import { saveAs } from 'file-saver';
-import type { Message } from '@/store/chat';
-import type { Conversation } from '@/store/conversation';
+import type { Message } from '@/types/messages';
+import type { Conversation } from '@/types/conversation';
 
 declare global {
   interface Window {
