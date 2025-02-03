@@ -33,6 +33,32 @@ async def openai_stream_generator(
         messages: Current message history (needed for function calling)
         model: Model name without prefix (needed for function calling)
     """
+
+    def _parse_usage(usage: Any) -> Dict[str, Any]:
+        if usage.completion_tokens:
+            completion_usage = usage.completion_tokens
+        else:
+            completion_usage = 0
+        
+        if usage.prompt_tokens:
+            prompt_usage = usage.prompt_tokens
+        else:
+            prompt_usage = 0
+        
+        if usage.completion_tokens_details:
+            if usage.completion_tokens_details.reasoning_tokens:
+                reasoning_usage = usage.completion_tokens_details.reasoning_tokens
+            else:
+                reasoning_usage = 0
+        else:
+            reasoning_usage = 0
+
+        return {
+            "completion_usage": completion_usage,
+            "prompt_usage": prompt_usage,
+            "reasoning_usage": reasoning_usage
+        }
+
     try:
         tool_calls_buffer = {}
         
@@ -92,22 +118,18 @@ async def openai_stream_generator(
                                             if final_chunk.choices[0].delta.content:
                                                 yield f"data: {json.dumps({'text': final_chunk.choices[0].delta.content})}\n\n"
                                         if final_chunk.usage:
-                                            completion_usage = final_chunk.usage.completion_tokens
-                                            prompt_usage = final_chunk.usage.prompt_tokens
-                                            reasoning_usage = final_chunk.usage.completion_tokens_details.reasoning_tokens
-                                            log_info(f"Completion Usage: {completion_usage}, Prompt Usage: {prompt_usage}, Reasoning Usage: {reasoning_usage}")
-                                            yield f"data: {json.dumps({'completion_usage': completion_usage, 'prompt_usage': prompt_usage, 'reasoning_usage': reasoning_usage})}\n\n"
+                                            usage = _parse_usage(final_chunk.usage)
+                                            log_info(f"Completion Usage: {usage['completion_usage']}, Prompt Usage: {usage['prompt_usage']}, Reasoning Usage: {usage['reasoning_usage']}")
+                                            yield f"data: {json.dumps(usage)}\n\n"
                 
                 # Handle regular text content
                 elif delta.content:
                     yield f"data: {json.dumps({'text': delta.content})}\n\n"
 
             if chunk.usage:
-                completion_usage = chunk.usage.completion_tokens
-                prompt_usage = chunk.usage.prompt_tokens
-                reasoning_usage = chunk.usage.completion_tokens_details.reasoning_tokens
-                log_info(f"Completion Usage: {completion_usage}, Prompt Usage: {prompt_usage}, Reasoning Usage: {reasoning_usage}")
-                yield f"data: {json.dumps({'completion_usage': completion_usage, 'prompt_usage': prompt_usage, 'reasoning_usage': reasoning_usage})}\n\n"
+                usage = _parse_usage(chunk.usage)
+                log_info(f"Completion Usage: {usage['completion_usage']}, Prompt Usage: {usage['prompt_usage']}, Reasoning Usage: {usage['reasoning_usage']}")
+                yield f"data: {json.dumps(usage)}\n\n"
 
         yield f"data: {json.dumps({'text': '[DONE]'})}\n\n"
         

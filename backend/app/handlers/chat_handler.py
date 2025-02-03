@@ -102,8 +102,7 @@ class ChatHandler:
         system: str,
         websearch: bool = True,
         reasoning_effort: Optional[str] = None,
-        is_reasoning_supported: bool = False,
-        multimodal: bool = False
+        is_reasoning_supported: bool = False
     ) -> Any:
         """Handle OpenAI API requests with optional function calling.
         
@@ -211,8 +210,7 @@ class ChatHandler:
         max_tokens: int,
         temperature: float,
         stream: bool,
-        system: str,
-        multimodal: bool = False
+        system: str
     ) -> Any:
         """Handle Gemini API requests"""
         genai.configure(api_key=self.api_key)
@@ -292,76 +290,6 @@ class ChatHandler:
                 media_type="text/event-stream"
             )
 
-    async def handle_chat_request(self, chat_request: ChatRequest) -> Any:
-        """
-        Main entry point for handling chat requests
-        
-        Args:
-            chat_request: ChatRequest object containing all request parameters
-            
-        Returns:
-            Appropriate response based on the model and streaming settings
-        """
-        try:
-            messages = await prepare_api_messages(chat_request.messages, multimodal=chat_request.multimodal)
-            
-            if chat_request.model.startswith('openai-'):
-                return await self.handle_openai(
-                    model=chat_request.model,
-                    messages=messages,
-                    max_tokens=chat_request.maxTokens,
-                    temperature=chat_request.temperature,
-                    stream=chat_request.stream,
-                    system=chat_request.system,
-                    websearch=chat_request.websearch,
-                    reasoning_effort=chat_request.reasoningEffort,
-                    is_reasoning_supported=chat_request.isReasoningSupported,
-                    multimodal=chat_request.multimodal
-                )
-            elif chat_request.model.startswith('deepseek-'):
-                return await self.handle_deepseek(
-                    model=chat_request.model,
-                    messages=messages,
-                    max_tokens=chat_request.maxTokens,
-                    temperature=chat_request.temperature,
-                    stream=chat_request.stream,
-                    system=chat_request.system,
-                    multimodal=chat_request.multimodal
-                )
-            elif chat_request.model.startswith('gemini-'):
-                return await self.handle_gemini(
-                    model=chat_request.model,
-                    messages=messages,
-                    max_tokens=chat_request.maxTokens,
-                    temperature=chat_request.temperature,
-                    stream=chat_request.stream,
-                    system=chat_request.system,
-                    multimodal=chat_request.multimodal
-                )
-            elif "/" in chat_request.model:  # OpenRouter models
-                return await self.handle_openrouter(
-                    model=chat_request.model,
-                    messages=messages,
-                    max_tokens=chat_request.maxTokens,
-                    temperature=chat_request.temperature,
-                    stream=chat_request.stream,
-                    system=chat_request.system,
-                    multimodal=chat_request.multimodal
-                )
-            else:  # Anthropic models
-                return await self.handle_anthropic(
-                    model=chat_request.model,
-                    messages=messages,
-                    max_tokens=chat_request.maxTokens,
-                    temperature=chat_request.temperature,
-                    stream=chat_request.stream,
-                    system=chat_request.system,
-                    multimodal=chat_request.multimodal
-                )
-                
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=str(e))
-
     async def handle_deepseek(
         self,
         model: str,
@@ -369,8 +297,7 @@ class ChatHandler:
         max_tokens: int,
         temperature: float,
         stream: bool,
-        system: str,
-        multimodal: bool = False
+        system: str
     ) -> Any:
         """Handle Deepseek API requests"""
         deepseek = AsyncOpenAI(
@@ -378,25 +305,7 @@ class ChatHandler:
             base_url="https://api.deepseek.com"
         )
 
-        deepseek_messages = [{"role": "system", "content": system}]
-        for msg in messages:
-            content = []
-            for item in msg['content']:
-                if item['type'] == 'text':
-                    content.append({"type": "text", "text": item['text']})
-                elif item['type'] == 'image':
-                    content.append({
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{item['source']['media_type']};base64,{item['source']['data']}"
-                        }
-                    })
-            # For Deepseek, we need to join text contents if there are multiple
-            text_contents = [item['text'] for item in content if item['type'] == 'text']
-            deepseek_messages.append({
-                "role": msg['role'],
-                "content": ''.join(text_contents)
-            })
+        deepseek_messages = prepare_openai_messages(system, messages)
 
         completion_args = {
             "model": model,
@@ -409,6 +318,7 @@ class ChatHandler:
         response = await deepseek.chat.completions.create(**completion_args)
 
         if stream:
+            completion_args["stream_options"] = {"include_usage": True}
             return StreamingResponse(
                 openai_stream_generator(
                     response,
@@ -435,8 +345,7 @@ class ChatHandler:
         max_tokens: int,
         temperature: float,
         stream: bool,
-        system: str,
-        multimodal: bool = False
+        system: str
     ) -> Any:
         """Handle OpenRouter API requests"""
         openrouter = AsyncOpenAI(
@@ -444,20 +353,7 @@ class ChatHandler:
             base_url="https://openrouter.ai/api/v1"
         )
 
-        openrouter_messages = [{"role": "system", "content": system}]
-        for msg in messages:
-            content = []
-            for item in msg['content']:
-                if item['type'] == 'text':
-                    content.append({"type": "text", "text": item['text']})
-                elif item['type'] == 'image':
-                    content.append({
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{item['source']['media_type']};base64,{item['source']['data']}"
-                        }
-                    })
-            openrouter_messages.append({"role": msg['role'], "content": content})
+        openrouter_messages = prepare_openai_messages(system, messages)
 
         completion_args = {
             "model": model,
@@ -470,6 +366,7 @@ class ChatHandler:
         response = await openrouter.chat.completions.create(**completion_args)
 
         if stream:
+            completion_args["stream_options"] = {"include_usage": True}
             return StreamingResponse(
                 openai_stream_generator(
                     response,
@@ -488,3 +385,68 @@ class ChatHandler:
                 generate_non_stream_response(),
                 media_type="text/event-stream"
             ) 
+
+    async def handle_chat_request(self, chat_request: ChatRequest) -> Any:
+        """
+        Main entry point for handling chat requests
+        
+        Args:
+            chat_request: ChatRequest object containing all request parameters
+            
+        Returns:
+            Appropriate response based on the model and streaming settings
+        """
+        try:
+            messages = await prepare_api_messages(chat_request.messages, multimodal=chat_request.multimodal)
+            
+            if chat_request.model.startswith('openai-'):
+                return await self.handle_openai(
+                    model=chat_request.model,
+                    messages=messages,
+                    max_tokens=chat_request.maxTokens,
+                    temperature=chat_request.temperature,
+                    stream=chat_request.stream,
+                    system=chat_request.system,
+                    websearch=chat_request.websearch,
+                    reasoning_effort=chat_request.reasoningEffort,
+                    is_reasoning_supported=chat_request.isReasoningSupported,
+                )
+            elif chat_request.model.startswith('deepseek-'):
+                return await self.handle_deepseek(
+                    model=chat_request.model,
+                    messages=messages,
+                    max_tokens=chat_request.maxTokens,
+                    temperature=chat_request.temperature,
+                    stream=chat_request.stream,
+                    system=chat_request.system
+                )
+            elif chat_request.model.startswith('gemini-'):
+                return await self.handle_gemini(
+                    model=chat_request.model,
+                    messages=messages,
+                    max_tokens=chat_request.maxTokens,
+                    temperature=chat_request.temperature,
+                    stream=chat_request.stream,
+                    system=chat_request.system
+                )
+            elif "/" in chat_request.model:  # OpenRouter models
+                return await self.handle_openrouter(
+                    model=chat_request.model,
+                    messages=messages,
+                    max_tokens=chat_request.maxTokens,
+                    temperature=chat_request.temperature,
+                    stream=chat_request.stream,
+                    system=chat_request.system
+                )
+            else:  # Anthropic models
+                return await self.handle_anthropic(
+                    model=chat_request.model,
+                    messages=messages,
+                    max_tokens=chat_request.maxTokens,
+                    temperature=chat_request.temperature,
+                    stream=chat_request.stream,
+                    system=chat_request.system
+                )
+                
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=str(e))
