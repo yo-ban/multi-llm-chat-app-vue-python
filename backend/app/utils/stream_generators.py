@@ -2,6 +2,10 @@ import json
 from typing import AsyncGenerator, Any, Dict, List
 from openai import AsyncOpenAI
 from ..utils.search_utils import web_search
+from app.utils.logging_utils import get_logger, log_error, log_info, log_warning, log_debug
+
+# Get logger instance
+logger = get_logger()
 
 async def gemini_stream_generator(response) -> AsyncGenerator[str, None]:
     """
@@ -33,61 +37,78 @@ async def openai_stream_generator(
         tool_calls_buffer = {}
         
         async for chunk in response:
-            delta = chunk.choices[0].delta
-            
-            # Handle tool calls
-            if delta.tool_calls:
-                for tool_call in delta.tool_calls:
-                    index = tool_call.index
-                    
-                    if index not in tool_calls_buffer:
-                        tool_calls_buffer[index] = tool_call
-                        # First chunk of a tool call
-                        yield f"data: {json.dumps({'type': 'tool_call_start', 'tool': tool_call.function.name})}\n\n"
-                    else:
-                        # Accumulate arguments
-                        tool_calls_buffer[index].function.arguments += tool_call.function.arguments or ""
+
+            if chunk.choices:
+                delta = chunk.choices[0].delta
+
+                # Handle tool calls
+                if delta.tool_calls:
+                    for tool_call in delta.tool_calls:
+                        index = tool_call.index
                         
-                    # If we have complete arguments, execute the function
-                    if tool_call.function.arguments and tool_call.function.arguments.endswith("}"):
-                        complete_call = tool_calls_buffer[index]
-                        args = json.loads(complete_call.function.arguments)
-
-                        query = args.get("query")
-                        num_results = args.get("num_results", 5)
-
-                        if complete_call.function.name == "web_search" and query:
-                            results = await web_search(query, num_results)
-                            # yield f"data: {json.dumps({'type': 'tool_result', 'results': [r.model_dump() for r in results]})}\n\n"
+                        if index not in tool_calls_buffer:
+                            tool_calls_buffer[index] = tool_call
+                            # First chunk of a tool call
+                            yield f"data: {json.dumps({'type': 'tool_call_start', 'tool': tool_call.function.name})}\n\n"
+                        else:
+                            # Accumulate arguments
+                            tool_calls_buffer[index].function.arguments += tool_call.function.arguments or ""
                             
-                            if openai_client and messages and model:
-                                # Add results to messages for context
-                                messages.append({
-                                    "role": "assistant",
-                                    "content": None,
-                                    "tool_calls": [complete_call.model_dump()]
-                                })
-                                messages.append({
-                                    "role": "tool",
-                                    "tool_call_id": complete_call.id,
-                                    "content": json.dumps([r.model_dump() for r in results])
-                                })
+                        # If we have complete arguments, execute the function
+                        if tool_call.function.arguments and tool_call.function.arguments.endswith("}"):
+                            complete_call = tool_calls_buffer[index]
+                            args = json.loads(complete_call.function.arguments)
+
+                            query = args.get("query")
+                            num_results = args.get("num_results", 5)
+
+                            if complete_call.function.name == "web_search" and query:
+                                results = await web_search(query, num_results)
+                                # yield f"data: {json.dumps({'type': 'tool_result', 'results': [r.model_dump() for r in results]})}\n\n"
                                 
-                                # Get final response incorporating search results
-                                final_response = await openai_client.chat.completions.create(
-                                    model=model,
-                                    messages=messages,
-                                    stream=True
-                                )
-                                
-                                async for final_chunk in final_response:
-                                    if final_chunk.choices[0].delta.content:
-                                        yield f"data: {json.dumps({'text': final_chunk.choices[0].delta.content})}\n\n"
-            
-            # Handle regular text content
-            elif delta.content:
-                yield f"data: {json.dumps({'text': delta.content})}\n\n"
-        
+                                if openai_client and messages and model:
+                                    # Add results to messages for context
+                                    messages.append({
+                                        "role": "assistant",
+                                        "content": None,
+                                        "tool_calls": [complete_call.model_dump()]
+                                    })
+                                    messages.append({
+                                        "role": "tool",
+                                        "tool_call_id": complete_call.id,
+                                        "content": json.dumps([r.model_dump() for r in results])
+                                    })
+                                    
+                                    # Get final response incorporating search results
+                                    final_response = await openai_client.chat.completions.create(
+                                        model=model,
+                                        messages=messages,
+                                        stream=True,
+                                        stream_options={"include_usage": True}
+                                    )
+                                    
+                                    async for final_chunk in final_response:
+                                        if final_chunk.choices:
+                                            if final_chunk.choices[0].delta.content:
+                                                yield f"data: {json.dumps({'text': final_chunk.choices[0].delta.content})}\n\n"
+                                        if final_chunk.usage:
+                                            completion_usage = final_chunk.usage.completion_tokens
+                                            prompt_usage = final_chunk.usage.prompt_tokens
+                                            reasoning_usage = final_chunk.usage.completion_tokens_details.reasoning_tokens
+                                            log_info(f"Completion Usage: {completion_usage}, Prompt Usage: {prompt_usage}, Reasoning Usage: {reasoning_usage}")
+                                            yield f"data: {json.dumps({'completion_usage': completion_usage, 'prompt_usage': prompt_usage, 'reasoning_usage': reasoning_usage})}\n\n"
+                
+                # Handle regular text content
+                elif delta.content:
+                    yield f"data: {json.dumps({'text': delta.content})}\n\n"
+
+            if chunk.usage:
+                completion_usage = chunk.usage.completion_tokens
+                prompt_usage = chunk.usage.prompt_tokens
+                reasoning_usage = chunk.usage.completion_tokens_details.reasoning_tokens
+                log_info(f"Completion Usage: {completion_usage}, Prompt Usage: {prompt_usage}, Reasoning Usage: {reasoning_usage}")
+                yield f"data: {json.dumps({'completion_usage': completion_usage, 'prompt_usage': prompt_usage, 'reasoning_usage': reasoning_usage})}\n\n"
+
         yield f"data: {json.dumps({'text': '[DONE]'})}\n\n"
         
     except Exception as e:

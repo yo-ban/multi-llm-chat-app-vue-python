@@ -138,6 +138,12 @@ Tailor your guidance to the specific document type and the user's needs.
 The current date is {{Date}}.
 </instructions>`,
   },
+  {
+    id: 'minimal',
+    name: 'Minimal',
+    image: 'simple.svg',
+    systemMessage: 'The current date is {{Date}}.',
+  },
 ]
 
 export const CUSTOM_PERSONA: Persona =   { 

@@ -95,7 +95,8 @@ export async function sendMessageToAPI(
         stream: true,
         websearch: settings.websearch,
         reasoningEffort: settings.reasoningEffort,
-        isReasoningSupported: settings.isReasoningSupported
+        isReasoningSupported: settings.isReasoningSupported,
+        multimodal: settings.multimodal
       }),
       signal
     });

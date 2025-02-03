@@ -22,6 +22,7 @@ class ChatRequest(BaseModel):
     reasoningEffort: Optional[str] = None  # 'low', 'medium', or 'high'
     isReasoningSupported: bool = False
     websearch: bool = False  # Enable web search functionality using function calling
+    multimodal: bool = False  # Whether the model supports multimodal inputs (e.g. images)
 
 class ErrorResponse(BaseModel):
     """

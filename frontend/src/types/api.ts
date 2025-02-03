@@ -8,6 +8,7 @@ export interface APISettings {
   reasoningEffort?: ReasoningEffort;
   isReasoningSupported?: boolean;
   websearch?: boolean;
+  multimodal?: boolean;
 }
 
 export interface APIResponse<T> {

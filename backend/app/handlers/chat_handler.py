@@ -78,6 +78,12 @@ class ChatHandler:
             else:
                 # If there are no tool_calls, return content directly
                 yield f'data: {json.dumps({"text": response.choices[0].message.content})}\n\n'
+
+            if response.usage:
+                completion_usage = response.usage.completion_tokens
+                prompt_usage = response.usage.prompt_tokens
+                reasoning_usage = response.usage.completion_tokens_details.reasoning_tokens
+                yield f"data: {json.dumps({'completion_usage': completion_usage, 'prompt_usage': prompt_usage, 'reasoning_usage': reasoning_usage})}\n\n"
             
             yield 'data: {"text": "[DONE]"}\n\n'
 
@@ -96,7 +102,8 @@ class ChatHandler:
         system: str,
         websearch: bool = True,
         reasoning_effort: Optional[str] = None,
-        is_reasoning_supported: bool = False
+        is_reasoning_supported: bool = False,
+        multimodal: bool = False
     ) -> Any:
         """Handle OpenAI API requests with optional function calling.
         
@@ -124,6 +131,7 @@ class ChatHandler:
 
         # If streaming is requested, try using stream mode.
         if stream:
+            completion_args["stream_options"] = { "include_usage": True }
             try:
                 response = await openai.chat.completions.create(**completion_args)
                 return StreamingResponse(
@@ -159,7 +167,8 @@ class ChatHandler:
         max_tokens: int,
         temperature: float,
         stream: bool,
-        system: str
+        system: str,
+        multimodal: bool = False
     ) -> Any:
         """Handle Anthropic API requests"""
         anthropic = AsyncAnthropic(api_key=self.api_key)
@@ -202,7 +211,8 @@ class ChatHandler:
         max_tokens: int,
         temperature: float,
         stream: bool,
-        system: str
+        system: str,
+        multimodal: bool = False
     ) -> Any:
         """Handle Gemini API requests"""
         genai.configure(api_key=self.api_key)
@@ -293,7 +303,7 @@ class ChatHandler:
             Appropriate response based on the model and streaming settings
         """
         try:
-            messages = await prepare_api_messages(chat_request.messages)
+            messages = await prepare_api_messages(chat_request.messages, multimodal=chat_request.multimodal)
             
             if chat_request.model.startswith('openai-'):
                 return await self.handle_openai(
@@ -305,7 +315,8 @@ class ChatHandler:
                     system=chat_request.system,
                     websearch=chat_request.websearch,
                     reasoning_effort=chat_request.reasoningEffort,
-                    is_reasoning_supported=chat_request.isReasoningSupported
+                    is_reasoning_supported=chat_request.isReasoningSupported,
+                    multimodal=chat_request.multimodal
                 )
             elif chat_request.model.startswith('deepseek-'):
                 return await self.handle_deepseek(
@@ -314,7 +325,8 @@ class ChatHandler:
                     max_tokens=chat_request.maxTokens,
                     temperature=chat_request.temperature,
                     stream=chat_request.stream,
-                    system=chat_request.system
+                    system=chat_request.system,
+                    multimodal=chat_request.multimodal
                 )
             elif chat_request.model.startswith('gemini-'):
                 return await self.handle_gemini(
@@ -323,7 +335,8 @@ class ChatHandler:
                     max_tokens=chat_request.maxTokens,
                     temperature=chat_request.temperature,
                     stream=chat_request.stream,
-                    system=chat_request.system
+                    system=chat_request.system,
+                    multimodal=chat_request.multimodal
                 )
             elif "/" in chat_request.model:  # OpenRouter models
                 return await self.handle_openrouter(
@@ -332,7 +345,8 @@ class ChatHandler:
                     max_tokens=chat_request.maxTokens,
                     temperature=chat_request.temperature,
                     stream=chat_request.stream,
-                    system=chat_request.system
+                    system=chat_request.system,
+                    multimodal=chat_request.multimodal
                 )
             else:  # Anthropic models
                 return await self.handle_anthropic(
@@ -341,7 +355,8 @@ class ChatHandler:
                     max_tokens=chat_request.maxTokens,
                     temperature=chat_request.temperature,
                     stream=chat_request.stream,
-                    system=chat_request.system
+                    system=chat_request.system,
+                    multimodal=chat_request.multimodal
                 )
                 
         except Exception as e:
@@ -354,7 +369,8 @@ class ChatHandler:
         max_tokens: int,
         temperature: float,
         stream: bool,
-        system: str
+        system: str,
+        multimodal: bool = False
     ) -> Any:
         """Handle Deepseek API requests"""
         deepseek = AsyncOpenAI(
@@ -419,7 +435,8 @@ class ChatHandler:
         max_tokens: int,
         temperature: float,
         stream: bool,
-        system: str
+        system: str,
+        multimodal: bool = False
     ) -> Any:
         """Handle OpenRouter API requests"""
         openrouter = AsyncOpenAI(

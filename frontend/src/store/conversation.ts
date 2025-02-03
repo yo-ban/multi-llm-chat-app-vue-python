@@ -63,6 +63,7 @@ export const useConversationStore = defineStore('conversation', {
             temperature: model?.unsupportsTemperature ? undefined : settingsStore.defaultTemperature,
             reasoningEffort: settingsStore.getEffectiveReasoningEffort(settingsStore.defaultModel),
             websearch: settingsStore.defaultWebSearch,
+            multimodal: model?.multimodal ?? false,
           },
           historyLength: 0,
         };

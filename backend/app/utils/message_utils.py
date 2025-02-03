@@ -2,23 +2,30 @@ from typing import List, Dict, Any
 from app.models.models import Message
 from app.utils.image_utils import process_images
 
-async def prepare_api_messages(messages: List[Message]) -> List[Dict[str, Any]]:
+async def prepare_api_messages(messages: List[Message], multimodal: bool = False) -> List[Dict[str, Any]]:
     """
     Prepare messages for API consumption
     
     Args:
         messages: List of Message objects
+        multimodal: Whether to include image content in messages
         
     Returns:
         List of formatted messages ready for API consumption
     """
     api_messages = []
     for message in messages:
-        content = await process_images(message.images or [])
+        content = []
+        if multimodal and message.images:
+            content.extend(await process_images(message.images))
         if message.text:
             content.append({"type": "text", "text": message.text})
         else:
-            content.append({"type": "text", "text": "Please describe this image(s)."})
+            # Only add default text for image description if multimodal is enabled and there are images
+            if multimodal and message.images:
+                content.append({"type": "text", "text": "Please describe this image(s)."})
+            else:
+                content.append({"type": "text", "text": ""})  # Empty text if no content
         api_messages.append({"role": message.role, "content": content})
     return api_messages
 
