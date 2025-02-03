@@ -49,7 +49,7 @@ export default defineConfig({
             '@fortawesome/free-solid-svg-icons', 
             '@fortawesome/vue-fontawesome'
           ],
-          'tiktoken-assets': ['@/assets/claude.json']
+          // 'tiktoken-assets': ['@/assets/claude.json']
         },
       },  
     },
