@@ -146,34 +146,3 @@ async def web_search(query: str, num_results: int = 5) -> List[SearchResult]:
     except Exception as e:
         log_error(f"Gemini search error: {str(e)}", additional_info={"query": query, "num_results": num_results})
         return [SearchResult(title="Error", link="", snippet="Error occurred while performing web search")]
-
-def get_search_tools() -> List[Dict[str, Any]]:
-    """
-    Get the function definitions for web search tools
-    
-    Returns:
-        List of tool definitions for OpenAI function calling
-    """
-    return [{
-        "type": "function",
-        "function": {
-            "name": "web_search",
-            "description": "If you need information that cannot normally be answered, search the web for information. If a user's question includes words such as 「search the web.」 be sure to use this function.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The search query to find relevant information. The query is processed by taking into account the language used by the questioner."
-                    },
-                    "num_results": {
-                        "type": "integer",
-                        "description": "Number of search results to return, default is 5",
-                    }
-                },
-                "required": ["query"],
-                "additionalProperties": False
-            },
-            "strict": False
-        }
-    }] 

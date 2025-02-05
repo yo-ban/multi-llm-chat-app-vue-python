@@ -22,6 +22,12 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
     volumes:
       - ./backend:/app
+    # Add these configurations for Playwright
+    security_opt: 
+      - seccomp=unconfined
+    cap_add:
+      - SYS_ADMIN
+    shm_size: "2gb"  # Increase shared memory size for browser
     command: uvicorn app.main:app --host 0.0.0.0 --port 5200 --reload
     networks:
       - app-network

@@ -14,7 +14,8 @@ from app.utils.stream_generators import (
 from app.utils.message_utils import prepare_api_messages, prepare_openai_messages, prepare_anthropic_messages
 from app.utils.image_utils import upload_image_to_gemini
 from app.models.models import ChatRequest
-from app.utils.search_utils import web_search, get_search_tools
+from app.utils.tool_utils import get_tool_definitions
+from app.utils.tool_handlers import handle_tool_call, parse_usage
 
 class ChatHandler:
     def __init__(self, api_key: str):
@@ -47,43 +48,26 @@ class ChatHandler:
             # Check if a tool_call is present in the response
             if response.choices[0].message.tool_calls:
                 tool_call = response.choices[0].message.tool_calls[0]
-                args = json.loads(tool_call.function.arguments)
 
-                query = args.get("query")
-                num_results = args.get("num_results", 5)
+                yield f"data: {json.dumps({'type': 'tool_call_start', 'tool': tool_call.function.name})}\n\n"
 
-                if tool_call.function.name == "web_search" and query:
-
-                    yield f"data: {json.dumps({'type': 'tool_call_start', 'tool': tool_call.function.name})}\n\n"
-                    results = await web_search(query, num_results)
-                    
-                    # Add results and tool call details to messages for context
-                    openai_messages.append({
-                        "role": "assistant",
-                        "content": None,
-                        "tool_calls": [tool_call.model_dump()]
-                    })
-                    openai_messages.append({
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "content": json.dumps([r.model_dump() for r in results])
-                    })
-                    
-                    # Get final response incorporating search results
-                    final_response = await openai.chat.completions.create(
-                        model=model[7:],  # Remove 'openai-' prefix for the API call
-                        messages=openai_messages
-                    )
-                    yield f'data: {json.dumps({"text": final_response.choices[0].message.content})}\n\n'
+                # Handle the tool call using common handler and yield status updates
+                async for status in handle_tool_call(tool_call, openai_messages):
+                    yield status
+                
+                # Get final response incorporating tool results
+                final_response = await openai.chat.completions.create(
+                    model=model[7:],  # Remove 'openai-' prefix for the API call
+                    messages=openai_messages
+                )
+                yield f'data: {json.dumps({"text": final_response.choices[0].message.content})}\n\n'
             else:
                 # If there are no tool_calls, return content directly
                 yield f'data: {json.dumps({"text": response.choices[0].message.content})}\n\n'
 
             if response.usage:
-                completion_usage = response.usage.completion_tokens
-                prompt_usage = response.usage.prompt_tokens
-                reasoning_usage = response.usage.completion_tokens_details.reasoning_tokens
-                yield f"data: {json.dumps({'completion_usage': completion_usage, 'prompt_usage': prompt_usage, 'reasoning_usage': reasoning_usage})}\n\n"
+                usage = parse_usage(response.usage)
+                yield f"data: {json.dumps(usage)}\n\n"
             
             yield 'data: {"text": "[DONE]"}\n\n'
 
@@ -126,7 +110,7 @@ class ChatHandler:
             completion_args["reasoning_effort"] = reasoning_effort
 
         if websearch:
-            completion_args["tools"] = get_search_tools()
+            completion_args["tools"] = get_tool_definitions()
 
         # If streaming is requested, try using stream mode.
         if stream:
@@ -227,8 +211,7 @@ class ChatHandler:
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_CIVIC_INTEGRITY", "threshold": "BLOCK_NONE"}
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
         ]
 
         model_instance = genai.GenerativeModel(

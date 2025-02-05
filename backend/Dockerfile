@@ -1,22 +1,27 @@
-FROM python:3.11-alpine
+FROM mcr.microsoft.com/playwright/python:v1.50.0-noble
 
 WORKDIR /app
 
-# 必要なビルドツールをインストール
-RUN apk add --no-cache build-base libffi-dev cmake geos-dev
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libffi-dev \
+    cmake \
+    libgeos-dev \
+    libmagic1 \
+    && rm -rf /var/lib/apt/lists/*
 
 ENV GEOS_CONFIG=/usr/bin/geos-config
 
-# 必要なパッケージをインストール
-RUN apk add --no-cache \
-    libmagic \
-    gcc \
-    musl-dev \
-    linux-headers
-
-COPY requirements.txt .
+# Install application dependencies
+COPY --chown=pwuser:pwuser requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+# Copy application code with correct ownership
+COPY --chown=pwuser:pwuser . .
 
+# Switch to non-root user (pwuser is pre-created in the base image)
+USER pwuser
+
+# Run the application
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5200"]
