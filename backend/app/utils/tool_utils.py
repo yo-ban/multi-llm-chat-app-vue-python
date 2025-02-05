@@ -14,13 +14,21 @@ def get_tool_definitions() -> List[Dict[str, Any]]:
             "type": "function",
             "function": {
                 "name": "web_search",
-                "description": "If you need information that cannot normally be answered, search the web for information. If a user's question includes words such as 「search the web.」 be sure to use this function.",
+                "description": (
+                    "Perform a targeted web search for the most up-to-date information. "
+                    "Use this tool when the user explicitly requests recent information or when the query indicates "
+                    "that the required details are newer than your current knowledge base. "
+                    "This ensures that live data is fetched when static information might be outdated."
+                ),
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "query": {
                             "type": "string",
-                            "description": "The search query to find relevant information. The query is processed by taking into account the language used by the questioner."
+                            "description": (
+                                "The search query used to fetch up-to-date information. "
+                                "The query takes into account the language of the questioner."
+                            )
                         },
                         "num_results": {
                             "type": "integer",
@@ -38,7 +46,11 @@ def get_tool_definitions() -> List[Dict[str, Any]]:
             "type": "function",
             "function": {
                 "name": "extract_web_site",
-                "description": "Extract and analyze information from a specified webpage using Gemini's visual and text analysis capabilities. Use this when you need to extract specific information from a webpage or analyze its content.",
+                "description": (
+                    "Extract and analyze detailed information from a specified webpage. "
+                    "Use this tool when search results or explicit user instructions indicate that a deeper investigation "
+                    "of the webpage content is required. It leverages Gemini's visual and text analysis capabilities to provide comprehensive insights."
+                ),
                 "parameters": {
                     "type": "object",
                     "properties": {

@@ -139,8 +139,14 @@ async def web_search(query: str, num_results: int = 5) -> List[SearchResult]:
         if not metadata:
             log_warning("No search results found", {"query": query})
             return []
-            
-        return await extract_sources_from_metadata(metadata, num_results)
+
+        results = await extract_sources_from_metadata(metadata, num_results)
+        log_info("Successfully searched web", {
+            "query": query,
+            "info_length": len(results) if results else 0
+        })
+
+        return results
         
     except Exception as e:
         log_error(f"Gemini search error: {str(e)}", additional_info={"query": query, "num_results": num_results})

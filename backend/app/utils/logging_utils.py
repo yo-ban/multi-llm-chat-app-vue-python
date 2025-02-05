@@ -32,6 +32,7 @@ def setup_logger(name: str, level: int = logging.INFO) -> logging.Logger:
     """
     logger = logging.getLogger(name)
     logger.setLevel(level)
+    logger.propagate = False  # Prevent propagation to root logger
     
     if not logger.handlers:
         handler = logging.StreamHandler(sys.stdout)

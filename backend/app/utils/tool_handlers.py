@@ -62,6 +62,7 @@ async def handle_tool_call(
                 yield f"data: {json.dumps({'type': 'tool_execution', 'tool': 'web_search', 'query': query})}\n\n"
                 
                 results = await web_search(query, num_results)
+
                 formatted_results = format_search_results(results)
                 
                 # Add formatted results to message history for the model
@@ -81,6 +82,7 @@ async def handle_tool_call(
                 yield f"data: {json.dumps({'type': 'tool_execution', 'tool': 'extract_web_site', 'url': url})}\n\n"
                 
                 result = await extract_web_site(url, query)
+
                 formatted_result = format_web_extraction(result)
                 
                 # Add formatted result to message history for the model

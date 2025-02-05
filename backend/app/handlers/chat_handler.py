@@ -44,9 +44,9 @@ class ChatHandler:
         """
         response = await openai.chat.completions.create(**completion_args)
 
-        async def generate_non_stream_response():
+        async def generate_non_stream_response(response):
             # Check if a tool_call is present in the response
-            if response.choices[0].message.tool_calls:
+            while response.choices[0].message.tool_calls:
                 tool_call = response.choices[0].message.tool_calls[0]
 
                 yield f"data: {json.dumps({'type': 'tool_call_start', 'tool': tool_call.function.name})}\n\n"
@@ -55,14 +55,16 @@ class ChatHandler:
                 async for status in handle_tool_call(tool_call, openai_messages):
                     yield status
                 
-                # Get final response incorporating tool results
+                completion_args['messages'] = openai_messages
+
+                # Get final response incorporating tool results with tools enabled
                 final_response = await openai.chat.completions.create(
-                    model=model[7:],  # Remove 'openai-' prefix for the API call
-                    messages=openai_messages
+                    **completion_args,
                 )
-                yield f'data: {json.dumps({"text": final_response.choices[0].message.content})}\n\n'
-            else:
-                # If there are no tool_calls, return content directly
+                response = final_response  # Update response for next iteration check
+            
+            # After all tool calls are processed, return the final content
+            if response.choices[0].message.content:
                 yield f'data: {json.dumps({"text": response.choices[0].message.content})}\n\n'
 
             if response.usage:
@@ -72,7 +74,7 @@ class ChatHandler:
             yield 'data: {"text": "[DONE]"}\n\n'
 
         return StreamingResponse(
-            generate_non_stream_response(),
+            generate_non_stream_response(response),
             media_type="text/event-stream"
         )
 
@@ -95,7 +97,7 @@ class ChatHandler:
         """
         openai = AsyncOpenAI(api_key=self.api_key)
         openai_messages = prepare_openai_messages(system, messages)
-        
+
         completion_args = {
             "model": model[7:],  # Remove 'openai-' prefix
             "messages": openai_messages,
@@ -122,7 +124,7 @@ class ChatHandler:
                         response,
                         openai_client=openai,
                         messages=openai_messages,
-                        model=model[7:]
+                        completion_args=completion_args
                     ),
                     media_type="text/event-stream"
                 )
@@ -130,6 +132,7 @@ class ChatHandler:
                 # If the error indicates that stream mode is unsupported, fall back.
                 if "Unsupported value: 'stream'" in str(e):
                     completion_args["stream"] = False
+                    completion_args.pop("stream_options")
                     # Delegate non-streamed handling to the common function.
                     return await self._handle_openai_non_stream(
                         openai, completion_args, model, openai_messages
