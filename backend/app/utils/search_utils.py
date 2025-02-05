@@ -87,7 +87,6 @@ async def web_search(query: str, num_results: int = 5) -> List[SearchResult]:
         List of SearchResult objects
     """
     try:
-        log_info(f"Performing web search", {"query": query, "num_results": num_results})
         
         from dotenv import load_dotenv
         load_dotenv()

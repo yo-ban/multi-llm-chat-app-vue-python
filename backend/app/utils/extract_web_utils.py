@@ -180,9 +180,6 @@ async def extract_web_site(url: str, query: str) -> Dict[str, Any]:
     from datetime import datetime, timezone
     import traceback
 
-    log_info(f"Starting web extraction", {"url": url, "query": query})
-    
-
     response = {
         "url": url,
         "query": query,

@@ -49,10 +49,22 @@
     </div>
     <div v-if="hasConversations" class="fade-effect"></div>
     <div v-if="isStreaming || activeToolCall" class="tool-call-indicator">
-      <i v-if="activeToolCall" class="pi pi-search" style="margin-right: 8px"></i>
+      <i v-if="activeToolCall" class="pi pi-search animate-pulse" style="margin-right: 8px"></i>
       <i v-else class="pi pi-spinner pi-spin" style="margin-right: 8px"></i>
-      <span v-if="activeToolCall?.type === 'web_search'">Web検索中...</span>
-      <span v-else>応答を待っています...</span>
+      <span v-if="activeToolCall?.type === 'web_search'" class="tool-status">
+        Searching<span class="animate-dots">...</span> {{ truncateText(activeToolCall.query, 30) }}
+      </span>
+      <span v-else-if="activeToolCall?.type === 'extract_web_site'" class="tool-status">
+        Browsing<span class="animate-dots">...</span> {{ truncateText(activeToolCall.url, 40) }}
+      </span>
+      <span v-else class="tool-status">
+        <template v-if="hasStartedStreaming">
+          Generating response<span class="animate-dots">...</span>
+        </template>
+        <template v-else>
+          Waiting for response<span class="animate-dots">...</span>
+        </template>
+      </span>
     </div>
     <MessageInput
       v-if="hasConversations"
@@ -209,14 +221,27 @@ const selectedModel = computed(() => {
   return MODELS.anthropic.CLAUDE_3_5_SONNET;
 });
 
-const activeToolCall = ref<{ type: string; status: 'start' | 'end' } | null>(null);
+interface ToolCall {
+  type: string;
+  status: 'start' | 'end';
+  query?: string;
+  url?: string;
+}
+
+const activeToolCall = ref<ToolCall | null>(null);
+const hasStartedStreaming = ref(false);
 
 function isAssistantMessage(message: Message): message is AssistantMessage {
   return message.role === 'assistant';
 }
 
+function truncateText(text: string | undefined, maxLength: number): string {
+  if (!text) return '';
+  return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+}
+
 // ツール呼び出しの状態を監視・更新
-const onUpdate = async (text: string, toolCall?: { type: string; status: 'start' | 'end' }, isIndicator?: boolean) => {
+const onUpdate = async (text: string, toolCall?: ToolCall, isIndicator?: boolean) => {
   if (!isIndicator && !chatStore.messages.some(message => 
     isAssistantMessage(message) && message.streaming
   )) {
@@ -224,8 +249,14 @@ const onUpdate = async (text: string, toolCall?: { type: string; status: 'start'
   }
   if (!isIndicator) {
     chatStore.updateStreamedMessage(text);
+    hasStartedStreaming.value = true;
   }
-  activeToolCall.value = toolCall || null;
+  if (toolCall) {
+    activeToolCall.value = toolCall;
+    hasStartedStreaming.value = false;
+  } else {
+    activeToolCall.value = null;
+  }
 };
 
 watch(
@@ -336,6 +367,7 @@ async function updateHistoryLength(historyLength: number) {
 }
 
 async function onSendMessage(newMessage: string, uploadedImages: string[]) {
+  hasStartedStreaming.value = false;
   const currentConversationId = conversationStore.currentConversationId;
   if (currentConversationId) {
     if (showSystemMessageInput.value) {
@@ -426,6 +458,7 @@ function cancelStreaming() {
   if (abortController.value) {
     abortController.value.abort();
     isStreaming.value = false;
+    hasStartedStreaming.value = false;
     chatStore.stopStreaming()
   }
 }
@@ -616,6 +649,47 @@ onBeforeUnmount(() => {
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   z-index: 100;
   animation: slide-up 0.3s ease-out;
+  max-width: 80%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.tool-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.animate-dots {
+  display: inline-block;
+  min-width: 16px;
+  animation: dots 1.4s infinite;
+}
+
+@keyframes dots {
+  0%, 20% {
+    content: '.';
+  }
+  40%, 60% {
+    content: '..';
+  }
+  80%, 100% {
+    content: '...';
+  }
 }
 
 @keyframes slide-up {
@@ -627,5 +701,25 @@ onBeforeUnmount(() => {
     transform: translate(-50%, 0);
     opacity: 1;
   }
+}
+</style>
+
+<style>
+/* グローバルスタイル（scoped外に配置） */
+@keyframes dots {
+  0%, 20% {
+    content: '.';
+  }
+  40%, 60% {
+    content: '..';
+  }
+  80%, 100% {
+    content: '...';
+  }
+}
+
+.animate-dots::after {
+  content: '...';
+  animation: dots 1.4s infinite;
 }
 </style>

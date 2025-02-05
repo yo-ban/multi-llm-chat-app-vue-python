@@ -6,10 +6,17 @@ import { WEB_SEARCH_TOOL_SUFFIX } from '@/constants/personas';
 // import { MODELS } from '@/constants/models';
 // import { getLastModelOfVendor } from '@/utils/model-utils';
 
+interface ToolCall {
+  type: string;
+  status: 'start' | 'end';
+  query?: string;
+  url?: string;
+}
+
 // SSEレスポンスを処理する共通関数
 async function processSSEResponse(
   response: Response,
-  onUpdate?: (text: string, toolCall?: { type: string; status: 'start' | 'end' }, isIndicator?: boolean) => void
+  onUpdate?: (text: string, toolCall?: ToolCall, isIndicator?: boolean) => void
 ): Promise<string> {
   const reader = response.body?.getReader();
   if (!reader) {
@@ -47,6 +54,14 @@ async function processSSEResponse(
         }
         if (data.type === 'tool_call_start' && onUpdate) {
           onUpdate(result, { type: data.tool, status: 'start' }, true);
+        } else if (data.type === 'tool_execution' && onUpdate) {
+          const toolCall: ToolCall = {
+            type: data.tool,
+            status: 'start'
+          };
+          if (data.query) toolCall.query = data.query;
+          if (data.url) toolCall.url = data.url;
+          onUpdate(result, toolCall, true);
         } else if (data.stop_reason) {
           stopReason = data.stop_reason;
         } else if (data.text) {
