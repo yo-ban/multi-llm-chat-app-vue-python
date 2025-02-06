@@ -26,6 +26,8 @@ def format_web_extraction(result: Dict[str, Any]) -> str:
     formatted_text.append(f"Extracted from: {result['url']}")
     if result.get("extracted_info"):
         formatted_text.append(f"\n{result['extracted_info']}")
+    if result.get("error"):
+        formatted_text.append(f"\n{result['error']}")
     return "\n".join(formatted_text)
 
 async def handle_tool_call(

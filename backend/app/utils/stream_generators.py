@@ -18,6 +18,7 @@ async def gemini_stream_generator(response) -> AsyncGenerator[str, None]:
 
         if event.usage_metadata:
             usage = await parse_usage_gemini(event.usage_metadata)
+            log_info("Token usage in Gemini", usage)
             yield f"data: {json.dumps(usage)}\n\n"
 
         yield f"data: {json.dumps({'text': '[DONE]'})}\n\n"
@@ -92,6 +93,7 @@ async def openai_stream_generator(
 
                 if hasattr(chunk, 'usage') and chunk.usage:
                     usage = await parse_usage(chunk.usage)
+                    log_info("Token usage in OpenAI", usage)
                     yield f"data: {json.dumps(usage)}\n\n"
 
                 # Check finish reason

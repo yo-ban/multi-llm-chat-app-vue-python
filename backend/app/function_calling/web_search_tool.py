@@ -1,4 +1,5 @@
 import os
+import asyncio
 from typing import List, Dict
 import aiohttp
 from google import genai
@@ -11,9 +12,10 @@ from google.genai.types import (
     HarmCategory, 
     HarmBlockThreshold
 )
+from google.genai.errors import ServerError
 from app.models.models import SearchResult
 from app.utils.logging_utils import get_logger, log_error, log_info, log_warning, log_debug
-
+from app.utils.message_utils import parse_usage_gemini
 # Get logger instance
 logger = get_logger()
 
@@ -132,20 +134,38 @@ async def web_search(query: str, num_results: int = 5) -> List[SearchResult]:
             )
         ]
 
-        # First, get search results
-        response = client.models.generate_content(
-            model=model_id,
-            contents=f"質問の言語に合わせて検索してください。有力な情報源を複数探し、簡潔に回答してください。\n\n質問:{query}",
-            config=GenerateContentConfig(
-                tools=[google_search_tool],
-                response_modalities=["TEXT"],
-                safety_settings=safety_settings,
-                max_output_tokens=1024
-            )
-        )
+        max_retries = 3
+        retries = 0
+        while retries < max_retries:
+            try:
+                        # First, get search results
+                response = client.models.generate_content(
+                    model=model_id,
+                    contents=f"Search using the same language as the question below.\n\nQuestion:{query}",
+                    config=GenerateContentConfig(
+                        tools=[google_search_tool],
+                        response_modalities=["TEXT"],
+                        safety_settings=safety_settings,
+                        max_output_tokens=1024
+                    )
+                )
+                break
+            except Exception as e:
+                if isinstance(e, ServerError) and e.code == 503 and 'The model is overloaded' in e.message:
+                    retries += 1
+                    if retries == max_retries:
+                        raise e
+                    await asyncio.sleep(1)
+                else:
+                    raise e
 
         # Extract and process grounding metadata
         metadata = response.candidates[0].grounding_metadata
+
+        if response.usage_metadata:
+            usage = await parse_usage_gemini(response.usage_metadata)
+            log_info("Token usage in web search", usage)
+
         if not metadata:
             log_warning("No search results found", {"query": query})
             return []

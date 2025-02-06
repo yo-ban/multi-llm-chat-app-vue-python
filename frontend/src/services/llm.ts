@@ -3,8 +3,6 @@ import { API_BASE_URL, API_MESSAGES_ENDPOINT } from '@/constants/api';
 import { useSettingsStore } from '@/store/settings';
 import type { APISettings } from '@/types/api';
 import { WEB_SEARCH_TOOL_SUFFIX } from '@/constants/personas';
-// import { MODELS } from '@/constants/models';
-// import { getLastModelOfVendor } from '@/utils/model-utils';
 
 interface ToolCall {
   type: string;
@@ -64,13 +62,14 @@ async function processSSEResponse(
           onUpdate(result, toolCall, true);
         } else if (data.stop_reason) {
           stopReason = data.stop_reason;
+          console.log("stopReason", stopReason);
         } else if (data.text) {
           result += data.text;
           if (onUpdate) {
             onUpdate(result);
           }
         } else if (data.usage) {
-          console.log(data.usage);
+          console.log("usage", data.usage);
         }
       }
     }

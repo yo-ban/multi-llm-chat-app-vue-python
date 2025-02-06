@@ -105,7 +105,6 @@ async def parse_usage(usage: Any) -> Dict[str, Any]:
         }
     }
 
-    log_info("Token usage", usage_info)
     return usage_info 
 
 async def parse_usage_gemini(usage: Any) -> Dict[str, Any]:
@@ -124,7 +123,5 @@ async def parse_usage_gemini(usage: Any) -> Dict[str, Any]:
             "reasoning_usage": reasoning_usage
         }
     }
-
-    log_info("Token usage", usage_info)
     return usage_info
 

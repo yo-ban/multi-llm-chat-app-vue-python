@@ -30,7 +30,7 @@ from app.utils.image_utils import upload_image_to_gemini
 from app.models.models import ChatRequest
 from app.function_calling.tool_definitions import get_tool_definitions
 from app.function_calling.tool_handlers import handle_tool_call
-
+from app.utils.logging_utils import log_info
 class ChatHandler:
     def __init__(self, api_key: str):
         self.api_key = api_key
@@ -82,6 +82,7 @@ class ChatHandler:
 
             if response.usage:
                 usage = await parse_usage(response.usage)
+                log_info("Token usage in OpenAI", usage)
                 yield f"data: {json.dumps(usage)}\n\n"
             
             yield 'data: {"text": "[DONE]"}\n\n'
@@ -317,6 +318,7 @@ class ChatHandler:
 
                 if response.usage_metadata:
                     usage = await parse_usage_gemini(response.usage_metadata)
+                    log_info("Token usage in Gemini", usage)
                     yield f"data: {json.dumps(usage)}\n\n"
 
                 yield 'data: {"text": "[DONE]"}\n\n'
