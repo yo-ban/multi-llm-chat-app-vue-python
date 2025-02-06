@@ -1,8 +1,20 @@
 import base64
 import os
-import tempfile
-from typing import Dict, Tuple, Optional, Any
+from typing import Dict, Tuple, Any
 from app.utils.logging_utils import get_logger, log_error, log_info, log_warning, log_debug
+from io import BytesIO
+from google import genai
+from google.genai.types import (
+    GenerateContentConfig, 
+    SafetySetting, 
+    HarmCategory, 
+    HarmBlockThreshold, 
+    Content,
+    File,
+    Part
+)
+from app.utils.logging_utils import log_info
+from app.utils.stream_generators import parse_usage_gemini
 
 async def retrieve_page_data(url: str) -> Tuple[str, str]:
     """
@@ -26,13 +38,10 @@ async def retrieve_page_data(url: str) -> Tuple[str, str]:
         screenshot_bytes = await page.screenshot(full_page=True)
         screenshot_base64 = base64.b64encode(screenshot_bytes).decode('utf-8')
 
-        # # save images
-        # with open("screenshot.png", "wb") as f:
-        #     f.write(screenshot_bytes)
         await browser.close()
         return text, screenshot_base64
 
-def extract_relevant_info(text: str, screenshot_base64: str, query: str) -> str:
+async def extract_relevant_info(text: str, screenshot_base64: str, query: str) -> str:
     """
     Gemini 2.0 Flash（Google Gen AI SDK経由）に対して、取得したページテキストとスクリーンショットの情報
     を元に、クエリに関連する部分のみを抽出して返す関数
@@ -94,62 +103,91 @@ Page text:
 Query: {query}
 """
 
-    # Import necessary modules and configure the Gemini API.
-
-    import google.generativeai as genai
     from dotenv import load_dotenv
     load_dotenv()
 
     # Configure the Gemini API using the key from environment variables.
-    genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-    model_id = os.environ["GEMINI_MODEL_NAME"]
+    client = genai.Client(
+        api_key=os.getenv('GEMINI_API_KEY'),
+        http_options={'api_version': 'v1alpha'}
+    )
     
-    # Write the Base64 screenshot data to a temporary file.
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp_file:
-        temp_file.write(base64.b64decode(screenshot_base64))
-        temp_file_path = temp_file.name
-
+    # Create BytesIO object for the image
+    image_bytes = base64.b64decode(screenshot_base64)    
+    image_buffer = BytesIO(image_bytes)
     # Upload the temporary image file to Gemini.
     try:
-        uploaded_file = genai.upload_file(temp_file_path, mime_type="image/png")
+        uploaded_file: File = client.files.upload(file=image_buffer, config={"mime_type": "image/png"})
     except Exception as upload_error:
-        os.remove(temp_file_path)
         raise upload_error
 
-    # Remove the temporary file after uploading.
-    os.remove(temp_file_path)
-
-    # Generation configuration for Gemini 2.0 Flash.
-    generation_config = {
-        "temperature": 1,
-        "top_p": 0.95,
-        "top_k": 40,
-        "max_output_tokens": 8192,
-        "response_mime_type": "text/plain",
-    }
-
     safety_settings = [
-        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+        SafetySetting(
+            category=HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
+            threshold=HarmBlockThreshold.BLOCK_NONE
+        ),
+        SafetySetting(
+            category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+            threshold=HarmBlockThreshold.BLOCK_NONE
+        ),
+        SafetySetting(
+            category=HarmCategory.HARM_CATEGORY_HARASSMENT,
+            threshold=HarmBlockThreshold.BLOCK_NONE
+        ),
+        SafetySetting(
+            category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+            threshold=HarmBlockThreshold.BLOCK_NONE
+        ),
+        SafetySetting(
+            category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+            threshold=HarmBlockThreshold.BLOCK_NONE
+        )
     ]
 
-    # Create the GenerativeModel with the designated system instruction.
-    model = genai.GenerativeModel(
-        model_name=model_id,
-        generation_config=generation_config,
-        system_instruction=BROWSING_SYSTEM_PROMPT,
+    content = Content(
+        parts=[
+            Part.from_text(text=BROWSING_USER_PROMPT),
+            Part.from_uri(file_uri=uploaded_file.uri, mime_type="image/png")
+        ],
+        role="user"
     )
 
-    # Start a chat session including both the uploaded screenshot and the text prompt.
-    chat_session = model.start_chat()
+    # Generation configuration for Gemini 2.0 Flash.
+    generation_config = GenerateContentConfig(
+        response_modalities=["TEXT"],
+        safety_settings=safety_settings,
+        system_instruction=BROWSING_SYSTEM_PROMPT,
+        temperature=1,
+        top_p=0.95,
+        top_k=40,
+        max_output_tokens=8192,
+        response_mime_type="text/plain",
+    )
 
-    # Send an empty message to trigger response generation.
-    response = chat_session.send_message([uploaded_file.uri, BROWSING_USER_PROMPT], safety_settings=safety_settings)
+    chat = client.aio.chats.create(
+        history=[],
+        model=os.getenv("GEMINI_MODEL_NAME"),
+        config=generation_config
+    )
 
-    # Return the generated text from the AI model.
-    return response.text
+    response = await chat.send_message_stream(content)
+
+    text = ""
+    try:
+        async for event in response:
+            text += event.text
+        if event.usage_metadata:
+            usage = await parse_usage_gemini(event.usage_metadata)
+            log_info("Token usage in web extraction", usage)
+    except Exception as e:
+        raise e
+
+    try:
+        client.files.delete(name=uploaded_file.name)
+    except Exception as e:
+        log_warning(f"Image delete failed: {e}")
+
+    return text
 
 async def web_browsing(url: str, query: str) -> Dict[str, Any]:
     """
@@ -194,7 +232,7 @@ async def web_browsing(url: str, query: str) -> Dict[str, Any]:
         
         # Extract relevant information using Gemini
         log_debug("Extracting relevant information using Gemini", {"query": query})
-        relevant_info = extract_relevant_info(text, screenshot_base64, query)
+        relevant_info = await extract_relevant_info(text, screenshot_base64, query)
         
         # Update response with success data
         response.update({

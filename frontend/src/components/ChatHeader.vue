@@ -326,6 +326,7 @@ const localSettings = ref<APISettings>({
   maxTokens: props.settings.maxTokens,
   reasoningEffort: props.settings.reasoningEffort,
   websearch: props.settings.websearch,
+  multimodal: props.settings.multimodal,
 });
 
 const availableModels = computed(() => {
@@ -426,6 +427,7 @@ watch(
         maxTokens: newSettings.maxTokens,
         reasoningEffort: newSettings.reasoningEffort,
         websearch: newSettings.websearch,
+        multimodal: newSettings.multimodal,
       };
       displayedModel.value = selectedModel.value;
     }
@@ -452,11 +454,13 @@ watch(
         maxTokens: model.maxTokens,
         supportsReasoning: model.supportsReasoning,
         supportFunctionCalling: model.supportFunctionCalling,
-        unsupportsTemperature: model.unsupportsTemperature
+        unsupportsTemperature: model.unsupportsTemperature,
+        multimodal: model.multimodal
       });
       
       localSettings.value.maxTokens = Math.min(localSettings.value.maxTokens || 4096, model.maxTokens);
       localSettings.value.isReasoningSupported = model.supportsReasoning || false;
+      localSettings.value.multimodal = model.multimodal || false;
       
       // Set reasoning effort based on model support and global default
       if (model.supportsReasoning && !localSettings.value.reasoningEffort) {
@@ -553,6 +557,7 @@ function closeModelSettingsDialog() {
     maxTokens: props.settings.maxTokens,
     reasoningEffort: props.settings.reasoningEffort,
     websearch: props.settings.websearch,
+    multimodal: props.settings.multimodal,
   };
   displayedModel.value = selectedModel.value;
 }

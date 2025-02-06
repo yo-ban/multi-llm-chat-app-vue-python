@@ -1,7 +1,8 @@
 import json
 from typing import AsyncGenerator, Any, Dict, List
 from openai import AsyncOpenAI
-from app.utils.tool_handlers import handle_tool_call, parse_usage
+from app.function_calling.tool_handlers import handle_tool_call
+from app.utils.message_utils import parse_usage, parse_usage_gemini
 from app.utils.logging_utils import get_logger, log_error, log_info, log_warning, log_debug
 
 # Get logger instance
@@ -14,6 +15,11 @@ async def gemini_stream_generator(response) -> AsyncGenerator[str, None]:
     try:
         async for event in response:
             yield f"data: {json.dumps({'text': event.text})}\n\n"
+
+        if event.usage_metadata:
+            usage = await parse_usage_gemini(event.usage_metadata)
+            yield f"data: {json.dumps(usage)}\n\n"
+
         yield f"data: {json.dumps({'text': '[DONE]'})}\n\n"
     except Exception as e:
         yield f"data: {json.dumps({'error': str(e)})}\n\n"
@@ -85,7 +91,7 @@ async def openai_stream_generator(
                         yield f"data: {json.dumps({'text': delta.content})}\n\n"
 
                 if hasattr(chunk, 'usage') and chunk.usage:
-                    usage = parse_usage(chunk.usage)
+                    usage = await parse_usage(chunk.usage)
                     yield f"data: {json.dumps(usage)}\n\n"
 
                 # Check finish reason

@@ -1,21 +1,35 @@
 from typing import Any, Dict, Optional
-import google.generativeai as genai
 from openai import AsyncOpenAI
 from anthropic import AsyncAnthropic
 from fastapi import HTTPException
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse
 import json
+from google import genai
+from google.genai.types import (
+    GenerateContentConfig,
+    SafetySetting,
+    HarmCategory,
+    HarmBlockThreshold,
+    Content,
+    Part
+)
 
 from app.utils.stream_generators import (
     gemini_stream_generator,
     openai_stream_generator,
     anthropic_stream_generator
 )
-from app.utils.message_utils import prepare_api_messages, prepare_openai_messages, prepare_anthropic_messages
+from app.utils.message_utils import (
+    prepare_api_messages, 
+    prepare_openai_messages, 
+    prepare_anthropic_messages, 
+    parse_usage,
+    parse_usage_gemini
+)
 from app.utils.image_utils import upload_image_to_gemini
 from app.models.models import ChatRequest
-from app.utils.tool_utils import get_tool_definitions
-from app.utils.tool_handlers import handle_tool_call, parse_usage
+from app.function_calling.tool_definitions import get_tool_definitions
+from app.function_calling.tool_handlers import handle_tool_call
 
 class ChatHandler:
     def __init__(self, api_key: str):
@@ -25,7 +39,6 @@ class ChatHandler:
         self,
         openai: AsyncOpenAI,
         completion_args: dict,
-        model: str,
         openai_messages: list
     ) -> Any:
         """
@@ -68,7 +81,7 @@ class ChatHandler:
                 yield f'data: {json.dumps({"text": response.choices[0].message.content})}\n\n'
 
             if response.usage:
-                usage = parse_usage(response.usage)
+                usage = await parse_usage(response.usage)
                 yield f"data: {json.dumps(usage)}\n\n"
             
             yield 'data: {"text": "[DONE]"}\n\n'
@@ -96,7 +109,7 @@ class ChatHandler:
         the generation falls back to non-streaming mode using common logic.
         """
         openai = AsyncOpenAI(api_key=self.api_key)
-        openai_messages = prepare_openai_messages(system, messages)
+        openai_messages = await prepare_openai_messages(system, messages)
 
         completion_args = {
             "model": model[7:],  # Remove 'openai-' prefix
@@ -135,7 +148,7 @@ class ChatHandler:
                     completion_args.pop("stream_options")
                     # Delegate non-streamed handling to the common function.
                     return await self._handle_openai_non_stream(
-                        openai, completion_args, model, openai_messages
+                        openai, completion_args, openai_messages
                     )
                 else:
                     raise e
@@ -143,7 +156,7 @@ class ChatHandler:
             completion_args["stream"] = False
             # For explicit non-stream requests, delegate to the common function.
             return await self._handle_openai_non_stream(
-                openai, completion_args, model, openai_messages
+                openai, completion_args, openai_messages
             )
 
     async def handle_anthropic(
@@ -154,11 +167,13 @@ class ChatHandler:
         temperature: float,
         stream: bool,
         system: str,
-        multimodal: bool = False
+        websearch: bool = True,
+        reasoning_effort: Optional[str] = None,
+        is_reasoning_supported: bool = False
     ) -> Any:
         """Handle Anthropic API requests"""
         anthropic = AsyncAnthropic(api_key=self.api_key)
-        anthropic_messages = prepare_anthropic_messages(messages)
+        anthropic_messages = await prepare_anthropic_messages(messages)
         
         response = await anthropic.messages.create(
             system=[
@@ -197,36 +212,51 @@ class ChatHandler:
         max_tokens: int,
         temperature: float,
         stream: bool,
-        system: str
+        system: str,
+        websearch: bool = True,
+        reasoning_effort: Optional[str] = None,
+        is_reasoning_supported: bool = False
     ) -> Any:
-        """Handle Gemini API requests"""
-        genai.configure(api_key=self.api_key)
+        """Handle Gemini API requests using the new client"""
+        client = genai.Client(api_key=self.api_key)
         
-        generation_config = {
-            "temperature": temperature,
-            "max_output_tokens": max_tokens,
-            "top_p": 0.95,
-            "top_k": 40,
-            "response_mime_type": "text/plain",
-        }
-
         safety_settings = [
-            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+            SafetySetting(
+                category=HarmCategory.HARM_CATEGORY_HARASSMENT,
+                threshold=HarmBlockThreshold.BLOCK_NONE
+            ),
+            SafetySetting(
+                category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                threshold=HarmBlockThreshold.BLOCK_NONE
+            ),
+            SafetySetting(
+                category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                threshold=HarmBlockThreshold.BLOCK_NONE
+            ),
+            SafetySetting(
+                category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                threshold=HarmBlockThreshold.BLOCK_NONE
+            ),
+            SafetySetting(
+                category=HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
+                threshold=HarmBlockThreshold.BLOCK_NONE
+            )
         ]
 
-        model_instance = genai.GenerativeModel(
-            model_name=model,
+        generation_config = GenerateContentConfig(
+            response_modalities=["TEXT"],
             safety_settings=safety_settings,
-            generation_config=generation_config,
-            system_instruction=[system]
+            system_instruction=system,
+            temperature=temperature,
+            top_p=0.95,
+            top_k=40,
+            max_output_tokens=max_tokens,
+            response_mime_type="text/plain",
         )
 
         # Process history and current message
-        images = []
         history = []
+        images = []
         for message in messages[:-1]:
             parts = []
             role = "model" if message["role"] == "assistant" else message["role"]
@@ -236,47 +266,59 @@ class ChatHandler:
                         content["source"]["data"],
                         content["source"]["media_type"]
                     )
-                    parts.append(uploaded_image.uri)
+                    parts.append(Part.from_uri(file_uri=uploaded_image.uri, mime_type=content["source"]["media_type"]))
                     images.append(uploaded_image)
                 elif content["type"] == "text":
-                    parts.append(content["text"])
-            history.append({"role": role, "parts": parts})
+                    parts.append(Part.from_text(text=content["text"]))
+            history.append(Content(parts=parts, role=role))
 
-        chat = model_instance.start_chat(history=history)
+        chat = client.aio.chats.create(
+            history=history,
+            model=model,
+            config=generation_config
+        )
         
         # Process latest message
         latest_message = messages[-1]
         latest_parts = []
         for content in latest_message["content"]:
             if content["type"] == "text":
-                latest_parts.append(content["text"])
+                latest_parts.append(Part.from_text(text=content["text"]))
             elif content["type"] == "image":
                 uploaded_image = await upload_image_to_gemini(
                     content["source"]["data"],
                     content["source"]["media_type"]
                 )
-                latest_parts.append(uploaded_image)
+                latest_parts.append(Part.from_uri(file_uri=uploaded_image.uri, mime_type=content["source"]["media_type"]))
                 images.append(uploaded_image)
-        response = await chat.send_message_async(
-            content=latest_parts,
-            stream=stream,
-            safety_settings=safety_settings
-        )
 
-        for image in images:
-            try:
-                genai.delete_file(image.name)
-            except Exception as e:
-                print(f"Error deleting image: {e}")
+        latest_content = Content(parts=latest_parts, role="user")
+
+        def _cleanup_images():
+        # Cleanup uploaded images
+            for image in images:
+                try:
+                    client.files.delete(name=image.name)
+                except Exception as e:
+                    print(f"Error deleting image: {e}")
 
         if stream:
+            response = await chat.send_message_stream(latest_content)
+            _cleanup_images()
             return StreamingResponse(
                 gemini_stream_generator(response),
                 media_type="text/event-stream"
             )
         else:
+            response = await chat.send_message(latest_content)
+            _cleanup_images()
             async def generate_non_stream_response():
                 yield f'data: {json.dumps({"text": response.text})}\n\n'
+
+                if response.usage_metadata:
+                    usage = await parse_usage_gemini(response.usage_metadata)
+                    yield f"data: {json.dumps(usage)}\n\n"
+
                 yield 'data: {"text": "[DONE]"}\n\n'
 
             return StreamingResponse(
@@ -291,7 +333,10 @@ class ChatHandler:
         max_tokens: int,
         temperature: float,
         stream: bool,
-        system: str
+        system: str,
+        websearch: bool = True,
+        reasoning_effort: Optional[str] = None,
+        is_reasoning_supported: bool = False
     ) -> Any:
         """Handle Deepseek API requests"""
         deepseek = AsyncOpenAI(
@@ -299,7 +344,7 @@ class ChatHandler:
             base_url="https://api.deepseek.com"
         )
 
-        deepseek_messages = prepare_openai_messages(system, messages)
+        deepseek_messages = await prepare_openai_messages(system, messages)
 
         completion_args = {
             "model": model,
@@ -339,7 +384,10 @@ class ChatHandler:
         max_tokens: int,
         temperature: float,
         stream: bool,
-        system: str
+        system: str,
+        websearch: bool = True,
+        reasoning_effort: Optional[str] = None,
+        is_reasoning_supported: bool = False
     ) -> Any:
         """Handle OpenRouter API requests"""
         openrouter = AsyncOpenAI(
@@ -347,7 +395,7 @@ class ChatHandler:
             base_url="https://openrouter.ai/api/v1"
         )
 
-        openrouter_messages = prepare_openai_messages(system, messages)
+        openrouter_messages = await prepare_openai_messages(system, messages)
 
         completion_args = {
             "model": model,

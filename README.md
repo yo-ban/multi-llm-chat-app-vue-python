@@ -74,6 +74,7 @@ pip install -r requirements.txt
 # Backend (.env)
 # Optional: Only required if you want to use web search functionality
 GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL_NAME=gemini-2.0-flash
 ```
 
 5. Start the development servers:
@@ -90,6 +91,14 @@ python run_local.py
 ## 🐳 Docker Deployment
 
 Deploy using Docker Compose:
+1. Optional: Create environment variables:
+```bash
+# Root directory (.env)
+# Optional: Only required if you want to use web search functionality
+GEMINI_API_KEY=your_gemini_api_key
+```
+
+2. Build and start the application:
 ```bash
 docker compose up -d --build
 ```

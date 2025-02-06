@@ -69,6 +69,8 @@ async function processSSEResponse(
           if (onUpdate) {
             onUpdate(result);
           }
+        } else if (data.usage) {
+          console.log(data.usage);
         }
       }
     }
@@ -92,6 +94,7 @@ export async function sendMessageToAPI(
     }));
     console.log(API_BASE_URL);
     console.log(API_MESSAGES_ENDPOINT);
+    console.log("API Settings:", settings);
 
     const systemMessage = settings.websearch ? `${system}${WEB_SEARCH_TOOL_SUFFIX}` : system;
 

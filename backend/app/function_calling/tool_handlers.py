@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, AsyncGenerator, Union
 import json
-from app.utils.search_utils import web_search
-from app.utils.extract_web_utils import web_browsing
+from app.function_calling.web_search_tool import web_search
+from app.function_calling.web_browsing_tool import web_browsing
 from app.utils.logging_utils import get_logger, log_error, log_info, log_warning, log_debug
 
 # Get logger instance
@@ -108,29 +108,3 @@ async def handle_tool_call(
             "error": str(e)
         })
         raise
-
-def parse_usage(usage: Any) -> Dict[str, Any]:
-    """
-    Parse usage information from OpenAI's response.
-    This is a common utility used by both streaming and non-streaming responses.
-
-    Args:
-        usage: The usage object from OpenAI's response
-
-    Returns:
-        Dict containing parsed usage information
-    """
-    completion_usage = getattr(usage, 'completion_tokens', 0)
-    prompt_usage = getattr(usage, 'prompt_tokens', 0)
-    
-    completion_tokens_details = getattr(usage, 'completion_tokens_details', None)
-    reasoning_usage = getattr(completion_tokens_details, 'reasoning_tokens', 0) if completion_tokens_details else 0
-
-    usage_info = {
-        "completion_usage": completion_usage,
-        "prompt_usage": prompt_usage,
-        "reasoning_usage": reasoning_usage
-    }
-    
-    log_info("Token usage", usage_info)
-    return usage_info 

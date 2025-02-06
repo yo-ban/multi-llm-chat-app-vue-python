@@ -1,8 +1,16 @@
-import json, os
-from typing import List, Dict, Any, Optional
+import os
+from typing import List, Dict
 import aiohttp
 from google import genai
-from google.genai.types import Tool, GenerateContentConfig, GoogleSearch, GroundingMetadata, SafetySetting, HarmCategory, HarmBlockThreshold, HarmBlockMethod
+from google.genai.types import (
+    Tool, 
+    GenerateContentConfig, 
+    GoogleSearch, 
+    GroundingMetadata, 
+    SafetySetting, 
+    HarmCategory, 
+    HarmBlockThreshold
+)
 from app.models.models import SearchResult
 from app.utils.logging_utils import get_logger, log_error, log_info, log_warning, log_debug
 
@@ -90,11 +98,12 @@ async def web_search(query: str, num_results: int = 5) -> List[SearchResult]:
         
         from dotenv import load_dotenv
         load_dotenv()
+
         client = genai.Client(
-            api_key=os.getenv('GEMINI_API_KEY'),
+            api_key=os.getenv("GEMINI_API_KEY"),
             http_options={'api_version': 'v1alpha'}
         )
-        model_id = os.environ["GEMINI_MODEL_NAME"]
+        model_id = os.getenv("GEMINI_MODEL_NAME")
 
         google_search_tool = Tool(
             google_search=GoogleSearch()
@@ -126,11 +135,12 @@ async def web_search(query: str, num_results: int = 5) -> List[SearchResult]:
         # First, get search results
         response = client.models.generate_content(
             model=model_id,
-            contents=f"質問の言語に合わせて検索してください。\n\n質問:{query}",
+            contents=f"質問の言語に合わせて検索してください。有力な情報源を複数探し、簡潔に回答してください。\n\n質問:{query}",
             config=GenerateContentConfig(
                 tools=[google_search_tool],
                 response_modalities=["TEXT"],
-                safety_settings=safety_settings
+                safety_settings=safety_settings,
+                max_output_tokens=1024
             )
         )
 

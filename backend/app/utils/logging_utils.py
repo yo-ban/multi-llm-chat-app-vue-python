@@ -56,11 +56,6 @@ async def log_request_info(request: Request, logger: Optional[logging.Logger] = 
         logger: Logger instance (optional, will use global logger if not provided)
     """
     logger = logger or get_logger()
-    body = await request.body()
-    try:
-        body_json = json.loads(body)
-    except:
-        body_json = {"raw": str(body)}
         
     logger.info(
         f"Request: {request.method} {request.url}"

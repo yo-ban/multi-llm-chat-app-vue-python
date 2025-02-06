@@ -2,33 +2,37 @@ import os
 import base64
 from io import BytesIO
 from PIL import Image
-import google.generativeai as genai
+from google import genai
+from google.genai.types import File
 from typing import List, Dict, Any
 
-async def upload_image_to_gemini(image_data: str, mime_type: str) -> Any:
+async def upload_image_to_gemini(image_data: str, mime_type: str) -> File:
     """
-    Upload an image to Gemini API
+    Upload an image to Gemini API using the new client
     
     Args:
         image_data: Base64 encoded image data
         mime_type: MIME type of the image
         
     Returns:
-        Uploaded image object from Gemini
+        Uploaded file object from Gemini
     """
-    image = Image.open(BytesIO(base64.b64decode(image_data)))
-    buffer = BytesIO()
-    image.save(buffer, format=mime_type.split('/')[1])
-    file_path = f'temp_image.{mime_type.split("/")[1]}'
+    # Decode base64 image data to bytes
+    image_bytes = base64.b64decode(image_data)
     
+    # Create BytesIO object for the image
+    image_buffer = BytesIO(image_bytes)
+    
+    # Upload directly from BytesIO without saving to disk
     try:
-        with open(file_path, 'wb') as f:
-            f.write(buffer.getvalue())
-        uploaded_file = genai.upload_file(file_path, mime_type=mime_type)
+        client = genai.Client(api_key=os.getenv('GEMINI_API_KEY'))
+        uploaded_file = client.files.upload(
+            file=image_buffer,
+            config={"mime_type": mime_type}
+        )
         return uploaded_file
-    finally:
-        if os.path.exists(file_path):
-            os.remove(file_path)
+    except Exception as e:
+        raise ValueError(f"Error uploading image to Gemini: {str(e)}")
 
 async def process_images(images: List[str]) -> List[Dict[str, Any]]:
     """
