@@ -94,7 +94,7 @@ async def web_search(query: str, num_results: int = 5) -> List[SearchResult]:
             api_key=os.getenv('GEMINI_API_KEY'),
             http_options={'api_version': 'v1alpha'}
         )
-        model_id = "gemini-2.0-flash-exp"
+        model_id = os.environ["GEMINI_MODEL_NAME"]
 
         google_search_tool = Tool(
             google_search=GoogleSearch()

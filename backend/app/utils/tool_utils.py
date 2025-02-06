@@ -15,10 +15,9 @@ def get_tool_definitions() -> List[Dict[str, Any]]:
             "function": {
                 "name": "web_search",
                 "description": (
-                    "Perform a targeted web search for the most up-to-date information. "
-                    "Use this tool when the user explicitly requests recent information or when the query indicates "
-                    "that the required details are newer than your current knowledge base. "
-                    "This ensures that live data is fetched when static information might be outdated."
+                    "Perform a targeted web search to retrieve relevant URLs along with concise snippets "
+                    "that provide a brief summary of the content. Use this tool when the user requires timely information "
+                    "coupled with direct links for quick reference and further investigation."
                 ),
                 "parameters": {
                     "type": "object",
@@ -45,11 +44,11 @@ def get_tool_definitions() -> List[Dict[str, Any]]:
         {
             "type": "function",
             "function": {
-                "name": "extract_web_site",
+                "name": "web_browsing",
                 "description": (
-                    "Extract and analyze detailed information from a specified webpage. "
-                    "Use this tool when search results or explicit user instructions indicate that a deeper investigation "
-                    "of the webpage content is required. It leverages Gemini's visual and text analysis capabilities to provide comprehensive insights."
+                    "Perform an interactive web browsing session on a given URL to investigate its content in detail. "
+                    "After a web search provides the URL, use this tool to explore the webpage further and gather comprehensive information "
+                    "that supports the user's query."
                 ),
                 "parameters": {
                     "type": "object",

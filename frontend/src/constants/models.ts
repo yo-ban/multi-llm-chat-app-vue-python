@@ -76,17 +76,17 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
     },
   },
   google: {
-    GEMINI_EXP_1206: {
-      id: 'gemini-exp-1206',
-      name: 'Gemini Experimental 1206',
-      contextWindow: 2097152,
+    GEMINI_2_0_FLASH: {
+      id: 'gemini-2.0-flash',
+      name: 'Gemini 2.0 Flash',
+      contextWindow: 1048576,
       maxTokens: 8192,
       multimodal: true,
     },
-    GEMINI_2_0_FLASH_EXP: {
-      id: 'gemini-2.0-flash-exp',
-      name: 'Gemini 2.0 Flash Experimental',
-      contextWindow: 1048576,
+    GEMINI_2_0_PRO_EXP: {
+      id: 'gemini-2.0-pro-exp-02-05',
+      name: 'Gemini 2.0 Pro Experimental',
+      contextWindow: 2097152,
       maxTokens: 8192,
       multimodal: true,
     },
@@ -96,6 +96,7 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       contextWindow: 1048576,
       maxTokens: 65536,
       multimodal: true,
+      supportsReasoning: true,
     }
   },
   deepseek: {

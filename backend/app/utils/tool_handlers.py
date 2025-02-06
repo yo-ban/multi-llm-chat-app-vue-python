@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, AsyncGenerator, Union
 import json
 from app.utils.search_utils import web_search
-from app.utils.extract_web_utils import extract_web_site
+from app.utils.extract_web_utils import web_browsing
 from app.utils.logging_utils import get_logger, log_error, log_info, log_warning, log_debug
 
 # Get logger instance
@@ -73,15 +73,15 @@ async def handle_tool_call(
                     "content": formatted_results  # Use formatted text instead of JSON
                 })
                 
-        elif tool_call.function.name == "extract_web_site":
+        elif tool_call.function.name == "web_browsing":
             url = args.get("url")
             query = args.get("query")
             
             if url and query:
                 log_info("Executing web extraction", {"url": url, "query": query})
-                yield f"data: {json.dumps({'type': 'tool_execution', 'tool': 'extract_web_site', 'url': url})}\n\n"
+                yield f"data: {json.dumps({'type': 'tool_execution', 'tool': 'web_browsing', 'url': url})}\n\n"
                 
-                result = await extract_web_site(url, query)
+                result = await web_browsing(url, query)
 
                 formatted_result = format_web_extraction(result)
                 

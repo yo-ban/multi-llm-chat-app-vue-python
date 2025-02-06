@@ -225,6 +225,7 @@ class ChatHandler:
         )
 
         # Process history and current message
+        images = []
         history = []
         for message in messages[:-1]:
             parts = []
@@ -236,6 +237,7 @@ class ChatHandler:
                         content["source"]["media_type"]
                     )
                     parts.append(uploaded_image.uri)
+                    images.append(uploaded_image)
                 elif content["type"] == "text":
                     parts.append(content["text"])
             history.append({"role": role, "parts": parts})
@@ -254,12 +256,18 @@ class ChatHandler:
                     content["source"]["media_type"]
                 )
                 latest_parts.append(uploaded_image)
-
+                images.append(uploaded_image)
         response = await chat.send_message_async(
             content=latest_parts,
             stream=stream,
             safety_settings=safety_settings
         )
+
+        for image in images:
+            try:
+                genai.delete_file(image.name)
+            except Exception as e:
+                print(f"Error deleting image: {e}")
 
         if stream:
             return StreamingResponse(

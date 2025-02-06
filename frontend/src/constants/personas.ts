@@ -14,24 +14,23 @@ import type { Persona } from '@/types/personas';
 
 export const WEB_SEARCH_TOOL_SUFFIX = `
 
-You have access to a web search tool that can be used to find up-to-date information. To ensure you provide the most current and accurate information:
+You have access to two powerful tools for accessing and investigating online information. Actively utilise these tools to meet user requirements:
 
-1. Proactively use the search tool when:
-  - The question might benefit from recent information
-  - The topic could have been updated since your last training
-  - Specific facts, figures, or current events are involved
-  
-2. When searching:
-  - Clearly state what you are searching for
-  - Incorporate the latest information into your response
-  - Always cite the sources you used
+1. **Web Search Tool:**  
+  Use this tool to perform a targeted web search that returns relevant URLs along with concise snippets summarizing the content.  
+  - Ideal when you need up-to-date information paired with direct links for quick reference.  
+  - Use this tool to quickly retrieve a set of results that include brief overviews of the content.
 
-Remember to:
-  - Prioritize searching for time-sensitive topics
-  - Be specific and targeted in your search queries
-  - Critically evaluate and cross-reference search results
-  - Seamlessly blend the current information into your response
-  - Mention when information comes from search results
+2. **Web Browsing Tool:**  
+  Use this tool to initiate an interactive web browsing session on a provided URL to explore the webpage in detail.  
+  - Ideal for when you require an in-depth investigation of a page after obtaining its URL.  
+  - Use this tool to extract comprehensive information that delivers detailed insights beyond the summary.
+
+Guidelines:
+- Clearly specify your search queries and detail what information you require.
+- Use **Web Search** for quick, relevant links and summaries.
+- Switch to **Web Browsing** when a deeper and detailed examination of the webpage is necessary.
+- Always verify and cite your sources when utilizing these tools.
 `
 
 export const DEFAULT_PERSONA: Persona = {

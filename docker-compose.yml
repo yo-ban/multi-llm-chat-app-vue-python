@@ -20,6 +20,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL_NAME=gemini-2.0-flash
     volumes:
       - ./backend:/app
     # Add these configurations for Playwright

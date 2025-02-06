@@ -1,7 +1,5 @@
 import chardet
 from io import BytesIO
-import pypdf
-from unstructured.partition.auto import partition
 from fastapi import UploadFile, HTTPException
 from typing import Dict, Any
 
@@ -20,6 +18,8 @@ class FileHandler:
             Dictionary containing extracted text
         """
         try:
+            import pypdf
+
             content = await file.read()
             pdf = pypdf.PdfReader(BytesIO(content))
             text = ''
@@ -41,6 +41,7 @@ class FileHandler:
             Dictionary containing extracted text
         """
         try:
+            from trafilatura import extract
             content = await file.read()
             detected_encoding = chardet.detect(content)['encoding'] or "utf-8"
             html_text = content.decode(detected_encoding)
@@ -80,6 +81,7 @@ class FileHandler:
             Dictionary containing extracted text
         """
         try:
+            from nbconvert import MarkdownExporter
             content = await file.read()
             markdown_exporter = MarkdownExporter()
             notebook, _ = markdown_exporter.from_file(BytesIO(content))
@@ -99,6 +101,8 @@ class FileHandler:
             Dictionary containing extracted text
         """
         try:
+            from unstructured.partition.auto import partition
+
             content = await file.read()
             detected_encoding = chardet.detect(content)['encoding']
             elements = partition(file=BytesIO(content), encoding=detected_encoding)

@@ -54,7 +54,7 @@
       <span v-if="activeToolCall?.type === 'web_search'" class="tool-status">
         Searching<span class="animate-dots">...</span> {{ truncateText(activeToolCall.query, 30) }}
       </span>
-      <span v-else-if="activeToolCall?.type === 'extract_web_site'" class="tool-status">
+      <span v-else-if="activeToolCall?.type === 'web_browsing'" class="tool-status">
         Browsing<span class="animate-dots">...</span> {{ truncateText(activeToolCall.url, 40) }}
       </span>
       <span v-else class="tool-status">

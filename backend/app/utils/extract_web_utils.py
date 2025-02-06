@@ -102,7 +102,8 @@ Query: {query}
 
     # Configure the Gemini API using the key from environment variables.
     genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-
+    model_id = os.environ["GEMINI_MODEL_NAME"]
+    
     # Write the Base64 screenshot data to a temporary file.
     with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp_file:
         temp_file.write(base64.b64decode(screenshot_base64))
@@ -136,7 +137,7 @@ Query: {query}
 
     # Create the GenerativeModel with the designated system instruction.
     model = genai.GenerativeModel(
-        model_name="gemini-2.0-flash-exp",
+        model_name=model_id,
         generation_config=generation_config,
         system_instruction=BROWSING_SYSTEM_PROMPT,
     )
@@ -150,7 +151,7 @@ Query: {query}
     # Return the generated text from the AI model.
     return response.text
 
-async def extract_web_site(url: str, query: str) -> Dict[str, Any]:
+async def web_browsing(url: str, query: str) -> Dict[str, Any]:
     """
     Extract information from a specified webpage based on a query using Playwright for scraping
     and Gemini 2.0 Flash for information extraction.
@@ -174,8 +175,7 @@ async def extract_web_site(url: str, query: str) -> Dict[str, Any]:
             - timestamp: ISO format timestamp of when the extraction was performed
 
     Raises:
-        Exception: Any exceptions during webpage access or information extraction are caught
-                  and returned in the response dictionary
+        Exception: Any exceptions during webpage access or information extraction are caught and returned in the response dictionary
     """
     from datetime import datetime, timezone
     import traceback
