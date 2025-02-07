@@ -30,7 +30,7 @@ def format_web_extraction(result: Dict[str, Any]) -> str:
         formatted_text.append(f"\n{result['error']}")
     return "\n".join(formatted_text)
 
-async def handle_tool_call(
+async def openai_handle_tool_call(
     tool_call: Any,
     messages: List[Dict[str, Any]]
 ) -> AsyncGenerator[str, None]:
@@ -61,7 +61,7 @@ async def handle_tool_call(
             
             if query:
                 log_info("Executing web search", {"query": query, "num_results": num_results})
-                yield f"data: {json.dumps({'type': 'tool_execution', 'tool': 'web_search', 'query': query})}\n\n"
+                yield {'type': 'tool_execution', 'tool': 'web_search', 'query': query}
                 
                 results = await web_search(query, num_results)
 
@@ -81,7 +81,7 @@ async def handle_tool_call(
             
             if url and query:
                 log_info("Executing web extraction", {"url": url, "query": query})
-                yield f"data: {json.dumps({'type': 'tool_execution', 'tool': 'web_browsing', 'url': url})}\n\n"
+                yield {'type': 'tool_execution', 'tool': 'web_browsing', 'url': url}
                 
                 result = await web_browsing(url, query)
 
@@ -107,6 +107,63 @@ async def handle_tool_call(
     except Exception as e:
         log_error(f"Error handling tool call: {str(e)}", {
             "tool": tool_call.function.name,
+            "error": str(e)
+        })
+        raise
+
+
+async def gemini_handle_tool_call(
+    function_call: Any
+) -> AsyncGenerator[Dict[str, Any], None]:
+    """
+    Handle a tool call from Gemini API and execute the requested tool.
+    This is a common handler used by both streaming and non-streaming responses.
+
+    Args:
+        function_call: The function call object from Gemini's response
+        history: The current message history (for context if needed)
+
+    Yields:
+        Tool execution status updates for frontend
+    Returns:
+        The tool execution results will be returned via the last yielded status update
+    """
+    result = None
+    try:
+        args = function_call.args
+        
+        if function_call.name == "web_search":
+            query = args.get("query")
+            num_results = args.get("num_results", 5)
+            
+            if query:
+                log_info("Executing web search", {"query": query, "num_results": num_results})
+                yield {"type": "tool_execution", "tool": "web_search", "query": query}
+                
+                results = await web_search(query, num_results)
+                result = format_search_results(results)
+                
+        elif function_call.name == "web_browsing":
+            url = args.get("url")
+            query = args.get("query")
+            
+            if url and query:
+                log_info("Executing web extraction", {"url": url, "query": query})
+                yield {"type": "tool_execution", "tool": "web_browsing", "url": url}
+                
+                browse_result = await web_browsing(url, query)
+                result = format_web_extraction(browse_result)
+                
+        else:
+            log_warning(f"Unknown tool called: {function_call.name}")
+            
+        # Return the final result in the last status update
+        if result:
+            yield {"type": "tool_execution_complete", "tool": function_call.name, "result": result}
+            
+    except Exception as e:
+        log_error(f"Error handling tool call: {str(e)}", {
+            "tool": function_call.name,
             "error": str(e)
         })
         raise

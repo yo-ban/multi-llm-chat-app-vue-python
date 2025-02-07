@@ -1,8 +1,6 @@
-import base64
 import asyncio
 import os
 import mimetypes
-import magic
 from typing import Dict, Tuple, Any, List, Optional
 from urllib.parse import urlparse
 from app.logger.logging_utils import get_logger, log_error, log_info, log_warning, log_debug
@@ -300,6 +298,8 @@ async def detect_mime_type(url: str) -> Tuple[str, bool]:
         Tuple[str, bool]: (MIMEタイプ, Webページかどうかのフラグ)
     """
     try:
+        import magic
+
         # ヘッダーのみを取得してContent-Typeをチェック
         async with httpx.AsyncClient() as client:
             response = await client.head(url, follow_redirects=True)

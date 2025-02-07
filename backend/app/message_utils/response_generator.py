@@ -1,39 +1,213 @@
 import json
 from typing import AsyncGenerator, Any, Dict, List
 from openai import AsyncOpenAI
-from app.function_calling.tool_handlers import handle_tool_call
+from app.function_calling.tool_handlers import openai_handle_tool_call, gemini_handle_tool_call
 from app.message_utils.usage_parser import parse_usage, parse_usage_gemini
 from app.logger.logging_utils import get_logger, log_error, log_info, log_warning, log_debug
+from google.genai.client import Client
+from google.genai.types import (
+    GenerateContentConfig,
+    Content,
+    Part,
+)
 
 # Get logger instance
 logger = get_logger()
 
-async def gemini_stream_generator(response) -> AsyncGenerator[str, None]:
+async def gemini_stream_generator(
+    response: Any,
+    gemini_client: Client,
+    model: str,
+    history: List[Content],
+    config: GenerateContentConfig
+) -> AsyncGenerator[str, None]:
     """
-    Generate streaming response for Gemini API
+    Generate streaming response for Gemini API.
+    Handles both regular text responses and function calls.
+    
+    Args:
+        response: Initial Gemini API streaming response
+        gemini_client: Gemini client instance
+        model: The full model string (e.g., "gemini-2.5-flash").
+        history: Current conversation history
+        config: Generation configuration including tools and settings
+        
+    Yields:
+        Streaming response data in SSE format
     """
     try:
-        async for event in response:
-            yield f"data: {json.dumps({'text': event.text})}\n\n"
+        latest_usage = None
+        should_continue = True
+        while should_continue:  # Loop to handle recursive tool calls
+            text = ""
+            has_function_call = False
 
-        if event.usage_metadata:
-            usage = await parse_usage_gemini(event.usage_metadata)
+            async for event in response:
+                # Handle function calls if present
+                if event.candidates[0].content:
+                    if event.candidates[0].content.parts:
+                        part = event.candidates[0].content.parts[0]
+
+                        if part.function_call:
+                            has_function_call = True
+
+                            # Initialize parts lists
+                            function_call_parts = []
+                            function_response_parts = []
+                            text_parts = []
+
+                            # Add text parts if present
+                            if text:
+                                text_parts.append(Part.from_text(text=text))
+
+                            # Handle function calls
+                            for function_call in event.function_calls:
+                                # Notify about tool call start
+                                yield f"data: {json.dumps({'type': 'tool_call_start', 'tool': function_call.name})}\n\n"
+                                
+                                # Handle the tool call
+                                tool_result = None
+                                async for status in gemini_handle_tool_call(function_call):
+                                    if status["type"] == "tool_execution_complete":
+                                        tool_result = status["result"]
+                                    else:
+                                        # Forward status updates to frontend
+                                        yield f"data: {json.dumps(status)}\n\n"
+                                
+                                # Create function call part with the tool result
+                                function_call_part = Part.from_function_call(
+                                    name=function_call.name,
+                                    args=function_call.args
+                                )
+                                function_call_parts.append(function_call_part)
+
+                                # Create function response part with the tool result
+                                function_response_part = Part.from_function_response(
+                                    name=function_call.name,
+                                    response={"output": tool_result}
+                                )
+                                function_response_parts.append(function_response_part)
+
+                            # Create function call content
+                            function_call_content = Content(
+                                role="model",
+                                parts=text_parts + function_call_parts
+                            )
+
+                            # Create function response content
+                            function_response_content = Content(
+                                role="user",
+                                parts=function_response_parts
+                            )
+
+                            # Update history with function call and response
+                            history = history + [function_call_content, function_response_content]
+
+                            # Get new response incorporating tool results
+                            response = await gemini_client.aio.models.generate_content_stream(
+                                model=model,
+                                contents=history,
+                                config=config
+                            )
+                            
+                            break  # Break inner loop to start new response processing
+                        
+                        # Handle regular text content
+                        if part.text:
+                            text += event.text
+                            yield f"data: {json.dumps({'text': event.text})}\n\n"
+
+                        if event.candidates:
+                            if event.candidates[0].finish_reason:
+                                if event.usage_metadata:
+                                    latest_usage = event.usage_metadata
+
+            # If no function calls were made, we're done
+            if not has_function_call:
+                should_continue = False
+                # Handle usage metadata if present
+                usage = await parse_usage_gemini(latest_usage)
+                log_info("Token usage in Gemini", usage)
+                yield f"data: {json.dumps(usage)}\n\n"
+                yield f"data: {json.dumps({'text': '[DONE]'})}\n\n"
+                break
+
+    except Exception as e:
+        log_error(f"Error in Gemini stream generator: {str(e)}")
+        yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+async def gemini_non_stream_generator(
+    response: Any,
+    gemini_client: Client,
+    model: str,
+    history: List[Content],
+    config: GenerateContentConfig
+) -> AsyncGenerator[str, None]:
+    """
+    Generate non-streaming response for Gemini API.
+    Handles both regular text responses and function calls.
+    
+    Args:
+        response: Initial Gemini API non-streaming response
+        gemini_client: Gemini client instance
+        model: The full model string (e.g., "gemini-2.5-flash").
+        history: Current conversation history
+        config: Generation configuration including tools and settings
+        
+    Yields:
+        Response data in SSE format
+    """
+    try:
+        # Handle function calls if present
+        if hasattr(response, 'function_calls'):
+            for function_call in response.function_calls:
+                # Notify about tool call start
+                yield f"data: {json.dumps({'type': 'tool_call_start', 'tool': function_call.name})}\n\n"
+                
+                # Handle the tool call
+                tool_result = None
+                async for status in gemini_handle_tool_call(function_call):
+                    if status["type"] == "tool_execution_complete":
+                        tool_result = status["result"]
+                    else:
+                        # Forward status updates to frontend
+                        yield f"data: {json.dumps(status)}\n\n"
+                
+                # Create function response content with the tool result
+                function_response_part = Part.from_function_response(
+                    name=function_call.name,
+                    response={"result": tool_result}
+                )
+                function_response_content = Content(
+                    role="tool",
+                    parts=[function_response_part]
+                )
+                
+                # Create new chat with updated history
+                chat = gemini_client.aio.chats.create(
+                    history=history,
+                    model=model,
+                    config=config
+                )
+                
+                # Get final response incorporating tool results
+                response = await chat.send_message(function_response_content)
+
+        # Output the final text response
+        if hasattr(response, 'text'):
+            yield f'data: {json.dumps({"text": response.text})}\n\n'
+
+        # Handle usage metadata if present
+        if response.usage_metadata:
+            usage = await parse_usage_gemini(response.usage_metadata)
             log_info("Token usage in Gemini", usage)
             yield f"data: {json.dumps(usage)}\n\n"
 
-        yield f"data: {json.dumps({'text': '[DONE]'})}\n\n"
+        yield 'data: {"text": "[DONE]"}\n\n'
+
     except Exception as e:
+        log_error(f"Error in Gemini non-stream generator: {str(e)}")
         yield f"data: {json.dumps({'error': str(e)})}\n\n"
-
-async def gemini_non_stream_generator(response) -> AsyncGenerator[str, None]:
-    yield f'data: {json.dumps({"text": response.text})}\n\n'
-
-    if response.usage_metadata:
-        usage = await parse_usage_gemini(response.usage_metadata)
-        log_info("Token usage in Gemini", usage)
-        yield f"data: {json.dumps(usage)}\n\n"
-
-    yield 'data: {"text": "[DONE]"}\n\n'
 
 
 async def openai_stream_generator(
@@ -90,8 +264,8 @@ async def openai_stream_generator(
                                 complete_call = tool_calls_buffer[index]
                                 
                                 # Handle the tool call using common handler
-                                async for status in handle_tool_call(complete_call, openai_messages):
-                                    yield status
+                                async for status in openai_handle_tool_call(complete_call, openai_messages):
+                                    yield f"data: {json.dumps(status)}\n\n"
                                 
                                 # Update messages for the next API call
                                 completion_args['messages'] = openai_messages
@@ -140,7 +314,6 @@ async def openai_non_stream_generator(
     Args:
         openai_client: The AsyncOpenAI client instance.
         completion_args: The arguments to pass to the API call.
-        model: The full model string (e.g., "openai-gpt4").
         openai_messages: Formatted conversation messages.
     
     Returns:
@@ -155,8 +328,8 @@ async def openai_non_stream_generator(
         yield f"data: {json.dumps({'type': 'tool_call_start', 'tool': tool_call.function.name})}\n\n"
 
         # Handle the tool call using common handler and yield status updates
-        async for status in handle_tool_call(tool_call, openai_messages):
-            yield status
+        async for status in openai_handle_tool_call(tool_call, openai_messages):
+            yield f"data: {json.dumps(status)}\n\n"
         
         completion_args['messages'] = openai_messages
 

@@ -220,7 +220,8 @@ class ChatHandler:
                     function_calling_config=FunctionCallingConfig(mode='AUTO')
                 ),
                 automatic_function_calling=AutomaticFunctionCallingConfig(
-                    maximum_remote_calls=10  # デフォルトの最大リモート呼び出し回数
+                    disable=True,
+                    ignore_call_history=True
                 )
             )
         else:
@@ -244,12 +245,6 @@ class ChatHandler:
                     parts.append(Part.from_text(text=content["text"]))
             history.append(Content(parts=parts, role=role))
 
-        chat = client.aio.chats.create(
-            history=history,
-            model=model,
-            config=generation_config
-        )
-        
         # Process latest message
         latest_message = messages[-1]
         latest_parts = []
@@ -266,28 +261,52 @@ class ChatHandler:
 
         latest_content = Content(parts=latest_parts, role="user")
 
-        def _cleanup_images():
+        # Add latest content to history
+        history.append(latest_content)
+
         # Cleanup uploaded images
+        def _cleanup_images():
             for image in images:
                 try:
                     client.files.delete(name=image.name)
                 except Exception as e:
                     print(f"Error deleting image: {e}")
+        
 
         if stream:
-            response = await chat.send_message_stream(latest_content)
+            response = await client.aio.models.generate_content_stream(
+                model=model,
+                contents=history,
+                config=generation_config
+            )
             _cleanup_images()
 
             return StreamingResponse(
-                gemini_stream_generator(response),
+                gemini_stream_generator(
+                    response,
+                    gemini_client=client, 
+                    model=model,
+                    history=history,
+                    config=generation_config
+                ),
                 media_type="text/event-stream"
             )
         else:
-            response = await chat.send_message(latest_content)
+            response = await client.aio.models.generate_content(
+                model=model,
+                contents=history,
+                config=generation_config
+            )
             _cleanup_images()
 
             return StreamingResponse(
-                gemini_non_stream_generator(response),
+                gemini_non_stream_generator(
+                    response,
+                    gemini_client=client,
+                    model=model,
+                    history=history + [latest_content],
+                    config=generation_config
+                ),
                 media_type="text/event-stream"
             )
 
