@@ -1,0 +1,40 @@
+# ---------------------------------------------------------------
+# Build Stage: Node.js によるアプリケーションのビルド
+# ---------------------------------------------------------------
+FROM node:20.16.0-alpine AS build
+
+# 作業ディレクトリの設定
+WORKDIR /app
+
+# ビルド時に渡される環境変数 (例: APIのエンドポイント)
+ARG VITE_API_BASE_URL
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+
+# パッケージ管理ファイルのコピーと依存パッケージのインストール
+COPY package*.json ./
+RUN npm ci
+
+# ソースコードのコピーとプロダクションビルドの実行
+COPY . .
+RUN npm run build
+
+# ---------------------------------------------------------------
+# Production Stage: Nginx による静的ファイルの配信
+# ---------------------------------------------------------------
+FROM nginx:alpine
+
+# カスタマイズした Nginx の設定ファイルをコピー（必要に応じて変更してください）
+COPY nginx.conf /etc/nginx/nginx.conf
+
+# ビルド済みの静的ファイルを Nginx のドキュメントルートにコピー
+COPY --from=build /app/dist /usr/share/nginx/html
+
+# コンテナがリッスンするポートの明示（デフォルトは 80）
+EXPOSE 80
+
+# Optional: コンテナヘルスチェック設定
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost/ || exit 1
+
+# コンテナ起動時に Nginx をフォアグラウンドで実行
+CMD ["nginx", "-g", "daemon off;"] 

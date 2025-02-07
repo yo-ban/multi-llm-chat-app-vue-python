@@ -1,0 +1,37 @@
+version: "3.8"
+
+services:
+  frontend:
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        - VITE_API_BASE_URL=/api
+    ports:
+      - "10000:80"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod   # 本番環境用の Dockerfile を指定
+    expose:
+      - "5200"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL_NAME=gemini-2.0-flash
+    security_opt: 
+      - seccomp=unconfined
+    cap_add:
+      - SYS_ADMIN
+    shm_size: "2gb"  # ブラウザ実行における共有メモリサイズを増加（Playwright 用）
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge 

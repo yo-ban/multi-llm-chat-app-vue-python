@@ -1,0 +1,27 @@
+FROM mcr.microsoft.com/playwright/python:v1.50.0-noble
+
+WORKDIR /app
+
+# システム依存ライブラリのインストール
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libffi-dev \
+    cmake \
+    libgeos-dev \
+    libmagic1 \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV GEOS_CONFIG=/usr/bin/geos-config
+
+# アプリケーション依存ライブラリのインストール
+COPY --chown=pwuser:pwuser requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# アプリケーションコードのコピー（所有権の設定付き）
+COPY --chown=pwuser:pwuser . .
+
+# 非rootユーザへ切り替え（pwuser: ベースイメージで作成済み）
+USER pwuser
+
+# サーバ起動
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5200"] 
