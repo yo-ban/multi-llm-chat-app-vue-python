@@ -6,6 +6,9 @@ from fastapi.responses import StreamingResponse
 import json
 from google import genai
 from google.genai.types import (
+    ToolConfig,
+    FunctionCallingConfig,
+    AutomaticFunctionCallingConfig,
     GenerateContentConfig,
     SafetySetting,
     HarmCategory,
@@ -28,9 +31,10 @@ from app.utils.message_utils import (
 )
 from app.utils.image_utils import upload_image_to_gemini
 from app.models.models import ChatRequest
-from app.function_calling.tool_definitions import get_tool_definitions
+from app.function_calling.tool_definitions import get_tool_definitions, get_gemini_tool_definitions
 from app.function_calling.tool_handlers import handle_tool_call
 from app.utils.logging_utils import log_info
+
 class ChatHandler:
     def __init__(self, api_key: str):
         self.api_key = api_key
@@ -244,16 +248,31 @@ class ChatHandler:
             )
         ]
 
-        generation_config = GenerateContentConfig(
-            response_modalities=["TEXT"],
-            safety_settings=safety_settings,
-            system_instruction=system,
-            temperature=temperature,
-            top_p=0.95,
-            top_k=40,
-            max_output_tokens=max_tokens,
-            response_mime_type="text/plain",
-        )
+        completion_args = {
+            "response_modalities": ["TEXT"],
+            "safety_settings": safety_settings,
+            "system_instruction": system,
+            "temperature": temperature,
+            "top_p": 0.95,
+            "top_k": 40,
+            "max_output_tokens": max_tokens,
+            "response_mime_type": "text/plain"
+        }
+
+        generation_config = None
+        if websearch:
+            generation_config = GenerateContentConfig(
+                **completion_args,
+                tools=get_gemini_tool_definitions(),
+                tool_config=ToolConfig(
+                    function_calling_config=FunctionCallingConfig(mode='AUTO')
+                ),
+                automatic_function_calling=AutomaticFunctionCallingConfig(
+                    maximum_remote_calls=10  # デフォルトの最大リモート呼び出し回数
+                )
+            )
+        else:
+            generation_config = GenerateContentConfig(**completion_args)
 
         # Process history and current message
         history = []

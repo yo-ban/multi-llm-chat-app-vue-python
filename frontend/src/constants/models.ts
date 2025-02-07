@@ -82,6 +82,7 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       contextWindow: 1048576,
       maxTokens: 8192,
       multimodal: true,
+      supportFunctionCalling: true,
     },
     GEMINI_2_0_PRO_EXP: {
       id: 'gemini-2.0-pro-exp-02-05',
