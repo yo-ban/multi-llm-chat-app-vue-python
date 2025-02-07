@@ -2,6 +2,7 @@ import base64
 import asyncio
 import os
 import mimetypes
+import magic
 from typing import Dict, Tuple, Any, List, Optional
 from urllib.parse import urlparse
 from app.logger.logging_utils import get_logger, log_error, log_info, log_warning, log_debug
@@ -19,6 +20,14 @@ from google.genai.types import (
     Part
 )
 from app.message_utils.usage_parser import parse_usage_gemini
+
+SKIP_GEMINI_EXTENSIONS = [
+    '.ipynb',
+    '.py',
+    '.txt',
+    '.md',
+    '.csv',
+] 
 
 # Supported MIME types for Gemini document processing
 SUPPORTED_MIME_TYPES = {
@@ -42,7 +51,7 @@ WEB_MIME_TYPES = {
     'application/html': '.html'
 }
 
-async def retrieve_page_data(url: str, content_type: Optional[str] = None, is_web_page: Optional[bool] = None) -> List[File]:
+async def retrieve_page_data(url: str, content_type: Optional[str] = None, is_web_page: Optional[bool] = None) -> Tuple[List[File] | str, bool]:
     """
     指定した URL にアクセスしてコンテンツを取得し、Gemini API用のFileオブジェクトとして返す関数
 
@@ -65,22 +74,22 @@ async def retrieve_page_data(url: str, content_type: Optional[str] = None, is_we
         http_options={'api_version': 'v1alpha'}
     )
 
-    # コンテンツタイプが渡されていない場合は判定
-    if content_type is None or is_web_page is None:
-        parsed_url = urlparse(url)
-        path = parsed_url.path
-        detected_type = mimetypes.guess_type(path)[0]
-        content_type = content_type or detected_type
+    parsed_url = urlparse(url)
+    path = parsed_url.path.split('.')[-1]
+
+    # ファイルの直接リンクの場合
+    if not is_web_page and path in SKIP_GEMINI_EXTENSIONS:
+
+        # ファイルをダウンロード
+        response = httpx.get(url)
+        response.raise_for_status()
+        file_data = BytesIO(response.content)
+
+        # ファイルをテキストに変換
+        file_data = file_data.getvalue().decode('utf-8')
         
-        # Webページ判定
-        is_web_page = is_web_page if is_web_page is not None else (
-            detected_type is None or  # MIMEタイプが不明
-            detected_type in WEB_MIME_TYPES or  # 明示的なWebページ
-            path.endswith('/') or  # ディレクトリURL
-            not path or  # パスなし
-            '.' not in path.split('/')[-1]  # 拡張子なし
-        )
-    
+        return file_data, False
+
     # ドキュメントファイルの場合（PDF等）
     if not is_web_page and content_type in SUPPORTED_MIME_TYPES:
         try:
@@ -94,7 +103,7 @@ async def retrieve_page_data(url: str, content_type: Optional[str] = None, is_we
                 file=file_data,
                 config={"mime_type": content_type}
             )
-            return [uploaded_file]
+            return [uploaded_file], True
             
         except Exception as e:
             log_error(f"Error downloading or uploading document: {str(e)}")
@@ -126,7 +135,7 @@ async def retrieve_page_data(url: str, content_type: Optional[str] = None, is_we
                 file=screenshot_buffer,
                 config={"mime_type": "image/png"}
             )
-            return [screenshot_file, text_file]
+            return [screenshot_file, text_file], True
             
         except Exception as e:
             log_error(f"Error uploading files to Gemini: {str(e)}")
@@ -280,6 +289,71 @@ When returning multiple segments, use the following format for each section:
 
     return text
 
+async def detect_mime_type(url: str) -> Tuple[str, bool]:
+    """
+    URLからコンテンツをダウンロードし、実際のファイル内容からMIMEタイプを判定する関数
+
+    Args:
+        url (str): 判定対象のURL
+
+    Returns:
+        Tuple[str, bool]: (MIMEタイプ, Webページかどうかのフラグ)
+    """
+    try:
+        # ヘッダーのみを取得してContent-Typeをチェック
+        async with httpx.AsyncClient() as client:
+            response = await client.head(url, follow_redirects=True)
+            header_content_type = response.headers.get('content-type', '').split(';')[0].lower()
+
+            # ヘッダーのContent-Typeが明確なWebページ系の場合は、それを信頼
+            if header_content_type in WEB_MIME_TYPES:
+                return header_content_type, True
+
+        # コンテンツの先頭部分のみをダウンロード（最大32KB）
+        async with httpx.AsyncClient() as client:
+            async with client.stream('GET', url) as response:
+                content = b''
+                async for chunk in response.aiter_bytes():
+                    content += chunk
+                    if len(content) >= 32768:  # 32KB
+                        break
+
+        # python-magicを使用してバイナリコンテンツからMIMEタイプを判定
+        mime = magic.Magic(mime=True)
+        detected_mime = mime.from_buffer(content)
+
+        # パスからの判定も併用
+        parsed_url = urlparse(url)
+        path = parsed_url.path
+        path_mime = mimetypes.guess_type(path)[0]
+
+        # MIMEタイプの判定ロジック
+        final_mime = detected_mime or path_mime or 'application/octet-stream'
+        
+        # Webページかどうかの判定
+        is_web_page = (
+            final_mime in WEB_MIME_TYPES or
+            path.endswith('/') or
+            not path or
+            '.' not in path.split('/')[-1]
+        )
+
+        return final_mime, is_web_page
+
+    except Exception as e:
+        log_warning(f"Error during MIME type detection: {str(e)}")
+        # エラーの場合はパスベースの判定にフォールバック
+        parsed_url = urlparse(url)
+        path = parsed_url.path
+        mime_type = mimetypes.guess_type(path)[0] or 'text/html'
+        is_web_page = (
+            mime_type in WEB_MIME_TYPES or
+            path.endswith('/') or
+            not path or
+            '.' not in path.split('/')[-1]
+        )
+        return mime_type, is_web_page
+
 async def web_browsing(url: str, query: str) -> Dict[str, Any]:
     """
     Extract information from a specified URL based on a query using Playwright for web pages
@@ -313,26 +387,15 @@ async def web_browsing(url: str, query: str) -> Dict[str, Any]:
     from datetime import datetime, timezone
     import traceback
 
-    # Get content type from URL
-    parsed_url = urlparse(url)
-    path = parsed_url.path
-    content_type = mimetypes.guess_type(path)[0]
-    
-    # Determine if it's a web page
-    is_web_page = (
-        content_type is None or  # MIMEタイプが不明
-        content_type in WEB_MIME_TYPES or  # 明示的なWebページ
-        path.endswith('/') or  # ディレクトリURL
-        not path or  # パスなし
-        '.' not in path.split('/')[-1]  # 拡張子なし
-    )
+    # Get content type and web page flag from actual content
+    content_type, is_web_page = await detect_mime_type(url)
 
     response = {
         "url": url,
         "query": query,
         "status": "error",  # Default to error, will be updated on success
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "content_type": content_type or "text/html",  # Default to HTML if type cannot be determined
+        "content_type": content_type,
         "is_web_page": is_web_page
     }
 
@@ -343,12 +406,15 @@ async def web_browsing(url: str, query: str) -> Dict[str, Any]:
             "content_type": response["content_type"],
             "is_web_page": is_web_page
         })
-        files = await retrieve_page_data(url, content_type, is_web_page)
+        file_data, use_gemini = await retrieve_page_data(url, content_type, is_web_page)
         
-        # Extract relevant information using Gemini
-        log_debug("Extracting relevant information using Gemini", {"query": query})
-        relevant_info = await extract_relevant_info(files, query)
-        
+        if use_gemini:
+            # Extract relevant information using Gemini
+            log_debug("Extracting relevant information using Gemini", {"query": query})
+            relevant_info = await extract_relevant_info(file_data, query)
+        else:
+            relevant_info = file_data
+
         # Update response with success data
         response.update({
             "status": "success",
