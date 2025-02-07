@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { getUserDefinedPersonas, saveUserDefinedPersonas } from '@/services/indexeddb';
 import type { UserDefinedPersona } from '@/types/personas';
 import { saveAs } from 'file-saver';
+import { v4 as uuidv4 } from 'uuid';
 
 export const usePersonaStore = defineStore('persona', {
   state: () => ({
@@ -53,7 +54,11 @@ export const usePersonaStore = defineStore('persona', {
           const reader = new FileReader();
           reader.onload = async (e) => {
             const importedPersona = JSON.parse(e.target?.result as string) as UserDefinedPersona;
-            this.addPersona(importedPersona);
+            const personaWithNewId = {
+              ...importedPersona,
+              id: `persona-${uuidv4()}`
+            };
+            this.addPersona(personaWithNewId);
           };
           reader.readAsText(file);
         }
