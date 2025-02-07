@@ -90,6 +90,14 @@ Use Markdown to format your responses and code appropriately.`,
 
 export const ADDITIONAL_PERSONA: Persona[] = [
   {
+    id: 'minimal',
+    name: 'Minimal',
+    image: 'simple.svg',
+    systemMessage: `The current date is {{Date}}.
+Respond in the same language as the user.
+Code snippets and code blocks should be written in Markdown notation.`,
+  },
+  {
     id: 'writer',
     name: 'Writer',
     image: 'writer.svg',
@@ -180,13 +188,6 @@ Tailor your guidance to the specific document type and the user's needs.
 
 The current date is {{Date}}.
 </instructions>`,
-  },
-  {
-    id: 'minimal',
-    name: 'Minimal',
-    image: 'simple.svg',
-    systemMessage: `The current date is {{Date}}.
-Code snippets and code blocks should be written in Markdown notation.`,
   },
 ]
 

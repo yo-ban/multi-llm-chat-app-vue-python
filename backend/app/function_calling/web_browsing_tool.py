@@ -4,7 +4,7 @@ import os
 import mimetypes
 from typing import Dict, Tuple, Any, List, Optional
 from urllib.parse import urlparse
-from app.utils.logging_utils import get_logger, log_error, log_info, log_warning, log_debug
+from app.logger.logging_utils import get_logger, log_error, log_info, log_warning, log_debug
 from io import BytesIO
 import httpx
 from google import genai
@@ -18,8 +18,7 @@ from google.genai.types import (
     File,
     Part
 )
-from app.utils.logging_utils import log_info
-from app.utils.message_utils import parse_usage_gemini
+from app.message_utils.usage_parser import parse_usage_gemini
 
 # Supported MIME types for Gemini document processing
 SUPPORTED_MIME_TYPES = {

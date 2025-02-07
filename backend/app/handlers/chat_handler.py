@@ -17,84 +17,26 @@ from google.genai.types import (
     Part
 )
 
-from app.utils.stream_generators import (
+from app.message_utils.response_generator import (
     gemini_stream_generator,
+    gemini_non_stream_generator,
     openai_stream_generator,
+    openai_non_stream_generator,
     anthropic_stream_generator
 )
-from app.utils.message_utils import (
+from app.message_utils.messages_preparer import (
     prepare_api_messages, 
     prepare_openai_messages, 
     prepare_anthropic_messages, 
-    parse_usage,
-    parse_usage_gemini
 )
-from app.utils.image_utils import upload_image_to_gemini
+from app.misc_utils.image_utils import upload_image_to_gemini
 from app.models.models import ChatRequest
 from app.function_calling.tool_definitions import get_tool_definitions, get_gemini_tool_definitions
-from app.function_calling.tool_handlers import handle_tool_call
-from app.utils.logging_utils import log_info
+from app.logger.logging_utils import log_info
 
 class ChatHandler:
     def __init__(self, api_key: str):
         self.api_key = api_key
-
-    async def _handle_openai_non_stream(
-        self,
-        openai: AsyncOpenAI,
-        completion_args: dict,
-        openai_messages: list
-    ) -> Any:
-        """
-        Common processing for non-streaming OpenAI API calls.
-        This function also handles tool_calls if present in the response.
-        Returns the response as a streaming response for consistency with streaming mode.
-        
-        Args:
-            openai: The AsyncOpenAI client instance.
-            completion_args: The arguments to pass to the API call.
-            model: The full model string (e.g., "openai-gpt4").
-            openai_messages: Formatted conversation messages.
-        
-        Returns:
-            A StreamingResponse containing the response message.
-        """
-        response = await openai.chat.completions.create(**completion_args)
-
-        async def generate_non_stream_response(response):
-            # Check if a tool_call is present in the response
-            while response.choices[0].message.tool_calls:
-                tool_call = response.choices[0].message.tool_calls[0]
-
-                yield f"data: {json.dumps({'type': 'tool_call_start', 'tool': tool_call.function.name})}\n\n"
-
-                # Handle the tool call using common handler and yield status updates
-                async for status in handle_tool_call(tool_call, openai_messages):
-                    yield status
-                
-                completion_args['messages'] = openai_messages
-
-                # Get final response incorporating tool results with tools enabled
-                final_response = await openai.chat.completions.create(
-                    **completion_args,
-                )
-                response = final_response  # Update response for next iteration check
-            
-            # After all tool calls are processed, return the final content
-            if response.choices[0].message.content:
-                yield f'data: {json.dumps({"text": response.choices[0].message.content})}\n\n'
-
-            if response.usage:
-                usage = await parse_usage(response.usage)
-                log_info("Token usage in OpenAI", usage)
-                yield f"data: {json.dumps(usage)}\n\n"
-            
-            yield 'data: {"text": "[DONE]"}\n\n'
-
-        return StreamingResponse(
-            generate_non_stream_response(response),
-            media_type="text/event-stream"
-        )
 
     async def handle_openai(
         self,
@@ -141,7 +83,7 @@ class ChatHandler:
                     openai_stream_generator(
                         response,
                         openai_client=openai,
-                        messages=openai_messages,
+                        openai_messages=openai_messages,
                         completion_args=completion_args
                     ),
                     media_type="text/event-stream"
@@ -152,16 +94,26 @@ class ChatHandler:
                     completion_args["stream"] = False
                     completion_args.pop("stream_options")
                     # Delegate non-streamed handling to the common function.
-                    return await self._handle_openai_non_stream(
-                        openai, completion_args, openai_messages
+                    return StreamingResponse(
+                        openai_non_stream_generator(
+                            openai_client=openai, 
+                            completion_args=completion_args, 
+                            openai_messages=openai_messages
+                        ),
+                        media_type="text/event-stream"
                     )
                 else:
                     raise e
         else:
             completion_args["stream"] = False
             # For explicit non-stream requests, delegate to the common function.
-            return await self._handle_openai_non_stream(
-                openai, completion_args, openai_messages
+            return StreamingResponse(
+                openai_non_stream_generator(
+                    openai_client=openai, 
+                    completion_args=completion_args, 
+                    openai_messages=openai_messages
+                ),
+                media_type="text/event-stream"
             )
 
     async def handle_anthropic(
@@ -325,6 +277,7 @@ class ChatHandler:
         if stream:
             response = await chat.send_message_stream(latest_content)
             _cleanup_images()
+
             return StreamingResponse(
                 gemini_stream_generator(response),
                 media_type="text/event-stream"
@@ -332,18 +285,9 @@ class ChatHandler:
         else:
             response = await chat.send_message(latest_content)
             _cleanup_images()
-            async def generate_non_stream_response():
-                yield f'data: {json.dumps({"text": response.text})}\n\n'
-
-                if response.usage_metadata:
-                    usage = await parse_usage_gemini(response.usage_metadata)
-                    log_info("Token usage in Gemini", usage)
-                    yield f"data: {json.dumps(usage)}\n\n"
-
-                yield 'data: {"text": "[DONE]"}\n\n'
 
             return StreamingResponse(
-                generate_non_stream_response(),
+                gemini_non_stream_generator(response),
                 media_type="text/event-stream"
             )
 

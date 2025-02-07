@@ -14,8 +14,8 @@ from google.genai.types import (
 )
 from google.genai.errors import ServerError
 from app.models.models import SearchResult
-from app.utils.logging_utils import get_logger, log_error, log_info, log_warning, log_debug
-from app.utils.message_utils import parse_usage_gemini
+from app.logger.logging_utils import get_logger, log_error, log_info, log_warning, log_debug
+from app.message_utils.usage_parser import parse_usage_gemini
 # Get logger instance
 logger = get_logger()
 

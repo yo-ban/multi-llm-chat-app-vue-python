@@ -2,7 +2,7 @@ from typing import Any, Dict, List, AsyncGenerator, Union
 import json
 from app.function_calling.web_search_tool import web_search
 from app.function_calling.web_browsing_tool import web_browsing
-from app.utils.logging_utils import get_logger, log_error, log_info, log_warning, log_debug
+from app.logger.logging_utils import get_logger, log_error, log_info, log_warning, log_debug
 
 # Get logger instance
 logger = get_logger()

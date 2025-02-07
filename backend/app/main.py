@@ -5,7 +5,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from app.models.models import ChatRequest
 from app.handlers.chat_handler import ChatHandler
 from app.handlers.file_handler import FileHandler
-from app.utils.logging_utils import get_logger, log_request_info, log_error, log_info
+from app.logger.logging_utils import get_logger, log_request_info, log_error, log_info
 
 # Set up logging
 logger = get_logger()

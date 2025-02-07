@@ -2,8 +2,8 @@ import json
 from typing import AsyncGenerator, Any, Dict, List
 from openai import AsyncOpenAI
 from app.function_calling.tool_handlers import handle_tool_call
-from app.utils.message_utils import parse_usage, parse_usage_gemini
-from app.utils.logging_utils import get_logger, log_error, log_info, log_warning, log_debug
+from app.message_utils.usage_parser import parse_usage, parse_usage_gemini
+from app.logger.logging_utils import get_logger, log_error, log_info, log_warning, log_debug
 
 # Get logger instance
 logger = get_logger()
@@ -25,10 +25,21 @@ async def gemini_stream_generator(response) -> AsyncGenerator[str, None]:
     except Exception as e:
         yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
+async def gemini_non_stream_generator(response) -> AsyncGenerator[str, None]:
+    yield f'data: {json.dumps({"text": response.text})}\n\n'
+
+    if response.usage_metadata:
+        usage = await parse_usage_gemini(response.usage_metadata)
+        log_info("Token usage in Gemini", usage)
+        yield f"data: {json.dumps(usage)}\n\n"
+
+    yield 'data: {"text": "[DONE]"}\n\n'
+
+
 async def openai_stream_generator(
     response: Any,
     openai_client: AsyncOpenAI,
-    messages: List[Dict[str, Any]],
+    openai_messages: List[Dict[str, Any]],
     completion_args: dict
 ) -> AsyncGenerator[str, None]:
     """
@@ -38,7 +49,7 @@ async def openai_stream_generator(
     Args:
         response: Initial OpenAI API response
         openai_client: OpenAI client instance
-        messages: Current message history
+        openai_messages: Current message history
         completion_args: The arguments to pass to the API call
     
     Yields:
@@ -79,11 +90,11 @@ async def openai_stream_generator(
                                 complete_call = tool_calls_buffer[index]
                                 
                                 # Handle the tool call using common handler
-                                async for status in handle_tool_call(complete_call, messages):
+                                async for status in handle_tool_call(complete_call, openai_messages):
                                     yield status
                                 
                                 # Update messages for the next API call
-                                completion_args['messages'] = messages
+                                completion_args['messages'] = openai_messages
                                 tool_calls_buffer = {}  # Reset buffer for next iteration
                                 break  # Break inner loop to start new API call
                     
@@ -114,6 +125,58 @@ async def openai_stream_generator(
     except Exception as e:
         log_error(f"Error in stream generator: {str(e)}")
         yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+
+async def openai_non_stream_generator(
+    openai_client: AsyncOpenAI,
+    completion_args: dict,
+    openai_messages: list
+) -> AsyncGenerator[str, None]:
+    """
+    Common processing for non-streaming OpenAI API calls.
+    This function also handles tool_calls if present in the response.
+    Returns the response as a streaming response for consistency with streaming mode.
+    
+    Args:
+        openai_client: The AsyncOpenAI client instance.
+        completion_args: The arguments to pass to the API call.
+        model: The full model string (e.g., "openai-gpt4").
+        openai_messages: Formatted conversation messages.
+    
+    Returns:
+        A StreamingResponse containing the response message.
+    """
+    response = await openai_client.chat.completions.create(**completion_args)
+
+    # Check if a tool_call is present in the response
+    while response.choices[0].message.tool_calls:
+        tool_call = response.choices[0].message.tool_calls[0]
+
+        yield f"data: {json.dumps({'type': 'tool_call_start', 'tool': tool_call.function.name})}\n\n"
+
+        # Handle the tool call using common handler and yield status updates
+        async for status in handle_tool_call(tool_call, openai_messages):
+            yield status
+        
+        completion_args['messages'] = openai_messages
+
+        # Get final response incorporating tool results with tools enabled
+        final_response = await openai_client.chat.completions.create(
+            **completion_args,
+        )
+        response = final_response  # Update response for next iteration check
+    
+    # After all tool calls are processed, return the final content
+    if response.choices[0].message.content:
+        yield f'data: {json.dumps({"text": response.choices[0].message.content})}\n\n'
+
+    if response.usage:
+        usage = await parse_usage(response.usage)
+        log_info("Token usage in OpenAI", usage)
+        yield f"data: {json.dumps(usage)}\n\n"
+    
+    yield 'data: {"text": "[DONE]"}\n\n'
+
 
 async def anthropic_stream_generator(response) -> AsyncGenerator[str, None]:
     """
