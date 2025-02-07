@@ -100,22 +100,6 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       supportsReasoning: true,
     }
   },
-  deepseek: {
-    DEEPSEEK_CHAT: {
-      id: 'deepseek-chat',
-      name: 'DeepSeek-V3',
-      contextWindow: 64000,
-      maxTokens: 8000,
-      multimodal: false,
-    },
-    DEEPSEEK_REASONER: {
-      id: 'deepseek-reasoner',
-      name: 'DeepSeek Reasoner',
-      contextWindow: 64000,
-      maxTokens: 8000,
-      multimodal: false,
-    },
-  },
   openrouter: {
     
   },

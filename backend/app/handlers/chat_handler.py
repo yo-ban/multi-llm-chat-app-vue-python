@@ -310,57 +310,6 @@ class ChatHandler:
                 media_type="text/event-stream"
             )
 
-    async def handle_deepseek(
-        self,
-        model: str,
-        messages: list,
-        max_tokens: int,
-        temperature: float,
-        stream: bool,
-        system: str,
-        websearch: bool = True,
-        reasoning_effort: Optional[str] = None,
-        is_reasoning_supported: bool = False
-    ) -> Any:
-        """Handle Deepseek API requests"""
-        deepseek = AsyncOpenAI(
-            api_key=self.api_key,
-            base_url="https://api.deepseek.com"
-        )
-
-        deepseek_messages = await prepare_openai_messages(system, messages)
-
-        completion_args = {
-            "model": model,
-            "messages": deepseek_messages,
-            "max_tokens": max_tokens,
-            "stream": stream,
-            "temperature": temperature
-        }
-
-        response = await deepseek.chat.completions.create(**completion_args)
-
-        if stream:
-            completion_args["stream_options"] = {"include_usage": True}
-            return StreamingResponse(
-                openai_stream_generator(
-                    response,
-                    openai_client=deepseek,
-                    messages=deepseek_messages,
-                    model=model
-                ),
-                media_type="text/event-stream"
-            )
-        else:
-            async def generate_non_stream_response():
-                yield f'data: {json.dumps({"text": response.choices[0].message.content})}\n\n'
-                yield 'data: {"text": "[DONE]"}\n\n'
-
-            return StreamingResponse(
-                generate_non_stream_response(),
-                media_type="text/event-stream"
-            )
-
     async def handle_openrouter(
         self,
         model: str,
