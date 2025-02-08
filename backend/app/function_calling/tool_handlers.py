@@ -2,6 +2,7 @@ from typing import Any, Dict, List, AsyncGenerator, Union
 import json
 from app.function_calling.web_search_tool import web_search
 from app.function_calling.web_browsing_tool import web_browsing
+from app.function_calling.need_ask_human_tool import need_ask_human
 from app.logger.logging_utils import get_logger, log_error, log_info, log_warning, log_debug
 
 # Get logger instance
@@ -94,6 +95,21 @@ async def openai_handle_tool_call(
                     "name": tool_call.function.name,
                     "content": formatted_result  # Use formatted text instead of JSON
                 })
+        elif tool_call.function.name == "need_ask_human":
+            clarification_points = args.get("clarification_points")
+
+            if clarification_points:
+                log_info("Executing need_ask_human", {"clarification_points": clarification_points})
+
+                result = await need_ask_human(clarification_points)
+
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "name": tool_call.function.name,
+                    "content": result
+                })
+
         else:
             log_warning(f"Unknown tool called: {tool_call.function.name}")
             
@@ -153,7 +169,14 @@ async def gemini_handle_tool_call(
                 
                 browse_result = await web_browsing(url, query)
                 result = format_web_extraction(browse_result)
-                
+        
+        elif function_call.name == "need_ask_human":
+            clarification_points = args.get("clarification_points")
+
+            if clarification_points:
+                log_info("Executing need_ask_human", {"clarification_points": clarification_points})
+                result = await need_ask_human(clarification_points)
+
         else:
             log_warning(f"Unknown tool called: {function_call.name}")
             

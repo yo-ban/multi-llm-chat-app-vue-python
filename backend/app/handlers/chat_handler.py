@@ -73,6 +73,7 @@ class ChatHandler:
 
         if websearch:
             completion_args["tools"] = get_tool_definitions()
+            completion_args["tool_choice"] = "required"
 
         # If streaming is requested, try using stream mode.
         if stream:
@@ -211,21 +212,20 @@ class ChatHandler:
             "response_mime_type": "text/plain"
         }
 
-        generation_config = None
         if websearch:
-            generation_config = GenerateContentConfig(
-                **completion_args,
-                tools=get_gemini_tool_definitions(),
-                tool_config=ToolConfig(
-                    function_calling_config=FunctionCallingConfig(mode='AUTO')
-                ),
-                automatic_function_calling=AutomaticFunctionCallingConfig(
-                    disable=True,
-                    ignore_call_history=True
-                )
+            tools = get_gemini_tool_definitions()
+            tool_config = ToolConfig(
+                function_calling_config=FunctionCallingConfig(mode='ANY')
             )
-        else:
-            generation_config = GenerateContentConfig(**completion_args)
+            automatic_function_calling = AutomaticFunctionCallingConfig(
+                disable=True,
+                ignore_call_history=True
+            )
+            completion_args["tools"] = tools
+            completion_args["tool_config"] = tool_config
+            completion_args["automatic_function_calling"] = automatic_function_calling
+
+        generation_config = GenerateContentConfig(**completion_args)
 
         # Process history and current message
         history = []
@@ -287,7 +287,7 @@ class ChatHandler:
                     gemini_client=client, 
                     model=model,
                     history=history,
-                    config=generation_config
+                    completion_args=completion_args
                 ),
                 media_type="text/event-stream"
             )
@@ -304,8 +304,8 @@ class ChatHandler:
                     response,
                     gemini_client=client,
                     model=model,
-                    history=history + [latest_content],
-                    config=generation_config
+                    history=history,
+                    completion_args=completion_args
                 ),
                 media_type="text/event-stream"
             )

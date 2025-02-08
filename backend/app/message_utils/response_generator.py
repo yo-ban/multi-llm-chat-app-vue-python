@@ -9,6 +9,8 @@ from google.genai.types import (
     GenerateContentConfig,
     Content,
     Part,
+    ToolConfig,
+    FunctionCallingConfig
 )
 
 # Get logger instance
@@ -19,7 +21,7 @@ async def gemini_stream_generator(
     gemini_client: Client,
     model: str,
     history: List[Content],
-    config: GenerateContentConfig
+    completion_args: dict
 ) -> AsyncGenerator[str, None]:
     """
     Generate streaming response for Gemini API.
@@ -30,7 +32,7 @@ async def gemini_stream_generator(
         gemini_client: Gemini client instance
         model: The full model string (e.g., "gemini-2.5-flash").
         history: Current conversation history
-        config: Generation configuration including tools and settings
+        completion_args: Generation configuration including tools and settings
         
     Yields:
         Streaming response data in SSE format
@@ -103,11 +105,17 @@ async def gemini_stream_generator(
                             # Update history with function call and response
                             history = history + [function_call_content, function_response_content]
 
+                            # Change tool config to AUTO
+                            tool_config = ToolConfig(
+                                function_calling_config=FunctionCallingConfig(mode='AUTO')
+                            )
+                            completion_args["tool_config"] = tool_config
+
                             # Get new response incorporating tool results
                             response = await gemini_client.aio.models.generate_content_stream(
                                 model=model,
                                 contents=history,
-                                config=config
+                                config=GenerateContentConfig(**completion_args)
                             )
                             
                             break  # Break inner loop to start new response processing
@@ -141,7 +149,7 @@ async def gemini_non_stream_generator(
     gemini_client: Client,
     model: str,
     history: List[Content],
-    config: GenerateContentConfig
+    completion_args: dict
 ) -> AsyncGenerator[str, None]:
     """
     Generate non-streaming response for Gemini API.
@@ -152,7 +160,7 @@ async def gemini_non_stream_generator(
         gemini_client: Gemini client instance
         model: The full model string (e.g., "gemini-2.5-flash").
         history: Current conversation history
-        config: Generation configuration including tools and settings
+        completion_args: Generation configuration including tools and settings
         
     Yields:
         Response data in SSE format
@@ -183,11 +191,17 @@ async def gemini_non_stream_generator(
                     parts=[function_response_part]
                 )
                 
+                # Change tool config to AUTO
+                tool_config = ToolConfig(
+                    function_calling_config=FunctionCallingConfig(mode='AUTO')
+                )
+                completion_args["tool_config"] = tool_config
+
                 # Create new chat with updated history
                 chat = gemini_client.aio.chats.create(
                     history=history,
                     model=model,
-                    config=config
+                    config=GenerateContentConfig(**completion_args)
                 )
                 
                 # Get final response incorporating tool results
@@ -269,6 +283,7 @@ async def openai_stream_generator(
                                 
                                 # Update messages for the next API call
                                 completion_args['messages'] = openai_messages
+                                completion_args['tool_choice'] = "auto"
                                 tool_calls_buffer = {}  # Reset buffer for next iteration
                                 break  # Break inner loop to start new API call
                     
@@ -276,13 +291,14 @@ async def openai_stream_generator(
                     elif hasattr(delta, 'content') and delta.content is not None:
                         yield f"data: {json.dumps({'text': delta.content})}\n\n"
 
-                if hasattr(chunk, 'usage') and chunk.usage:
-                    usage = await parse_usage(chunk.usage)
-                    log_info("Token usage in OpenAI", usage)
-                    yield f"data: {json.dumps(usage)}\n\n"
-
                 # Check finish reason
                 if chunk.choices and chunk.choices[0].finish_reason:
+                    
+                    if chunk.usage:
+                        usage = await parse_usage(chunk.usage)
+                        log_info("Token usage in OpenAI", usage)
+                        yield f"data: {json.dumps(usage)}\n\n"
+
                     if chunk.choices[0].finish_reason == 'stop':
                         log_info("Stream generator ended normally")
                         should_continue = False
@@ -332,7 +348,7 @@ async def openai_non_stream_generator(
             yield f"data: {json.dumps(status)}\n\n"
         
         completion_args['messages'] = openai_messages
-
+        completion_args['tool_choice'] = "auto"
         # Get final response incorporating tool results with tools enabled
         final_response = await openai_client.chat.completions.create(
             **completion_args,

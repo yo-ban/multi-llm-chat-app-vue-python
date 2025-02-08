@@ -33,7 +33,7 @@ async def resolve_redirect_url(url: str) -> str:
         return url
         
     try:
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(max_field_size=8190*2, max_line_size=8190*2) as session:
             async with session.get(url, allow_redirects=True) as response:
                 # Get the final URL after all redirects
                 final_url = str(response.url)

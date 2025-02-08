@@ -1,5 +1,6 @@
 import asyncio
 import os
+import random
 import mimetypes
 from typing import Dict, Tuple, Any, List, Optional
 from urllib.parse import urlparse
@@ -63,7 +64,10 @@ async def retrieve_page_data(url: str, content_type: Optional[str] = None, is_we
         - 通常のWebページの場合: [スクリーンショットのFile, テキストのFile]
         - PDF等のドキュメントの場合: [ドキュメントのFile]
     """
+
     from playwright.async_api import async_playwright
+    from playwright_stealth import stealth_async
+    from markdownify import markdownify as md
     from dotenv import load_dotenv
     load_dotenv()
 
@@ -111,10 +115,23 @@ async def retrieve_page_data(url: str, content_type: Optional[str] = None, is_we
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
+        await stealth_async(page)
+        await page.set_extra_http_headers({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9'
+        })
         await page.goto(url, wait_until="networkidle")
-        
+
+        # Add a random delay of 500 to 2000 milliseconds to simulate human behavior
+        await asyncio.sleep(random.randint(500, 2000) / 1000)
+
+        # Scroll the page to load additional content
+        await page.evaluate("() => window.scrollBy(0, window.innerHeight)")
+
         # ページテキストを取得
-        text = await page.evaluate("() => document.body.innerText")
+        # text = await page.evaluate("() => document.body.innerText")
+        page_html = await page.content()
+        text = md(page_html)
         text_buffer = BytesIO(text.encode('utf-8'))
         
         # スクリーンショットを取得
@@ -159,16 +176,21 @@ Images should be read visually.
 
 For documents (PDF, etc.), analyze both the text content and any visual elements like diagrams, charts, and tables.
 
-Present the content inside a Markdown code block. 
-Include both the directly relevant information and enough surrounding context to ensure the material is understood. 
+Present the each section of content inside a Markdown code block. 
+Include both the directly relevant information and enough surrounding context to ensure the material is fully understood. 
 Only output the content—do not add any additional explanations. 
 Format any figures or tables using Markdown-friendly structures, and ensure that code within code blocks is escaped properly with backticks (for example, \`\`\` for multi-line code).
 
+If the content is organized into separated sections and some sections are less essential, you may omit those and return multiple segments. 
+When returning multiple segments, use the following format for each section:
+
 Output format:
+
+**Section 1:**
 ```
 ...
 ...
-[write website's contents]
+[Content for Section 1]
 
 \`\`\`
 code block in code block will be escaped with backticks (e.g., \`\`\`).
@@ -178,18 +200,21 @@ code block in code block will be escaped with backticks (e.g., \`\`\`).
 ...
 ```
 
-If the content is organized into separated sections and some sections are less essential, you may omit those and return multiple segments. 
-When returning multiple segments, use the following format for each section:
-
-**Section 1:**
-```
-[Content for Section 1]
-```
-
 **Section 2:**
 ```
+...
+...
 [Content for Section 2]
+
+\`\`\`
+code block in code block will be escaped with backticks (e.g., \`\`\`).
+\`\`\`
+
+...
+
+...
 ```
+
 ...and so on.
 """
 
@@ -285,6 +310,10 @@ When returning multiple segments, use the following format for each section:
         except Exception as e:
             log_warning(f"File delete failed: {e}")
 
+    if text.startswith("```\n**Section"):
+        text = text[3:]
+
+    # Return the generated text from the AI model.
     return text
 
 async def detect_mime_type(url: str) -> Tuple[str, bool]:

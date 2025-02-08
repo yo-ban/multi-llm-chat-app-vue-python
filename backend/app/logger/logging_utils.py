@@ -85,7 +85,7 @@ def log_error(
     }
     
     logger.error(
-        f"Error occurred: {json.dumps(error_info, indent=2)}",
+        f"Error occurred: {json.dumps(error_info, indent=2, ensure_ascii=False)}",
         exc_info=True
     )
 
@@ -104,7 +104,7 @@ def log_info(
     """
     logger = logger or get_logger()
     if additional_info:
-        logger.info(f"{message} - Additional Info: {json.dumps(additional_info, indent=2)}")
+        logger.info(f"{message} - Additional Info: {json.dumps(additional_info, indent=2, ensure_ascii=False)}")
     else:
         logger.info(message)
 
@@ -123,7 +123,7 @@ def log_warning(
     """
     logger = logger or get_logger()
     if additional_info:
-        logger.warning(f"{message} - Additional Info: {json.dumps(additional_info, indent=2)}")
+        logger.warning(f"{message} - Additional Info: {json.dumps(additional_info, indent=2, ensure_ascii=False)}")
     else:
         logger.warning(message)
 
@@ -142,6 +142,6 @@ def log_debug(
     """
     logger = logger or get_logger()
     if additional_info:
-        logger.debug(f"{message} - Additional Info: {json.dumps(additional_info, indent=2)}")
+        logger.debug(f"{message} - Additional Info: {json.dumps(additional_info, indent=2, ensure_ascii=False)}")
     else:
         logger.debug(message) 

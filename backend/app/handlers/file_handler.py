@@ -41,12 +41,13 @@ class FileHandler:
             Dictionary containing extracted text
         """
         try:
-            from trafilatura import extract
+            from markdownify import markdownify as md
             content = await file.read()
             detected_encoding = chardet.detect(content)['encoding'] or "utf-8"
             html_text = content.decode(detected_encoding)
-            text = extract(html_text, include_links=True)
+            text = md(html_text)
             return {"text": text}
+
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Error processing HTML: {str(e)}")
 

@@ -15,6 +15,7 @@ ENV GEOS_CONFIG=/usr/bin/geos-config
 
 # Install application dependencies
 COPY --chown=pwuser:pwuser requirements.txt .
+RUN pip install -U setuptools
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code with correct ownership
