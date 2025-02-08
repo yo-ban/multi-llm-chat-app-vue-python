@@ -89,6 +89,8 @@ async def gemini_stream_generator(
                                     response={"output": tool_result}
                                 )
                                 function_response_parts.append(function_response_part)
+                            
+                                yield f"data: {json.dumps({'type': 'tool_call_end', 'tool': function_call.name})}\n\n"
 
                             # Create function call content
                             function_call_content = Content(
@@ -285,6 +287,8 @@ async def openai_stream_generator(
                                 completion_args['messages'] = openai_messages
                                 completion_args['tool_choice'] = "auto"
                                 tool_calls_buffer = {}  # Reset buffer for next iteration
+
+                                yield f"data: {json.dumps({'type': 'tool_call_end', 'tool': tool_call.function.name})}\n\n"
                                 break  # Break inner loop to start new API call
                     
                     # Handle regular text content

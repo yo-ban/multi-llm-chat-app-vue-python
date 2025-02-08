@@ -60,6 +60,8 @@ async function processSSEResponse(
           if (data.query) toolCall.query = data.query;
           if (data.url) toolCall.url = data.url;
           onUpdate(result, toolCall, true);
+        } else if (data.type === 'tool_call_end' && onUpdate) {
+          onUpdate(result, { type: data.tool, status: 'end' }, true);
         } else if (data.stop_reason) {
           stopReason = data.stop_reason;
           console.log("stopReason", stopReason);

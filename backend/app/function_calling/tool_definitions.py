@@ -3,42 +3,40 @@ from google.genai import types
 
 # Constants for Web Search Tool
 WEB_SEARCH_TOOL_DESCRIPTION = (
-    "Perform a targeted web search to retrieve relevant URLs along with concise snippets "
-    "that provide a brief summary of the content. Use this tool when the user requires timely information "
-    "coupled with direct links for quick reference and further investigation."
+    "Perform a targeted web search to retrieve relevant URLs along with concise snippets. "
+    "Use this tool when you need to discover new information, verify facts, or gather current data. "
 )
+
 WEB_SEARCH_TOOL_PARAMETERS_DESCRIPTION = {
-    "query": "The search query used to fetch up-to-date information. The query takes into account the language of the questioner.",
+    "query": "A concise, well-crafted search query that reflects the precise information needed. Avoid copying the entire user request verbatim; focus on the key concepts you need to explore or verify.",
     "num_results": "Number of search results to return, default is 5",
 }
 
 # Constants for Web Browsing Tool
 WEB_BROWSING_TOOL_DESCRIPTION = (
     "Perform an interactive web browsing session on a given URL to investigate its content in detail. "
-    "After a web search provides the URL, use this tool to explore the webpage further and gather comprehensive information "
-    "that supports the user's query."
+    "Use this after identifying a promising link (either provided by the user or found via the Web Search Tool) "
+    "to obtain comprehensive information, verify context, or extract specific data (e.g., code snippets, instructions, logs, etc.)."
 )
+
 WEB_BROWSING_TOOL_PARAMETERS_DESCRIPTION = {
     "url": "The URL of the webpage to extract information from. Must be a valid HTTP/HTTPS URL.",
-    "query": "The specific information or analysis you want to extract from the webpage. Be precise and clear about what information you're looking for.",
+    "query": (
+        "A targeted request for the information you need to extract. "
+        "Focus on what specific details (code snippets, instructions, data, context) will help you answer the user's question comprehensively."
+    ),
 }
 
 # Constants for Need-Asking-Human Tool (Fallback)
 NEED_ASK_HUMAN_TOOL_DESCRIPTION = (
     "A tool that requests confirmation or clarification from the user when web-related tools should not be automatically invoked. "
     "Use this tool for cases such as casual greetings or when the user's query is contains ambiguous or does not provide enough detail."
-    "It requires a parameter 'clarification_points', which is a list of specific follow-up questions addressing multiple "
-    "aspects that the user might be interested in—for example, the desired scope, timeframe, context, or specific data points. "
-    "These prompts help pinpoint what additional information is needed."
 )
 NEED_ASK_HUMAN_TOOL_PARAMETERS_DESCRIPTION = {
     "clarification_points": (
         "An array of detailed and specific prompts for follow-up questions to ask the user. "
-        "These should capture aspects such as: "
-        "1) Which specific data or outcome are you interested in? "
-        "2) Can you specify a timetable or context for this query? "
-        "3) Are there particular details or examples you require? "
-        "Include as many prompts as needed to fully clarify the user's information needs."
+        "which is a list of specific follow-up questions addressing multiple "
+        "aspects that the user might be interested in—for example, the desired scope, timeframe, context, or specific data points."
     )
 }
 

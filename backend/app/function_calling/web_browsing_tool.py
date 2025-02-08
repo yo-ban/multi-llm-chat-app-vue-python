@@ -115,7 +115,7 @@ async def retrieve_page_data(url: str, content_type: Optional[str] = None, is_we
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
-        await stealth_async(page)
+        # await stealth_async(page)
         await page.set_extra_http_headers({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
             'Accept-Language': 'en-US,en;q=0.9'

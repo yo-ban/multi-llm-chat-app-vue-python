@@ -32,20 +32,20 @@
         </div>
       </div>
       <div class="message-actions-container">
-        <div class="message-actions" :class="{ 'visible': hovering && !streaming }">
-          <button @click="toggleEditMode" class="action-button" v-if="role !== 'error' && !streaming">
+        <div class="message-actions" :class="{ 'visible': hovering && !is_processing }">
+          <button @click="toggleEditMode" class="action-button" v-if="role !== 'error' && !is_processing">
             <font-awesome-icon :icon="isEditing ? 'save' : 'edit'" />
           </button>
           <button v-if="isEditing" @click="cancelEdit" class="action-button">
             <font-awesome-icon icon="times" />
           </button>
-          <button @click="copyMessage" class="action-button" v-if="role === 'assistant' && !isEditing && !streaming">
+          <button @click="copyMessage" class="action-button" v-if="role === 'assistant' && !isEditing && !is_processing">
             <font-awesome-icon icon="copy" />
           </button>
-          <button @click="$emit('resend-message', id)" class="action-button" v-if="role === 'user' && !isEditing && !streaming">
+          <button @click="$emit('resend-message', id)" class="action-button" v-if="role === 'user' && !isEditing && !is_processing">
             <font-awesome-icon icon="redo" />
           </button>
-          <button @click="confirmDeleteMessage" class="action-button" v-if="!isEditing && !streaming">
+          <button @click="confirmDeleteMessage" class="action-button" v-if="!isEditing && !is_processing">
             <font-awesome-icon icon="trash" />
           </button>
         </div>
@@ -87,6 +87,10 @@ const props = defineProps({
     default: () => [],
   },
   streaming: {
+    type: Boolean,
+    default: false,
+  },
+  is_processing: {
     type: Boolean,
     default: false,
   },

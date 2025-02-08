@@ -36,7 +36,8 @@
           v-bind="message"
           :images="message.images"
           :streamed-text="isAssistantMessage(message) ? message.streamedText : undefined"
-          :streaming="isAssistantMessage(message) ? message.streaming : undefined"
+          :streaming="isAssistantMessage(message) ? message.streaming : isStreaming"
+          :is-processing="isStreaming"
           :persona-id="currentPersonaId"
           @resend-message="resendMessage"
           @delete-message="deleteMessage"
@@ -252,8 +253,12 @@ const onUpdate = async (text: string, toolCall?: ToolCall, isIndicator?: boolean
     hasStartedStreaming.value = true;
   }
   if (toolCall) {
-    activeToolCall.value = toolCall;
-    hasStartedStreaming.value = false;
+    if (toolCall.status === 'start') {
+      activeToolCall.value = toolCall;
+      hasStartedStreaming.value = false;
+    } else if (toolCall.status === 'end') {
+      activeToolCall.value = null;
+    }
   } else {
     activeToolCall.value = null;
   }
@@ -459,6 +464,7 @@ function cancelStreaming() {
     abortController.value.abort();
     isStreaming.value = false;
     hasStartedStreaming.value = false;
+    activeToolCall.value = null
     chatStore.stopStreaming()
   }
 }
@@ -474,6 +480,7 @@ async function saveEditedMessage(id: string, editedText: string) {
 }
 
 async function resendMessage(id: string) {
+  hasStartedStreaming.value = false;
   const messageIndex = chatStore.messages.findIndex(message => message.id === id);
   console.log('Resending message with id:', id, 'Index:', messageIndex);
   if (messageIndex !== -1) {
