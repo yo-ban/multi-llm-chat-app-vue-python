@@ -1,5 +1,7 @@
 import type { Persona } from '@/types/personas';
 
+export const REASONING_PREFIX_OPENAI = "Formatting re-enabled"
+
 export const WEB_SEARCH_TOOL_SUFFIX = `
 You have access to powerful tools for retrieving, validating, and analyzing current information. It is **imperative** that you use these tools **frequently and thoroughly** to provide comprehensive, well-researched responses. Avoid relying solely on your existing knowledge; always substantiate your findings with live data.
 

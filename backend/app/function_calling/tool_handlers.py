@@ -48,12 +48,20 @@ async def openai_handle_tool_call(
     """
     try:
         args = json.loads(tool_call.function.arguments)
-        
         # Add the tool call to message history
         messages.append({
             "role": "assistant",
             "content": None,
-            "tool_calls": [tool_call.model_dump()]
+            "tool_calls": [
+                {
+                    "id": tool_call.id.replace("\\", ""),
+                    "type": "function",
+                    "function": {
+                        "name": tool_call.function.name,
+                        "arguments": tool_call.function.arguments
+                    }
+                }
+            ]
         })
 
         if tool_call.function.name == "web_search":
@@ -95,6 +103,16 @@ async def openai_handle_tool_call(
                     "name": tool_call.function.name,
                     "content": formatted_result  # Use formatted text instead of JSON
                 })
+            else:
+                log_warning("No URL or query provided for web browsing")
+
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "name": tool_call.function.name,
+                    "content": "Invalid arguments provided for web browsing. Try to check tool definitions and validate the arguments again."
+                })
+
         elif tool_call.function.name == "need_ask_human":
             clarification_points = args.get("clarification_points")
 

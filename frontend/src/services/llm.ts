@@ -2,7 +2,7 @@ import type { Message } from '@/types/messages';
 import { API_BASE_URL, API_MESSAGES_ENDPOINT } from '@/constants/api';
 import { useSettingsStore } from '@/store/settings';
 import type { APISettings } from '@/types/api';
-import { WEB_SEARCH_TOOL_SUFFIX } from '@/constants/personas';
+import { WEB_SEARCH_TOOL_SUFFIX, REASONING_PREFIX_OPENAI } from '@/constants/personas';
 
 interface ToolCall {
   type: string;
@@ -97,7 +97,14 @@ export async function sendMessageToAPI(
     console.log(API_MESSAGES_ENDPOINT);
     console.log("API Settings:", settings);
 
-    const systemMessage = settings.websearch ? `${system}${WEB_SEARCH_TOOL_SUFFIX}` : system;
+    let systemMessage = system;
+    if (settings.websearch) {
+      systemMessage = `${system}${WEB_SEARCH_TOOL_SUFFIX}`;
+    }
+
+    if (settings.isReasoningSupported && settings.vendor === "openai") {
+      systemMessage = `${REASONING_PREFIX_OPENAI}\n\n${systemMessage}`;
+    }
 
     const response = await fetch(`${API_BASE_URL}${API_MESSAGES_ENDPOINT}`, {
       method: "POST",

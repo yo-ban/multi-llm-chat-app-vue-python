@@ -72,7 +72,7 @@ class ChatHandler:
             completion_args["reasoning_effort"] = reasoning_effort
 
         if websearch:
-            completion_args["tools"] = get_tool_definitions()
+            completion_args["tools"] = get_tool_definitions(without_human_fallback=True)
             completion_args["tool_choice"] = "required"
 
         # If streaming is requested, try using stream mode.
@@ -213,7 +213,7 @@ class ChatHandler:
         }
 
         if websearch:
-            tools = get_gemini_tool_definitions()
+            tools = get_gemini_tool_definitions(without_human_fallback=True)
             tool_config = ToolConfig(
                 function_calling_config=FunctionCallingConfig(mode='ANY')
             )

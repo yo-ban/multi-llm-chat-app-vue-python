@@ -2,6 +2,7 @@ import json
 from typing import AsyncGenerator, Any, Dict, List
 from openai import AsyncOpenAI
 from app.function_calling.tool_handlers import openai_handle_tool_call, gemini_handle_tool_call
+from app.function_calling.tool_definitions import get_tool_definitions, get_gemini_tool_definitions
 from app.message_utils.usage_parser import parse_usage, parse_usage_gemini
 from app.logger.logging_utils import get_logger, log_error, log_info, log_warning, log_debug
 from google.genai.client import Client
@@ -40,6 +41,8 @@ async def gemini_stream_generator(
     try:
         latest_usage = None
         should_continue = True
+        tool_calls_count = 0
+        
         while should_continue:  # Loop to handle recursive tool calls
             text = ""
             has_function_call = False
@@ -112,6 +115,11 @@ async def gemini_stream_generator(
                                 function_calling_config=FunctionCallingConfig(mode='AUTO')
                             )
                             completion_args["tool_config"] = tool_config
+
+                            if tool_calls_count > 0:
+                                completion_args["tools"] = get_gemini_tool_definitions()
+
+                            tool_calls_count += 1
 
                             # Get new response incorporating tool results
                             response = await gemini_client.aio.models.generate_content_stream(
@@ -248,6 +256,8 @@ async def openai_stream_generator(
     try:
         tool_calls_buffer = {}
         should_continue = True
+        tool_calls_count = 0
+        text_generated = False
         
         while should_continue:  # Loop to handle recursive tool calls
             stream = response if response else await openai_client.chat.completions.create(
@@ -258,6 +268,7 @@ async def openai_stream_generator(
             has_tool_call = False
 
             async for chunk in stream:
+
                 if chunk.choices:
                     delta = chunk.choices[0].delta
 
@@ -285,7 +296,11 @@ async def openai_stream_generator(
                                 
                                 # Update messages for the next API call
                                 completion_args['messages'] = openai_messages
-                                completion_args['tool_choice'] = "auto"
+                                completion_args['tools'] = get_tool_definitions()
+                                if tool_calls_count > 0:
+                                    completion_args['tool_choice'] = "auto"
+                                
+                                tool_calls_count += 1
                                 tool_calls_buffer = {}  # Reset buffer for next iteration
 
                                 yield f"data: {json.dumps({'type': 'tool_call_end', 'tool': tool_call.function.name})}\n\n"
@@ -294,6 +309,7 @@ async def openai_stream_generator(
                     # Handle regular text content
                     elif hasattr(delta, 'content') and delta.content is not None:
                         yield f"data: {json.dumps({'text': delta.content})}\n\n"
+                        text_generated = True
 
                 # Check finish reason
                 if chunk.choices and chunk.choices[0].finish_reason:
@@ -303,9 +319,12 @@ async def openai_stream_generator(
                         log_info("Token usage in OpenAI", usage)
                         yield f"data: {json.dumps(usage)}\n\n"
 
-                    if chunk.choices[0].finish_reason == 'stop':
+                    if chunk.choices[0].finish_reason == 'stop' and text_generated:
                         log_info("Stream generator ended normally")
                         should_continue = False
+                        break
+                    elif chunk.choices[0].finish_reason == 'stop' and not text_generated:
+                        log_info("Stream generator ended but no text generated")
                         break
                     elif chunk.choices[0].finish_reason == 'tool_calls':
                         log_info("Tool call completed, continuing with new request")

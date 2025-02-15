@@ -8,8 +8,8 @@ WEB_SEARCH_TOOL_DESCRIPTION = (
 )
 
 WEB_SEARCH_TOOL_PARAMETERS_DESCRIPTION = {
-    "query": "A concise, well-crafted search query that reflects the precise information needed. Avoid copying the entire user request verbatim; focus on the key concepts you need to explore or verify.",
-    "num_results": "Number of search results to return, default is 5",
+    "query": "The information is extracted and made into a query, focusing on the **information to be obtained from the web** that is necessary to answer the question, rather than the final answer required by the user.",
+    "num_results": "The number of results to return from the search."
 }
 
 # Constants for Web Browsing Tool
@@ -40,7 +40,7 @@ NEED_ASK_HUMAN_TOOL_PARAMETERS_DESCRIPTION = {
     )
 }
 
-def get_tool_definitions() -> List[Dict[str, Any]]:
+def get_tool_definitions(without_human_fallback: bool = False) -> List[Dict[str, Any]]:
     """
     Get all function definitions for OpenAI function calling.
     Centralizes all tool definitions in one place for better maintainability.
@@ -48,82 +48,79 @@ def get_tool_definitions() -> List[Dict[str, Any]]:
     Returns:
         List[Dict[str, Any]]: A list of tool definitions in OpenAI function calling format.
     """
-    return [
-        # Web Search Tool
-        {
-            "type": "function",
-            "function": {
-                "name": "web_search",
-                "description": WEB_SEARCH_TOOL_DESCRIPTION,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": WEB_SEARCH_TOOL_PARAMETERS_DESCRIPTION["query"]
-                        },
-                        "num_results": {
-                            "type": "integer",
-                            "description": WEB_SEARCH_TOOL_PARAMETERS_DESCRIPTION["num_results"],
-                        }
-                    },
-                    "required": ["query"],
-                    "additionalProperties": False
+    # Web Search Tool
+    web_search_tool = {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": WEB_SEARCH_TOOL_DESCRIPTION,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": WEB_SEARCH_TOOL_PARAMETERS_DESCRIPTION["query"]
+                    }
                 },
-                "strict": False
-            }
-        },
-        # Web Browsing Tool
-        {
-            "type": "function",
-            "function": {
-                "name": "web_browsing",
-                "description": WEB_BROWSING_TOOL_DESCRIPTION,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "url": {
-                            "type": "string",
-                            "description": WEB_BROWSING_TOOL_PARAMETERS_DESCRIPTION["url"]
-                        },
-                        "query": {
-                            "type": "string",
-                            "description": WEB_BROWSING_TOOL_PARAMETERS_DESCRIPTION["query"]
-                        }
-                    },
-                    "required": ["url", "query"],
-                    "additionalProperties": False
-                },
-                "strict": False
-            }
-        },
-        # Need-Asking-Human Tool (Fallback)
-        {
-            "type": "function",
-            "function": {
-                "name": "need_ask_human",
-                "description": NEED_ASK_HUMAN_TOOL_DESCRIPTION,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "clarification_points": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            },
-                            "description": NEED_ASK_HUMAN_TOOL_PARAMETERS_DESCRIPTION["clarification_points"]
-                        }
-                    },
-                    "required": ["clarification_points"],
-                    "additionalProperties": False
-
-                },
-                "strict": False
-            }
+                "required": ["query"],
+                "additionalProperties": False
+            },
+            "strict": False
         }
-    ]
+    }
+    # Web Browsing Tool
+    web_browsing_tool = {
+        "type": "function",
+        "function": {
+            "name": "web_browsing",
+            "description": WEB_BROWSING_TOOL_DESCRIPTION,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": WEB_BROWSING_TOOL_PARAMETERS_DESCRIPTION["url"]
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": WEB_BROWSING_TOOL_PARAMETERS_DESCRIPTION["query"]
+                    }
+                },
+                "required": ["url", "query"],
+                "additionalProperties": False
+            },
+            "strict": False
+        }
+    }
+    # Need-Asking-Human Tool (Fallback)
+    need_ask_human_tool = {
+        "type": "function",
+        "function": {
+            "name": "need_ask_human",
+            "description": NEED_ASK_HUMAN_TOOL_DESCRIPTION,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "clarification_points": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": NEED_ASK_HUMAN_TOOL_PARAMETERS_DESCRIPTION["clarification_points"]
+                    }
+                },
+                "required": ["clarification_points"],
+                "additionalProperties": False
+            },
+            "strict": False
+        }
+    }
+    tool_definitions = [web_search_tool, web_browsing_tool]
+    if not without_human_fallback:
+        tool_definitions.append(need_ask_human_tool)
+    return tool_definitions
 
-def get_gemini_tool_definitions() -> List[types.Tool]:
+def get_gemini_tool_definitions(without_human_fallback: bool = False) -> List[types.Tool]:
     """
     Get all function definitions for Gemini API function calling.
     Centralizes all tool definitions in one place for better maintainability.
@@ -141,10 +138,6 @@ def get_gemini_tool_definitions() -> List[types.Tool]:
                 "query": types.Schema(
                     type="STRING",
                     description=WEB_SEARCH_TOOL_PARAMETERS_DESCRIPTION["query"],
-                ),
-                "num_results": types.Schema(
-                    type="INTEGER",
-                    description=WEB_SEARCH_TOOL_PARAMETERS_DESCRIPTION["num_results"],
                 ),
             },
             required=["query"],
@@ -190,10 +183,9 @@ def get_gemini_tool_definitions() -> List[types.Tool]:
         ),
     )
 
+    tool_definitions = [web_search_function, web_browsing_function]
 
-    # Create Tool objects for each function
-    web_search_tool = types.Tool(function_declarations=[web_search_function])
-    web_browsing_tool = types.Tool(function_declarations=[web_browsing_function])
-    need_ask_human_tool = types.Tool(function_declarations=[need_ask_human_function])
+    if not without_human_fallback:
+        tool_definitions.append(need_ask_human_function)
 
-    return [web_search_tool, web_browsing_tool, need_ask_human_tool]
+    return tool_definitions
