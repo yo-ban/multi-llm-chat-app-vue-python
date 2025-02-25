@@ -21,8 +21,9 @@ async def gemini_stream_generator(
     response: Any,
     gemini_client: Client,
     model: str,
-    history: List[Content],
-    completion_args: dict
+    history: list[Content],
+    completion_args: dict,
+    images: list
 ) -> AsyncGenerator[str, None]:
     """
     Generate streaming response for Gemini API.
@@ -38,6 +39,15 @@ async def gemini_stream_generator(
     Yields:
         Streaming response data in SSE format
     """
+
+    # Cleanup uploaded images
+    def _cleanup_images():
+        for image in images:
+            try:
+                gemini_client.files.delete(name=image.name)
+            except Exception as e:
+                print(f"Error deleting image: {e}")
+
     try:
         latest_usage = None
         should_continue = True
@@ -117,7 +127,7 @@ async def gemini_stream_generator(
                             completion_args["tool_config"] = tool_config
 
                             if tool_calls_count > 0:
-                                completion_args["tools"] = get_gemini_tool_definitions()
+                                completion_args["tools"] = [get_gemini_tool_definitions()]
 
                             tool_calls_count += 1
 
@@ -148,6 +158,7 @@ async def gemini_stream_generator(
                 log_info("Token usage in Gemini", usage)
                 yield f"data: {json.dumps(usage)}\n\n"
                 yield f"data: {json.dumps({'text': '[DONE]'})}\n\n"
+                _cleanup_images()
                 break
 
     except Exception as e:
@@ -158,8 +169,9 @@ async def gemini_non_stream_generator(
     response: Any,
     gemini_client: Client,
     model: str,
-    history: List[Content],
-    completion_args: dict
+    history: list[Content],
+    completion_args: dict,
+    images: list
 ) -> AsyncGenerator[str, None]:
     """
     Generate non-streaming response for Gemini API.
@@ -397,9 +409,15 @@ async def anthropic_stream_generator(response) -> AsyncGenerator[str, None]:
     try:
         async for event in response:
             if event.type == "content_block_start":
-                yield f"data: {json.dumps({'text': event.content_block.text})}\n\n"
+                if event.content_block.type == "thinking":
+                    print(f"思考：{event.content_block.thinking}", end="", flush=True)
+                elif event.content_block.type == "text":
+                    yield f"data: {json.dumps({'text': event.content_block.text})}\n\n"
             elif event.type == "content_block_delta":
-                yield f"data: {json.dumps({'text': event.delta.text})}\n\n"
+                if event.delta.type == "thinking_delta":
+                    print(f"{event.delta.thinking}", end="", flush=True)
+                elif event.delta.type == "text_delta":
+                    yield f"data: {json.dumps({'text': event.delta.text})}\n\n"
             elif event.type == "content_block_stop":
                 pass
             elif event.type == "message_delta":

@@ -3,18 +3,27 @@ import type { Model } from '@/types/models';
 
 export const MODELS: { [key: string]: { [key: string]: Model } } = {
   anthropic: {
+    CLAUDE_3_7_SONNET: {
+      id: 'claude-3-7-sonnet-20250219',
+      name: 'Claude 3.7 Sonnet',
+      contextWindow: 200000,
+      maxTokens: 8192,
+      multimodal: true
+    },
+    CLAUDE_3_7_SONNET_THINKING: {
+      id: 'claude-3-7-sonnet-20250219-thinking',
+      name: 'Claude 3.7 Sonnet (with Thinking)',
+      contextWindow: 200000,
+      maxTokens: 128000,
+      multimodal: true,
+      supportsReasoning: true,
+      defaultReasoningEffort: 'low',
+    },
     CLAUDE_3_5_SONNET: {
       id: 'claude-3-5-sonnet-20241022',
       name: 'Claude 3.5 Sonnet',
       contextWindow: 200000,
       maxTokens: 8192,
-      multimodal: true
-    },
-    CLAUDE_3_OPUS: {
-      id: 'claude-3-opus-20240229',
-      name: 'Claude 3 Opus',
-      contextWindow: 200000,
-      maxTokens: 4096,
       multimodal: true
     },
     CLAUDE_3_HAIKU: {

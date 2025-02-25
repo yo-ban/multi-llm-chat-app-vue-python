@@ -200,6 +200,7 @@ async def gemini_handle_tool_call(
             
         # Return the final result in the last status update
         if result:
+            log_info("Tool execution complete", {"tool": function_call.name, "result": result})
             yield {"type": "tool_execution_complete", "tool": function_call.name, "result": result}
             
     except Exception as e:

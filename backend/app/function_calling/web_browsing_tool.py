@@ -419,6 +419,11 @@ async def web_browsing(url: str, query: str) -> Dict[str, Any]:
     # Get content type and web page flag from actual content
     content_type, is_web_page = await detect_mime_type(url)
 
+    log_debug("Content type and web page flag", {
+        "content_type": content_type,
+        "is_web_page": is_web_page
+    })
+
     response = {
         "url": url,
         "query": query,

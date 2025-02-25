@@ -49,7 +49,7 @@ async def prepare_openai_messages(system_message: str, messages: List[Dict[str, 
         for item in msg['content']:
             if item['type'] == 'text':
                 content.append({"type": "text", "text": item['text']})
-            elif item['type'] == 'image':
+            if item['type'] == 'image':
                 content.append({
                     "type": "image_url",
                     "image_url": {

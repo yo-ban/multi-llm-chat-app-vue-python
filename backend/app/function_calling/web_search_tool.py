@@ -170,6 +170,8 @@ async def web_search(query: str, num_results: int = 5) -> List[SearchResult]:
             log_warning("No search results found", {"query": query})
             return []
 
+        log_info("extract_sources_from_metadata")
+
         results = await extract_sources_from_metadata(metadata, num_results)
         log_info("Successfully searched web", {
             "query": query,

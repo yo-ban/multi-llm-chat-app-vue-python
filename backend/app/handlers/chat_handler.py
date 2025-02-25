@@ -132,21 +132,40 @@ class ChatHandler:
         """Handle Anthropic API requests"""
         anthropic = AsyncAnthropic(api_key=self.api_key)
         anthropic_messages = await prepare_anthropic_messages(messages)
-        
-        response = await anthropic.messages.create(
-            system=[
+
+        params = {
+            "system": [
                 {
                     "type": "text",
                     "text": system,
                     "cache_control": {"type": "ephemeral"}
-                },
+                }
             ],
-            model=model,
-            messages=anthropic_messages,
-            max_tokens=max_tokens,
-            stream=stream,
-            temperature=temperature
-        )
+            "model": model,
+            "messages": anthropic_messages,
+            "max_tokens": max_tokens,
+            "stream": stream,
+            "temperature": temperature
+        }
+
+        if is_reasoning_supported:
+            if reasoning_effort == "low":
+                budget_tokens = 6000
+            elif reasoning_effort == "medium":
+                budget_tokens = 10000
+            elif reasoning_effort == "high":
+                budget_tokens = 14000
+                
+            model = model.replace("-thinking", "")
+
+            params["model"] = model
+
+            params["thinking"] = {
+                "type": "enabled",
+                "budget_tokens": budget_tokens
+            }
+
+        response = await anthropic.messages.create(**params)
 
         if stream:
             return StreamingResponse(
@@ -155,7 +174,14 @@ class ChatHandler:
             )
         else:
             async def generate_non_stream_response():
-                yield f'data: {json.dumps({"text": response.content[0].text})}\n\n'
+                content = response.content
+                for block in content:
+                    if block.type == "text":
+                        yield f'data: {json.dumps({"text": block.text})}\n\n'
+                    elif block.type == "thinking":
+                        if block.thinking:
+                            print(f"思考：{block.thinking}")
+
                 yield 'data: {"text": "[DONE]"}\n\n'
 
             return StreamingResponse(
@@ -213,7 +239,6 @@ class ChatHandler:
         }
 
         if websearch:
-            tools = get_gemini_tool_definitions(without_human_fallback=True)
             tool_config = ToolConfig(
                 function_calling_config=FunctionCallingConfig(mode='ANY')
             )
@@ -221,14 +246,14 @@ class ChatHandler:
                 disable=True,
                 ignore_call_history=True
             )
-            completion_args["tools"] = tools
+            completion_args["tools"] = [get_gemini_tool_definitions(without_human_fallback=True)]
             completion_args["tool_config"] = tool_config
             completion_args["automatic_function_calling"] = automatic_function_calling
 
         generation_config = GenerateContentConfig(**completion_args)
 
         # Process history and current message
-        history = []
+        history: list[Content] = []
         images = []
         for message in messages[:-1]:
             parts = []
@@ -241,7 +266,7 @@ class ChatHandler:
                     )
                     parts.append(Part.from_uri(file_uri=uploaded_image.uri, mime_type=content["source"]["media_type"]))
                     images.append(uploaded_image)
-                elif content["type"] == "text":
+                if content["type"] == "text":
                     parts.append(Part.from_text(text=content["text"]))
             history.append(Content(parts=parts, role=role))
 
@@ -251,7 +276,7 @@ class ChatHandler:
         for content in latest_message["content"]:
             if content["type"] == "text":
                 latest_parts.append(Part.from_text(text=content["text"]))
-            elif content["type"] == "image":
+            if content["type"] == "image":
                 uploaded_image = await upload_image_to_gemini(
                     content["source"]["data"],
                     content["source"]["media_type"]
@@ -263,14 +288,6 @@ class ChatHandler:
 
         # Add latest content to history
         history.append(latest_content)
-
-        # Cleanup uploaded images
-        def _cleanup_images():
-            for image in images:
-                try:
-                    client.files.delete(name=image.name)
-                except Exception as e:
-                    print(f"Error deleting image: {e}")
         
 
         if stream:
@@ -279,7 +296,6 @@ class ChatHandler:
                 contents=history,
                 config=generation_config
             )
-            _cleanup_images()
 
             return StreamingResponse(
                 gemini_stream_generator(
@@ -287,7 +303,8 @@ class ChatHandler:
                     gemini_client=client, 
                     model=model,
                     history=history,
-                    completion_args=completion_args
+                    completion_args=completion_args,
+                    images=images
                 ),
                 media_type="text/event-stream"
             )
@@ -297,7 +314,6 @@ class ChatHandler:
                 contents=history,
                 config=generation_config
             )
-            _cleanup_images()
 
             return StreamingResponse(
                 gemini_non_stream_generator(
@@ -386,15 +402,6 @@ class ChatHandler:
                     reasoning_effort=chat_request.reasoningEffort,
                     is_reasoning_supported=chat_request.isReasoningSupported,
                 )
-            elif chat_request.model.startswith('deepseek-'):
-                return await self.handle_deepseek(
-                    model=chat_request.model,
-                    messages=messages,
-                    max_tokens=chat_request.maxTokens,
-                    temperature=chat_request.temperature,
-                    stream=chat_request.stream,
-                    system=chat_request.system
-                )
             elif chat_request.model.startswith('gemini-'):
                 return await self.handle_gemini(
                     model=chat_request.model,
@@ -402,7 +409,8 @@ class ChatHandler:
                     max_tokens=chat_request.maxTokens,
                     temperature=chat_request.temperature,
                     stream=chat_request.stream,
-                    system=chat_request.system
+                    system=chat_request.system,
+                    websearch=chat_request.websearch
                 )
             elif "/" in chat_request.model:  # OpenRouter models
                 return await self.handle_openrouter(
@@ -420,7 +428,9 @@ class ChatHandler:
                     max_tokens=chat_request.maxTokens,
                     temperature=chat_request.temperature,
                     stream=chat_request.stream,
-                    system=chat_request.system
+                    system=chat_request.system,
+                    reasoning_effort=chat_request.reasoningEffort,
+                    is_reasoning_supported=chat_request.isReasoningSupported
                 )
                 
         except Exception as e:

@@ -120,7 +120,7 @@ def get_tool_definitions(without_human_fallback: bool = False) -> List[Dict[str,
         tool_definitions.append(need_ask_human_tool)
     return tool_definitions
 
-def get_gemini_tool_definitions(without_human_fallback: bool = False) -> List[types.Tool]:
+def get_gemini_tool_definitions(without_human_fallback: bool = False) -> types.Tool:
     """
     Get all function definitions for Gemini API function calling.
     Centralizes all tool definitions in one place for better maintainability.
@@ -185,7 +185,8 @@ def get_gemini_tool_definitions(without_human_fallback: bool = False) -> List[ty
 
     tool_definitions = [web_search_function, web_browsing_function]
 
+
     if not without_human_fallback:
         tool_definitions.append(need_ask_human_function)
 
-    return tool_definitions
+    return types.Tool(function_declarations=tool_definitions)
