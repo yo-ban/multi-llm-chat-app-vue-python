@@ -2,14 +2,8 @@ import type { Message } from '@/types/messages';
 import { API_BASE_URL, API_MESSAGES_ENDPOINT } from '@/constants/api';
 import { useSettingsStore } from '@/store/settings';
 import type { APISettings } from '@/types/api';
+import type { ToolCall } from '@/types/tools';
 import { WEB_SEARCH_TOOL_SUFFIX, REASONING_PREFIX_OPENAI } from '@/constants/personas';
-
-interface ToolCall {
-  type: string;
-  status: 'start' | 'end';
-  query?: string;
-  url?: string;
-}
 
 // SSEレスポンスを処理する共通関数
 async function processSSEResponse(
