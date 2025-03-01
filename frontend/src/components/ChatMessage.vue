@@ -55,16 +55,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch, inject } from 'vue';
 import DOMPurify from 'dompurify';
 import MarkdownIt from 'markdown-it';
 
-import hljs from '@/utils/highlight';
-import '@/assets/styles/code-theme.css';
 import { PERSONAS } from '@/constants/personas';
 import { usePersonaStore } from '@/store/persona';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
+
+// プラグインから関数をインジェクト
+const highlightCode = inject('highlightCode') as (str: string, lang: string) => string;
+const setupCopyButtonHandler = inject('setupCopyButtonHandler') as () => () => void;
 
 const confirm = useConfirm();
 const toast = useToast();
@@ -131,15 +133,7 @@ const vTripleClick = {
 const md: MarkdownIt = new MarkdownIt({
   breaks: true,
   highlight: function (str, lang) {
-    if (lang && hljs.getLanguage(lang)) {
-      try {
-        const code = hljs.highlight(str, { language: lang }).value;
-        return `<pre class="hljs"><div class="code-header"><span class="language">${lang}</span><button class="copy-button">Copy</button></div><code>${code}</code></pre>`;
-      } catch (error) {
-        console.error('Error highlighting code:', error);
-      }
-    }
-    return `<pre class="hljs"><div class="code-header"><span class="language">Code</span><button class="copy-button">Copy</button></div><code>${md.utils.escapeHtml(str)}</code></pre>`;
+    return highlightCode(str, lang);
   },
 });
 
@@ -291,11 +285,13 @@ function copyMessage() {
 }
 
 onMounted(() => {
-  window.addEventListener('click', handleCopyButtonClick);
-});
-
-onBeforeUnmount(() => {
-  window.removeEventListener('click', handleCopyButtonClick);
+  // コピーボタンのイベントハンドラを設定
+  const removeHandler = setupCopyButtonHandler();
+  
+  // コンポーネント破棄時にイベントリスナーを削除するように保存
+  onBeforeUnmount(() => {
+    removeHandler();
+  });
 });
 
 watch(isEditing, (newVal) => {
