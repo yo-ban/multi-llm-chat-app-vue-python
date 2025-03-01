@@ -37,7 +37,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useConversationStore } from '@/store/conversation';
-import { extractTextFromFile } from '@/utils/file-utils';
+import { fileService } from '@/services/api/file-service';
 import { useToast } from 'primevue/usetoast';
 
 const conversationStore = useConversationStore();
@@ -118,7 +118,7 @@ async function processFiles(files: FileList) {
       throw new Error(`You may not upload files larger than 20mb.\nFilename: ${file.name}`);
     }
     try {
-      const fileContent = await extractTextFromFile(file);
+      const fileContent = await fileService.extractTextFromFile(file);
       fileContents[file.name] = fileContent;
     } catch (error) {
       console.error(`Error extracting text from file ${file.name}:`, error);

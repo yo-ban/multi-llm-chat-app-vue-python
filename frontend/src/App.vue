@@ -57,7 +57,7 @@ import ChatView from './views/ChatView.vue';
 import { useConversationStore } from './store/conversation';
 import { useSettingsStore } from './store/settings';
 import { usePersonaStore } from '@/store/persona';
-import { initializeIndexedDB } from './services/indexeddb';
+import { storageService } from '@/services/storage/indexeddb-service';
 import { MODELS } from '@/constants/models';
 import GlobalSettingsDialog from '@/components/settings/GlobalSettingsDialog.vue';
 import type { GlobalSettings } from '@/types/settings';
@@ -79,7 +79,7 @@ const tempSettings = reactive<GlobalSettings>({
   titleGenerationModel: settingsStore.titleGenerationModel,
 });
 
-initializeIndexedDB();
+storageService.initialize();
 
 // const availableModels = computed(() => {
 //   if (tempSettings.defaultVendor === 'openrouter') {

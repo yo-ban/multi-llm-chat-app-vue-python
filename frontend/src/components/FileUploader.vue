@@ -18,7 +18,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { extractTextFromFile } from '@/utils/file-utils';
+import { fileService } from '@/services/api/file-service';
 import { useToast } from 'primevue/usetoast';
 
 const props = defineProps({
@@ -67,7 +67,7 @@ const onFileUpload = async (event: Event) => {
         reader.readAsDataURL(file);
       } else {
         try {
-          const fileContent = await extractTextFromFile(file);
+          const fileContent = await fileService.extractTextFromFile(file);
           fileContents[file.name] = fileContent;
         } catch (error) {
           console.error(`Error extracting text from file ${file.name}:`, error);

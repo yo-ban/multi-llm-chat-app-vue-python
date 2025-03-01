@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 import { MODELS } from '@/constants/models';
 import type { GlobalSettings } from '@/types/settings';
 import type { Model } from '@/types/models';
-import { getGlobalSettings, saveGlobalSettings } from '@/services/indexeddb';
+import { storageService } from '@/services/storage/indexeddb-service';
 
 export const useSettingsStore = defineStore('settings', {
   state: (): GlobalSettings => ({
@@ -23,13 +23,13 @@ export const useSettingsStore = defineStore('settings', {
 
   actions: {
     async loadSettings() {
-      const settings = await getGlobalSettings();
+      const settings = await storageService.getGlobalSettings();
       this.$patch(settings);
     },
 
     async saveSettings(settings: GlobalSettings) {
       this.$patch(settings);
-      await saveGlobalSettings(settings);
+      await storageService.saveGlobalSettings(settings);
     },
 
     getModelById(modelId: string): Model | null {

@@ -94,12 +94,11 @@ import type { MessageRole } from '@/types/common';
 import type { Conversation } from '@/types/conversation';
 
 // Services
-import { sendMessageToAPI, generateChatTitle } from '@/services/llm';
-import { getConversationMessages, updateConversationMessages } from '@/services/indexeddb';
-import { countTokens } from '@/services/tokenizer';
+import { llmService } from '@/services/domain/llm-service';
+import { storageService } from '@/services/storage/indexeddb-service';
 
 // Utils
-import { generateSystemMessageWithFiles } from '@/utils/message-utils';
+import { generateSystemMessageWithFiles, countTokens } from '@/utils/message-utils';
 
 // Components
 import ChatHeader from '@/components/ChatHeader.vue';
@@ -274,7 +273,7 @@ watch(
         await updateConversationHistory(previousConversationID.value, chatStore.messages);
       }
       previousConversationID.value = newConversationId;
-      const messages = await getConversationMessages(newConversationId);
+      const messages = await storageService.getConversationMessages(newConversationId);
       chatStore.messages = messages.map(message => ({
         ...message,
       }));
@@ -391,7 +390,7 @@ async function onSendMessage(newMessage: string, uploadedImages: string[]) {
 
 const updateConversationHistory = async (conversationId: string, messages: Message[]) => {
   if (conversationId) {
-    await updateConversationMessages(conversationId, messages);
+    await storageService.updateConversationMessages(conversationId, messages);
   }
 };
 
@@ -399,9 +398,9 @@ async function reGenerateChatTitle() {
   const currentConversationId = conversationStore.currentConversationId;
   if (currentConversationId) {
     if (chatStore.messages.length >= 2) {
-      generateChatTitle(chatStore.messages).then(async (title) => {
+      llmService.generateChatTitle(chatStore.messages).then(async (title: string) => {
         await conversationStore.updateConversationTitle(currentConversationId, title);
-      }).catch((error) => {
+      }).catch((error: Error) => {
         console.error('Error generating chat title:', error);
       });
     }
@@ -431,14 +430,14 @@ async function sendMessage() {
       delete apiSettings.temperature;
     }
 
-    await sendMessageToAPI(apiMessages, systemMessage, apiSettings, onUpdate, abortController.value.signal);
+    await llmService.sendMessageToAPI(apiMessages, systemMessage, apiSettings, onUpdate, abortController.value.signal);
 
     chatStore.stopStreaming();
 
     if (chatStore.messages.length >= 2 && currentConversationTitle.value === "New Chat" && currentConversationId) {
-      generateChatTitle(chatStore.messages).then(async (title) => {
+      llmService.generateChatTitle(chatStore.messages).then(async (title: string) => {
         await conversationStore.updateConversationTitle(currentConversationId, title);
-      }).catch((error) => {
+      }).catch((error: Error) => {
         console.error('Error generating chat title:', error);
       });
     }

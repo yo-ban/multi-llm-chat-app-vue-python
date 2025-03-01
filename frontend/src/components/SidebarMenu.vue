@@ -134,9 +134,8 @@ import { useConversationStore } from '@/store/conversation';
 import type { Conversation } from '@/types/conversation';
 import { useChatStore } from '@/store/chat';
 import { storeToRefs } from 'pinia';
-import { generateChatTitle } from '@/services/llm';
+import { llmService } from '@/services/domain/llm-service';
 import { PERSONAS } from '@/constants/personas';
-
 import { useToast } from 'primevue/usetoast';
 import { usePersonaStore } from '@/store/persona';
 import { v4 as uuidv4 } from 'uuid';
@@ -310,9 +309,9 @@ const confirmDeleteConversation = (conversationId: string) => {
 
 async function reGenerateChatTitle(conversationId: string) {
   if (chatStore.messages.length >= 2) {
-    generateChatTitle(chatStore.messages).then(async (title) => {
+    llmService.generateChatTitle(chatStore.messages).then(async (title: string) => {
       await conversationStore.updateConversationTitle(conversationId, title);
-    }).catch((error) => {
+    }).catch((error: Error) => {
       console.error('Error generating chat title:', error);
     });
   }

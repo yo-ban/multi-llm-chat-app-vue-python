@@ -161,7 +161,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import type { Model } from '@/types/models';
-import { fetchOpenRouterModels, convertToCustomModel } from '@/services/openrouter';
+import { openRouterService } from '@/services/api/openrouter-service';
+import type { OpenRouterModel } from '@/types/openrouter';
 
 const props = defineProps<{
   modelValue: Model[]
@@ -195,11 +196,11 @@ async function fetchModelInfo(modelId: string) {
   try {
     isLoading.value = true;
     errorMessage.value = '';
-    const models = await fetchOpenRouterModels();
-    const model = models.find(m => m.id === modelId);
+    const models = await openRouterService.fetchModels();
+    const model = models.find((m: OpenRouterModel) => m.id === modelId);
     
     if (model) {
-      const customModel = convertToCustomModel(model);
+      const customModel = openRouterService.convertToCustomModel(model);
       editingModel.value = {
         ...editingModel.value,
         name: customModel.name,

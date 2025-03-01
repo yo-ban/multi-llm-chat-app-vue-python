@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { getUserDefinedPersonas, saveUserDefinedPersonas } from '@/services/indexeddb';
+import { storageService } from '@/services/storage/indexeddb-service';
 import type { UserDefinedPersona } from '@/types/personas';
 import { saveAs } from 'file-saver';
 import { v4 as uuidv4 } from 'uuid';
@@ -12,7 +12,7 @@ export const usePersonaStore = defineStore('persona', {
   actions: {
     async loadUserDefinedPersonas() {
       if (this.userDefinedPersonas.length === 0) {
-        this.userDefinedPersonas = await getUserDefinedPersonas();
+        this.userDefinedPersonas = await storageService.getUserPersonas();
       }
     },
 
@@ -35,7 +35,7 @@ export const usePersonaStore = defineStore('persona', {
     },
 
     async savePersonas() {
-      await saveUserDefinedPersonas(this.userDefinedPersonas);
+      await storageService.saveUserPersonas(this.userDefinedPersonas);
     },
 
     async exportPersona(persona: UserDefinedPersona) {
