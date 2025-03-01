@@ -37,6 +37,8 @@ import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 import App from './App.vue';
 import router from './router';
 import primevue from './plugins/primevue';
+import highlightPlugin from './plugins/highlight-plugin';
+import '@/assets/styles/code-theme.css';
 
 library.add(
   faPaperPlane, 
@@ -74,5 +76,6 @@ app.use(createPinia());
 app.use(router);
 app.use(primevue);
 app.use(FloatingVue);
+app.use(highlightPlugin);
 app.component('font-awesome-icon', FontAwesomeIcon);
 app.mount('#app');
