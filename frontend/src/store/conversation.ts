@@ -57,6 +57,7 @@ export const useConversationStore = defineStore('conversation', {
             reasoningEffort: settingsStore.getEffectiveReasoningEffort(settingsStore.defaultModel),
             websearch: settingsStore.defaultWebSearch,
             multimodal: model?.multimodal ?? false,
+            imageGeneration: model?.imageGeneration ?? false,
           },
           historyLength: 0,
         };

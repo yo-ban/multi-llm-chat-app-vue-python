@@ -75,6 +75,13 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       unsupportsTemperature: true,
       supportFunctionCalling: true,
     },
+    OPENAI_GPT_4_5_PREVIEW: {
+      id: 'openai-gpt-4.5-preview',
+      name: 'GPT-4.5 Preview',
+      contextWindow: 128000,
+      maxTokens: 16384,
+      multimodal: true,
+    },
     OPENAI_CHATGPT_4_O: {
       id: 'openai-chatgpt-4o-latest',
       name: 'ChatGPT-4o',
@@ -107,7 +114,16 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       maxTokens: 65536,
       multimodal: true,
       supportsReasoning: true,
-    }
+    },
+    GEMINI_2_0_FLASH_EXP: {
+      id: 'gemini-2.0-flash-exp',
+      name: 'Gemini 2.0 Flash Experimental',
+      contextWindow: 32768,
+      maxTokens: 8192,
+      multimodal: true,
+      imageGeneration: true,
+      supportFunctionCalling: true,
+    },
   },
   openrouter: {
     

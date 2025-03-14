@@ -1,4 +1,5 @@
 import json
+import base64
 from typing import AsyncGenerator, Any, Dict, List
 from openai import AsyncOpenAI
 from app.function_calling.tool_handlers import openai_handle_tool_call, gemini_handle_tool_call
@@ -35,10 +36,35 @@ async def gemini_stream_generator(
         model: The full model string (e.g., "gemini-2.5-flash").
         history: Current conversation history
         completion_args: Generation configuration including tools and settings
+        images: List of uploaded images
         
     Yields:
         Streaming response data in SSE format
     """
+
+    # Insert helper function to process inline image data
+    async def _yield_inline_image(inline_data) -> AsyncGenerator[str, None]:
+        try:
+            mime_type = inline_data.mime_type
+            data = inline_data.data
+            # Check the type of data and encode if necessary
+            if isinstance(data, bytes):
+                base64_data = base64.b64encode(data).decode('utf-8')
+            elif isinstance(data, str):
+                # Assume data is already a proper base64 encoded string
+                base64_data = data
+            else:
+                log_error(f"Unexpected type for inline_data.data: {type(data)}")
+                base64_data = str(data)
+
+            yield f"data: {json.dumps({'type': 'image_start', 'mime_type': mime_type})}\n\n"
+            chunk_size = 8192  # 8KB chunks
+            for i in range(0, len(base64_data), chunk_size):
+                chunk = base64_data[i:i + chunk_size]
+                yield f"data: {json.dumps({'type': 'image_chunk', 'chunk': chunk})}\n\n"
+            yield f"data: {json.dumps({'type': 'image_end'})}\n\n"
+        except Exception as e:
+            log_error(f"Error processing image data: {str(e)}")
 
     # Cleanup uploaded images
     def _cleanup_images():
@@ -140,6 +166,10 @@ async def gemini_stream_generator(
                             
                             break  # Break inner loop to start new response processing
                         
+                        if part.inline_data:
+                            async for inline_chunk in _yield_inline_image(part.inline_data):
+                                yield inline_chunk
+
                         # Handle regular text content
                         if part.text:
                             text += event.text

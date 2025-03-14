@@ -19,10 +19,16 @@ export const useChatStore = defineStore('chat', {
       };
       this.messages.push(newMessage as Message);
     },
-    updateStreamedMessage(text: string) {
+    updateStreamedMessage(text: string, image?: string) {
       const lastMessage = this.messages[this.messages.length - 1];
       if (lastMessage && lastMessage.role === 'assistant' && 'streaming' in lastMessage && lastMessage.streaming) {
         lastMessage.streamedText = text;
+        if (image) {
+          if (!lastMessage.images) {
+            lastMessage.images = [];
+          }
+          lastMessage.images.push(image);
+        }
       }
     },
     stopStreaming() {

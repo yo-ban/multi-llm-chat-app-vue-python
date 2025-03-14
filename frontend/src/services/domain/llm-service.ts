@@ -23,7 +23,7 @@ export interface LLMService {
     messages: Message[], 
     system: string, 
     settings: APISettings, 
-    onUpdate: (text: string, toolCall?: ToolCall, isIndicator?: boolean) => void,
+    onUpdate: (text: string, toolCall?: ToolCall, isIndicator?: boolean, image?: string) => void,
     signal?: AbortSignal
   ): Promise<string>;
   
@@ -47,7 +47,7 @@ class LLMServiceImpl implements LLMService {
    */
   private async processSSEResponse(
     response: Response,
-    onUpdate?: (text: string, toolCall?: ToolCall, isIndicator?: boolean) => void
+    onUpdate?: (text: string, toolCall?: ToolCall, isIndicator?: boolean, image?: string) => void
   ): Promise<string> {
     const reader = response.body?.getReader();
     if (!reader) {
@@ -58,57 +58,90 @@ class LLMServiceImpl implements LLMService {
     let result = '';
     let stopReason = '';
     
+    // For handling chunked image data
+    let isCollectingImage = false;
+    let imageChunks: string[] = [];
+    let imageMimeType = '';
+    
     let done = false;
+    let buffer = '';
+
+    // Helper function to process a single SSE line (starting with 'data:')
+    async function processDataLine(line: string): Promise<boolean> {
+      const data = JSON.parse(line.slice(5));
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      if (data.text === '[DONE]') {
+        if (onUpdate) {
+          await new Promise(resolve => { onUpdate(result); setTimeout(resolve, 0); });
+        }
+        return true;
+      }
+      if (data.type === 'tool_call_start' && onUpdate) {
+        onUpdate(result, { type: data.tool, status: 'start' }, true);
+      } else if (data.type === 'tool_execution' && onUpdate) {
+        const toolCall: ToolCall = { type: data.tool, status: 'start' };
+        if (data.query) toolCall.query = data.query;
+        if (data.url) toolCall.url = data.url;
+        onUpdate(result, toolCall, true);
+      } else if (data.type === 'tool_call_end' && onUpdate) {
+        onUpdate(result, { type: data.tool, status: 'end' }, true);
+      } else if (data.stop_reason) {
+        stopReason = data.stop_reason;
+        console.log("stopReason", stopReason);
+      } else if (data.type === 'image_start') {
+        isCollectingImage = true;
+        imageChunks = [];
+        imageMimeType = data.mime_type;
+      } else if (data.type === 'image_chunk' && isCollectingImage) {
+        imageChunks.push(data.chunk);
+      } else if (data.type === 'image_end' && isCollectingImage) {
+        const completeBase64 = imageChunks.join('');
+        const dataUrl = `data:${imageMimeType};base64,${completeBase64}`;
+        if (onUpdate) { onUpdate(result, undefined, undefined, dataUrl); }
+        isCollectingImage = false;
+        imageChunks = [];
+      } else if (data.text) {
+        result += data.text;
+        if (onUpdate) { onUpdate(result); }
+      } else if (data.usage) {
+        console.log("usage", data.usage);
+      }
+      return false;
+    }
+
+    // Main loop to process SSE stream
     while (!done) {
       const { value, done: readerDone } = await reader.read();
       done = readerDone;
-      if (done) break;
-
-      const chunk = decoder.decode(value);
-      const lines = chunk.split('\n');
-
+      if (value) {
+        buffer += decoder.decode(value, { stream: true });
+      }
+      const lines = buffer.split('\n');
+      // Keep the last partial line in the buffer
+      buffer = lines.pop() || '';
       for (const line of lines) {
         if (line.startsWith('data:')) {
-          const data = JSON.parse(line.slice(5));
-          if (data.error) {
-            throw new Error(data.error);
-          }
-          if (data.text === '[DONE]') {
-            // Ensure the final update is reflected
-            if (onUpdate) {
-              await new Promise(resolve => {
-                onUpdate(result);
-                setTimeout(resolve, 0);
-              });
-            }
+          if (await processDataLine(line)) {
             return result;
-          }
-          if (data.type === 'tool_call_start' && onUpdate) {
-            onUpdate(result, { type: data.tool, status: 'start' }, true);
-          } else if (data.type === 'tool_execution' && onUpdate) {
-            const toolCall: ToolCall = {
-              type: data.tool,
-              status: 'start'
-            };
-            if (data.query) toolCall.query = data.query;
-            if (data.url) toolCall.url = data.url;
-            onUpdate(result, toolCall, true);
-          } else if (data.type === 'tool_call_end' && onUpdate) {
-            onUpdate(result, { type: data.tool, status: 'end' }, true);
-          } else if (data.stop_reason) {
-            stopReason = data.stop_reason;
-            console.log("stopReason", stopReason);
-          } else if (data.text) {
-            result += data.text;
-            if (onUpdate) {
-              onUpdate(result);
-            }
-          } else if (data.usage) {
-            console.log("usage", data.usage);
           }
         }
       }
     }
+
+    // Process any remaining buffered text after the stream ends
+    if (buffer.trim() !== '') {
+      const remainingLines = buffer.split('\n');
+      for (const line of remainingLines) {
+        if (line.startsWith('data:')) {
+          if (await processDataLine(line)) {
+            return result;
+          }
+        }
+      }
+    }
+
     return result;
   }
 
@@ -125,7 +158,7 @@ class LLMServiceImpl implements LLMService {
     messages: Message[], 
     system: string, 
     settings: APISettings, 
-    onUpdate: (text: string, toolCall?: ToolCall, isIndicator?: boolean) => void,
+    onUpdate: (text: string, toolCall?: ToolCall, isIndicator?: boolean, image?: string) => void,
     signal?: AbortSignal
   ): Promise<string> {
     try {
@@ -163,7 +196,8 @@ class LLMServiceImpl implements LLMService {
           websearch: settings.websearch,
           reasoningEffort: settings.reasoningEffort,
           isReasoningSupported: settings.isReasoningSupported,
-          multimodal: settings.multimodal
+          multimodal: settings.multimodal,
+          imageGeneration: settings.imageGeneration
         }),
         signal
       });

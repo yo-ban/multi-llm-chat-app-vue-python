@@ -5,6 +5,7 @@
       <div class="model-name">
         Model: {{ displayedModel.name }} ({{ displayedModel.id }})
         <span v-if="displayedModel.supportsReasoning" class="model-feature">• Reasoning</span>
+        <span v-if="displayedModel.imageGeneration" class="model-feature">• Image Generation</span>
         <span v-if="localSettings.websearch" class="model-feature">• Web Search</span>
       </div>
     </div>
@@ -327,6 +328,7 @@ const localSettings = ref<APISettings>({
   reasoningEffort: props.settings.reasoningEffort,
   websearch: props.settings.websearch,
   multimodal: props.settings.multimodal,
+  imageGeneration: props.settings.imageGeneration
 });
 
 const availableModels = computed(() => {
@@ -418,7 +420,7 @@ watch(
 watch(
   () => props.settings,
   (newSettings) => {
-    if (newSettings) {
+    if (newSettings) {  
       console.log('Settings updated from props:', newSettings);
       localSettings.value = {
         vendor: newSettings.vendor,
@@ -428,6 +430,7 @@ watch(
         reasoningEffort: newSettings.reasoningEffort,
         websearch: newSettings.websearch,
         multimodal: newSettings.multimodal,
+        imageGeneration: newSettings.imageGeneration
       };
       displayedModel.value = selectedModel.value;
     }
@@ -455,13 +458,15 @@ watch(
         supportsReasoning: model.supportsReasoning,
         supportFunctionCalling: model.supportFunctionCalling,
         unsupportsTemperature: model.unsupportsTemperature,
-        multimodal: model.multimodal
+        multimodal: model.multimodal,
+        imageGeneration: model.imageGeneration
       });
       
       localSettings.value.maxTokens = Math.min(localSettings.value.maxTokens || 4096, model.maxTokens);
       localSettings.value.isReasoningSupported = model.supportsReasoning || false;
       localSettings.value.multimodal = model.multimodal || false;
-      
+      localSettings.value.imageGeneration = model.imageGeneration || false;
+
       // Set reasoning effort based on model support and global default
       if (model.supportsReasoning && !localSettings.value.reasoningEffort) {
         localSettings.value.reasoningEffort = settingsStore.defaultReasoningEffort || 'medium';
@@ -558,6 +563,7 @@ function closeModelSettingsDialog() {
     reasoningEffort: props.settings.reasoningEffort,
     websearch: props.settings.websearch,
     multimodal: props.settings.multimodal,
+    imageGeneration: props.settings.imageGeneration
   };
   displayedModel.value = selectedModel.value;
 }

@@ -9,6 +9,7 @@ export interface APISettings {
   isReasoningSupported?: boolean;
   websearch?: boolean;
   multimodal?: boolean;
+  imageGeneration?: boolean;
 }
 
 export interface APIResponse<T> {

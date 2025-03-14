@@ -10,6 +10,7 @@ export interface Model {
     defaultReasoningEffort?: ReasoningEffort;  // Default reasoning effort level
     unsupportsTemperature?: boolean;  // Whether the model does not support temperature parameter
     supportFunctionCalling?: boolean;  // Whether the model supports function calling (e.g. for web search)
+    imageGeneration?: boolean;  // Whether the model supports image generation
 }
 
 export interface ModelVendor {

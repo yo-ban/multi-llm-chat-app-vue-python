@@ -23,6 +23,7 @@ class ChatRequest(BaseModel):
     isReasoningSupported: bool = False
     websearch: bool = False  # Enable web search functionality using function calling
     multimodal: bool = False  # Whether the model supports multimodal inputs (e.g. images)
+    imageGeneration: bool = False  # Whether the model supports image generation
 
 class ErrorResponse(BaseModel):
     """

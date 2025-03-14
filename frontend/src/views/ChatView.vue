@@ -241,14 +241,14 @@ function truncateText(text: string | undefined, maxLength: number): string {
 }
 
 // ツール呼び出しの状態を監視・更新
-const onUpdate = async (text: string, toolCall?: ToolCall, isIndicator?: boolean) => {
+const onUpdate = async (text: string, toolCall?: ToolCall, isIndicator?: boolean, image?: string) => {
   if (!isIndicator && !chatStore.messages.some(message => 
     isAssistantMessage(message) && message.streaming
   )) {
     await chatStore.addMessage('assistant', '', undefined, true);
   }
   if (!isIndicator) {
-    chatStore.updateStreamedMessage(text);
+    chatStore.updateStreamedMessage(text, image);
     hasStartedStreaming.value = true;
   }
   if (toolCall) {

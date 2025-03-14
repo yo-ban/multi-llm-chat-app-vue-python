@@ -199,7 +199,8 @@ class ChatHandler:
         system: str,
         websearch: bool = True,
         reasoning_effort: Optional[str] = None,
-        is_reasoning_supported: bool = False
+        is_reasoning_supported: bool = False,
+        image_generation: bool = False
     ) -> Any:
         """Handle Gemini API requests using the new client"""
         client = genai.Client(api_key=self.api_key)
@@ -207,23 +208,23 @@ class ChatHandler:
         safety_settings = [
             SafetySetting(
                 category=HarmCategory.HARM_CATEGORY_HARASSMENT,
-                threshold=HarmBlockThreshold.BLOCK_NONE
+                threshold=HarmBlockThreshold.OFF,
             ),
             SafetySetting(
                 category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                threshold=HarmBlockThreshold.BLOCK_NONE
+                threshold=HarmBlockThreshold.OFF
             ),
             SafetySetting(
                 category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                threshold=HarmBlockThreshold.BLOCK_NONE
+                threshold=HarmBlockThreshold.OFF
             ),
             SafetySetting(
                 category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                threshold=HarmBlockThreshold.BLOCK_NONE
+                threshold=HarmBlockThreshold.OFF
             ),
             SafetySetting(
                 category=HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
-                threshold=HarmBlockThreshold.BLOCK_NONE
+                threshold=HarmBlockThreshold.OFF
             )
         ]
 
@@ -237,6 +238,14 @@ class ChatHandler:
             "max_output_tokens": max_tokens,
             "response_mime_type": "text/plain"
         }
+
+        if image_generation:
+            completion_args["response_modalities"] = [
+                "IMAGE",
+                "TEXT"
+            ]
+            # remove system instruction
+            completion_args.pop("system_instruction")
 
         if websearch:
             tool_config = ToolConfig(
@@ -410,7 +419,8 @@ class ChatHandler:
                     temperature=chat_request.temperature,
                     stream=chat_request.stream,
                     system=chat_request.system,
-                    websearch=chat_request.websearch
+                    websearch=chat_request.websearch,
+                    image_generation=chat_request.imageGeneration
                 )
             elif "/" in chat_request.model:  # OpenRouter models
                 return await self.handle_openrouter(
