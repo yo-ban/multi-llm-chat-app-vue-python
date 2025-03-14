@@ -130,12 +130,39 @@ const vTripleClick = {
   },
 };
 
-const md: MarkdownIt = new MarkdownIt({
+// コードブロックを安全に処理するための特殊なDOMPurify設定
+const purifyConfig = {
+  ALLOWED_TAGS: ['pre', 'code', 'div', 'span', 'button', 'p', 'a', 'ul', 'ol', 'li', 'strong', 'em', 'blockquote', 'img', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'br', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
+  ADD_ATTR: ['class', 'style', 'data-code', 'data-lang'],
+  KEEP_CONTENT: true
+};
+
+// カスタムプラグインで、コードブロックを特殊処理
+const safeCodePlugin = (md: MarkdownIt) => {
+  // 元のフェンスドコードブロックルールを保存
+  const defaultFence = md.renderer.rules.fence!;
+
+  // カスタムレンダラーでフェンスドコードブロックを処理
+  md.renderer.rules.fence = (tokens, idx, options, env, self) => {
+    const token = tokens[idx];
+    const content = token.content;
+    const lang = token.info || '';
+
+    // ハイライト適用
+    const codeHtml = highlightCode(content, lang);
+    
+    // 特殊なdata属性でマークして、後で適切に処理できるようにする
+    return `<div class="code-block-wrapper" data-code="${encodeURIComponent(content)}" data-lang="${lang}">${codeHtml}</div>`;
+  };
+};
+
+const md = new MarkdownIt({
   breaks: true,
-  highlight: function (str, lang) {
-    return highlightCode(str, lang);
-  },
+  html: false // HTMLタグをエスケープ
 });
+
+// カスタムプラグインを追加
+md.use(safeCodePlugin);
 
 const personaStore = usePersonaStore();
 const isEditing = ref(false);
@@ -160,7 +187,11 @@ const formattedText = computed(() => {
   } else {
     html = md.render(rawText);
   }
-  return DOMPurify.sanitize(html);
+  
+  // DOMPurifyでサニタイズ
+  html = DOMPurify.sanitize(html, purifyConfig);
+  
+  return html;
 });
 
 const personaIcon = computed(() => {
@@ -238,22 +269,6 @@ const confirmDeleteMessage = () => {
     },
   });
 };
-
-function handleCopyButtonClick(event: MouseEvent) {
-  const target = event.target as HTMLElement;
-  if (target.classList.contains('copy-button')) {
-    const codeElement = target.parentElement?.nextElementSibling;
-    if (codeElement) {
-      const code = codeElement.textContent || '';
-      navigator.clipboard.writeText(code).then(() => {
-        target.textContent = 'Copied!';
-        setTimeout(() => {
-          target.textContent = 'Copy';
-        }, 10000);
-      });
-    }
-  }
-}
 
 function deleteImage(index: number) {
   emit('delete-image', props.id, index);

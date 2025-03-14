@@ -35,17 +35,38 @@ hljs.registerLanguage('json', json);
 hljs.registerLanguage('yaml', yaml);
 hljs.registerLanguage('markdown', markdown);
 
+// HTMLエスケープ処理用のヘルパー関数
+function escapeHtml(unsafe: string): string {
+  return unsafe
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 // マークダウンでのコードブロックハイライト用ヘルパー関数
 export function highlightCode(str: string, lang: string): string {
-  if (lang && hljs.getLanguage(lang)) {
-    try {
-      const code = hljs.highlight(str, { language: lang }).value;
-      return `<pre class="hljs"><div class="code-header"><span class="language">${lang}</span><button class="copy-button">Copy</button></div><code>${code}</code></pre>`;
-    } catch (error) {
-      console.error('Error highlighting code:', error);
+  try {
+    // コードの内容をエスケープ
+    const escapedStr = escapeHtml(str);
+    
+    let code;
+    if (lang && hljs.getLanguage(lang)) {
+      // ハイライト処理を適用
+      code = hljs.highlight(str, { language: lang }).value;
+    } else {
+      // 言語不明の場合はそのまま（ただしエスケープする）
+      code = escapedStr;
     }
+    
+    // コードブロックを返す
+    return `<pre class="hljs"><div class="code-header"><span class="language">${lang || 'Code'}</span><button class="copy-button">Copy</button></div><code>${code}</code></pre>`;
+  } catch (error) {
+    console.error('Error highlighting code:', error);
+    // エラーが発生した場合はエスケープしたテキストを返す
+    return `<pre class="hljs"><div class="code-header"><span class="language">Code</span><button class="copy-button">Copy</button></div><code>${escapeHtml(str)}</code></pre>`;
   }
-  return `<pre class="hljs"><div class="code-header"><span class="language">Code</span><button class="copy-button">Copy</button></div><code>${str}</code></pre>`;
 }
 
 // ブラウザでのコードブロックハイライト用ディレクティブ
@@ -71,9 +92,22 @@ export function setupCopyButtonHandler() {
   const handleCopyButtonClick = (event: MouseEvent) => {
     const target = event.target as HTMLElement;
     if (target.classList.contains('copy-button')) {
-      const codeElement = target.parentElement?.nextElementSibling;
-      if (codeElement) {
-        const code = codeElement.textContent || '';
+      // まずコードブロックのラッパーを探す
+      const wrapper = target.closest('.code-block-wrapper');
+      let code = '';
+      
+      if (wrapper && wrapper.hasAttribute('data-code')) {
+        // data-code属性から元のコード（エンコードされたもの）を取得
+        code = decodeURIComponent(wrapper.getAttribute('data-code') || '');
+      } else {
+        // 従来の方法（後方互換性のため）
+        const codeElement = target.parentElement?.nextElementSibling;
+        if (codeElement) {
+          code = codeElement.textContent || '';
+        }
+      }
+      
+      if (code) {
         navigator.clipboard.writeText(code).then(() => {
           target.textContent = 'Copied!';
           setTimeout(() => {
