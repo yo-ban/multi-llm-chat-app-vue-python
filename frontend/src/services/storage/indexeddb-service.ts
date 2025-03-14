@@ -9,7 +9,7 @@ import { MODELS } from '@/constants/models';
 const CONVERSATION_LIST_KEY = 'conversationList';
 const CURRENT_CONVERSATION_ID_KEY = 'currentConversationId';
 const GLOBAL_SETTINGS_KEY = 'globalSettings';
-const USER_PERSONAS_KEY = 'userPersonas';
+const USER_PERSONAS_KEY = 'userDefinedPersonas';
 
 /**
  * ストレージサービスのインターフェース
