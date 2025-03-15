@@ -1,8 +1,7 @@
 <template>
-  <div v-if="!showPersonasManagement">
-    <div class="sidebar-menu" :style="{ maxHeight: sidebarHeight }">
-      <h3>Conversations</h3>
-
+  <div v-if="!showPersonasManagement" class="sidebar-container">
+    <h3>Conversations</h3>
+    <div class="conversation-sidebar">
       <div class="new-chat-container">
         <button class="new-chat-button" @click="createNewConversation">
           <font-awesome-icon icon="plus" />
@@ -236,9 +235,9 @@
       </div>
     </div>
   </div>
-  <div v-else>
+  <div v-else class="sidebar-container">
     <h3>My Assistant Roles</h3>
-    <div class="sidebar-menu" :style="{ maxHeight: sidebarHeight }">
+    <div class="persona-sidebar">
       <div class="new-persona-container">
         <button class="add-persona-button" @click="openAddPersonaDialog">
           <font-awesome-icon icon="plus" />
@@ -253,7 +252,7 @@
           </button>
         </VTooltip>
       </div>
-      <div class="persona-list">
+      <div class="persona-list-container">
         <div class="persona-grid">
           <div v-for="persona in userDefinedPersonas" :key="persona.id" class="persona-card" >
             <VTooltip placement="top" popper-class="tooltip-content">
@@ -316,24 +315,22 @@
       <PrimeInputText v-model="newFolderName" placeholder="Folder Name" class="w-full" autofocus />
     </div>
     <template #footer>
-      <PrimeButton label="Cancel" @click="closeCreateFolderDialog" class="p-button-text" />
-      <PrimeButton label="Create" @click="createFolder" :disabled="!newFolderName.trim()" />
-    </template>
-  </PrimeDialog>
-  <PrimeDialog v-model:visible="moveToFolderDialog" header="Move to Folder" :style="{ width: '300px' }">
-    <div class="folder-dialog-content">
-      <PrimeDropdown 
-        v-model="selectedFolderId" 
-        :options="folderOptions" 
-        optionLabel="name" 
-        optionValue="id" 
-        placeholder="Select Folder"
-        class="w-full"
-      />
-    </div>
-    <template #footer>
-      <PrimeButton label="Cancel" @click="closeMoveToFolderDialog" class="p-button-text" />
-      <PrimeButton label="Move" @click="moveConversationToFolder" />
+      <div class="dialog-footer">
+        <div class="dialog-buttons">
+          <PrimeButton 
+            label="Cancel" 
+            icon="pi pi-times"
+            @click="closeCreateFolderDialog" 
+            class="p-button-text" 
+          />
+          <PrimeButton 
+            label="Create" 
+            icon="pi pi-check"
+            @click="createFolder" 
+            :disabled="!newFolderName.trim()" 
+          />
+        </div>
+      </div>
     </template>
   </PrimeDialog>
 </template>
@@ -354,7 +351,6 @@ import PersonaDialog from '@/components/PersonaDialog.vue';
 import { useConfirm } from 'primevue/useconfirm';
 import PrimeDialog from 'primevue/dialog';
 import PrimeInputText from 'primevue/inputtext';
-import PrimeDropdown from 'primevue/dropdown';
 
 const confirm = useConfirm();
 const toast = useToast();
@@ -387,11 +383,6 @@ const folderNameInput = ref<any | null>(null);
 // フォルダダイアログ関連
 const createFolderDialog = ref(false);
 const newFolderName = ref('');
-const moveToFolderDialog = ref(false);
-const selectedFolderId = ref<string | null>(null);
-const currentMovingConversationId = ref('');
-
-const sidebarHeight = ref('100vh');
 
 // ドラッグアンドドロップ関連
 const draggedConversationId = ref('');
@@ -619,28 +610,6 @@ const getConversationsInFolder = (folderId: string) => {
   });
 };
 
-// 「フォルダに移動」ドロップダウン用のオプション
-const folderOptions = computed(() => {
-  return [
-    { name: 'Root (No folder)', id: null as string | null },
-    ...folders.value.map(folder => ({ name: folder.name, id: folder.id }))
-  ];
-});
-
-const updateSidebarHeight = () => {
-  sidebarHeight.value = `${window.innerHeight-75}px`;
-};
-
-onMounted(() => {
-  updateSidebarHeight();
-  window.addEventListener('resize', updateSidebarHeight);
-  personaStore.loadUserDefinedPersonas();
-});
-
-onUnmounted(() => {
-  window.removeEventListener('resize', updateSidebarHeight);
-});
-
 function openCreateFolderDialog() {
   newFolderName.value = '';
   createFolderDialog.value = true;
@@ -705,28 +674,6 @@ function confirmDeleteFolder(folderId: string) {
         });
       });
     }
-  });
-}
-
-function openMoveToFolderDialog(conversation: Conversation) {
-  currentMovingConversationId.value = conversation.conversationId;
-  selectedFolderId.value = conversation.folderId ?? null;
-  moveToFolderDialog.value = true;
-}
-
-function closeMoveToFolderDialog() {
-  moveToFolderDialog.value = false;
-  currentMovingConversationId.value = '';
-}
-
-async function moveConversationToFolder() {
-  await conversationStore.moveConversationToFolder(currentMovingConversationId.value, selectedFolderId.value);
-  closeMoveToFolderDialog();
-  toast.add({
-    severity: 'success',
-    summary: 'Conversation Moved',
-    detail: 'Conversation has been moved to the selected folder',
-    life: 3000
   });
 }
 
@@ -847,12 +794,56 @@ function duplicatePersona(persona: UserDefinedPersona) {
       });
     });
 }
+
+onMounted(() => {
+  personaStore.loadUserDefinedPersonas();
+});
+
+onUnmounted(() => {
+});
 </script>
 
 <style scoped>
-.sidebar-menu {
+.sidebar-container {
   display: flex;
   flex-direction: column;
+  height: 100%;
+  max-height: 100vh;
+  overflow: hidden;
+}
+
+.conversation-sidebar {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.conversation-list {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 5px;
+  padding-bottom: 15px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.conversation-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.conversation-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.conversation-list::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+}
+
+.conversation-list::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.3);
 }
 
 .new-chat-container {
@@ -926,12 +917,6 @@ function duplicatePersona(persona: UserDefinedPersona) {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
-.conversation-list {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-
 .conversation-item {
   display: flex;
   flex-direction: column;
@@ -1001,31 +986,6 @@ function duplicatePersona(persona: UserDefinedPersona) {
   flex-shrink: 0;
   object-fit: cover;
   border-radius: 30%;
-}
-
-.conversation-list {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
-}
-
-.conversation-list::-webkit-scrollbar {
-  width: 4px;
-}
-
-.conversation-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.conversation-list::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.2);
-  border-radius: 20px;
-}
-
-.conversation-list::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255, 255, 255, 0.3);
 }
 
 .conversation-actions {
@@ -1118,12 +1078,38 @@ function duplicatePersona(persona: UserDefinedPersona) {
   margin-right: 10px;
 }
 
-.persona-list {
+/* Fixed persona view styling */
+.persona-sidebar {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.persona-list-container {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
+  padding-right: 5px;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.persona-list-container::-webkit-scrollbar {
+  width: 4px;
+}
+
+.persona-list-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.persona-list-container::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+}
+
+.persona-list-container::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.3);
 }
 
 .persona-grid {
@@ -1187,7 +1173,7 @@ function duplicatePersona(persona: UserDefinedPersona) {
   justify-content: center;
 }
 
-.p-button-text {
+.persona-actions .p-button-text {
   background: none;
   border: none;
   color: white;
@@ -1195,7 +1181,7 @@ function duplicatePersona(persona: UserDefinedPersona) {
   transition: color 0.3s;
 }
 
-.p-button-text:hover {
+.persona-actions .p-button-text:hover {
   color: #c8d0e0;
 }
 
@@ -1408,5 +1394,23 @@ function duplicatePersona(persona: UserDefinedPersona) {
 
 .drag-helper svg {
   margin-right: 5px;
+}
+
+/* Dialog styling */
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+
+.dialog-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+:deep(.p-dialog-footer) {
+  padding: 1rem;
+  border-top: 1px solid var(--surface-border);
 }
 </style>

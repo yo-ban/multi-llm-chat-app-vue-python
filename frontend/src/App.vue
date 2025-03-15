@@ -1,6 +1,6 @@
 <template>
   <div id="app" :class="{ 'sidebar-hidden': isSidebarHidden }">
-    <div class="sidebar-wrapper" :class="{ 'resizing': isResizing }" :style="sidebarWidthStyle">
+    <div class="sidebar-wrapper" :class="{ 'resizing': isResizing, 'no-transition': isResponsiveTransition }" :style="sidebarWidthStyle">
       <div class="sidebar-left">
         <div class="sidebar-item" @click="toggleSidebar">
           <font-awesome-icon
@@ -100,10 +100,11 @@ storageService.initialize();
 const isSidebarHidden = ref(false);
 const isSidebarManuallyHidden = ref(false);
 const isSettingsDialogVisible = ref(false);
-const sidebarWidth = ref(350); // デフォルトのサイドバー幅
+const sidebarWidth = ref(400); // デフォルトのサイドバー幅
 const minSidebarWidth = ref(250); // 最小サイドバー幅
-const maxSidebarWidth = ref(600); // 最大サイドバー幅
+const maxSidebarWidth = ref(700); // 最大サイドバー幅
 const isResizing = ref(false);
+const isResponsiveTransition = ref(false); // レスポンシブ切り替え時のトランジションフラグ
 const startMouseX = ref(0);
 const startWidth = ref(0);
 let lastResizeTime = 0;
@@ -132,14 +133,20 @@ const togglePersonasManagement = (show: boolean) => {
 
 const updateSidebarVisibility = () => {
   if (!isSidebarManuallyHidden.value) {
+    isResponsiveTransition.value = true; // レスポンシブによる切り替えなのでフラグを設定
     isSidebarHidden.value = window.innerWidth <= 768;
+    
+    // 少し遅延して、フラグをリセット
+    setTimeout(() => {
+      isResponsiveTransition.value = false;
+    }, 100);
   }
 };
 
 const toggleSidebar = () => {
+  isResponsiveTransition.value = false; // 手動切り替えなのでフラグをリセット
   isSidebarHidden.value = !isSidebarHidden.value;
   isSidebarManuallyHidden.value = isSidebarHidden.value;
-  
 };
 
 const closeDrawerOnMobile = () => {
@@ -327,7 +334,8 @@ body {
 }
 
 /* リサイズ中はトランジションを無効にする */
-.sidebar-wrapper.resizing {
+.sidebar-wrapper.resizing,
+.sidebar-wrapper.no-transition {
   transition: none !important;
 }
 
