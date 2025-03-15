@@ -16,29 +16,175 @@
             <font-awesome-icon icon="upload" />
           </button>
         </VTooltip>
+        <VTooltip placement="top" popper-class="tooltip-content">
+          <template #popper>
+            Create Folder
+          </template>
+          <button class="create-folder-button" @click="openCreateFolderDialog" title="Create Folder">
+            <font-awesome-icon icon="folder-plus" />
+          </button>
+        </VTooltip>
       </div>
-      <div class="conversation-list">
+      
+      <div 
+        class="conversation-list"
+        @dragover.prevent="handleRootDragOver"
+        @drop.prevent="handleRootDrop"
+        :class="{ 'drop-target': isDraggingOver && dragOverTarget === 'root' }"
+      >
+        <div v-for="folder in folders" :key="folder.id" class="folder-container">
+          <div 
+            class="folder-header" 
+            @click="toggleFolder(folder.id)"
+            @dragover.prevent="handleFolderDragOver(folder.id, $event)"
+            @drop.prevent="handleFolderDrop(folder.id, $event)"
+            :class="{ 'drop-target': isDraggingOver && dragOverTarget === folder.id }"
+          >
+            <font-awesome-icon :icon="folder.isExpanded ? 'folder-open' : 'folder'" class="folder-icon" />
+            <div 
+              v-if="editingFolderId !== folder.id" 
+              class="folder-name"
+              @dblclick.stop="startEditFolderName(folder)"
+            >
+              {{ folder.name }}
+            </div>
+            <div v-else class="folder-name-edit">
+              <input
+                ref="folderNameInput"
+                v-model="editedFolderName"
+                @keyup.enter="saveFolderName(folder.id)"
+                @blur="saveFolderName(folder.id)"
+                @keyup.esc="cancelFolderEdit()"
+                class="folder-name-input"
+                @click.stop
+              />
+            </div>
+            <div class="folder-actions">
+              <VTooltip placement="bottom" popper-class="tooltip-content">
+                <template #popper>
+                  Rename
+                </template>
+                <button @click.stop="startEditFolderName(folder)" class="folder-action-button">
+                  <font-awesome-icon icon="edit" />
+                </button>
+              </VTooltip>
+              <VTooltip placement="bottom" popper-class="tooltip-content">
+                <template #popper>
+                  Delete
+                </template>
+                <button @click.stop="confirmDeleteFolder(folder.id)" class="folder-action-button">
+                  <font-awesome-icon icon="trash" />
+                </button>
+              </VTooltip>
+            </div>
+          </div>
+          
+          <div v-if="folder.isExpanded" class="folder-conversations">
+            <div
+              v-for="conversation in getConversationsInFolder(folder.id)"
+              :key="conversation.conversationId"
+              class="conversation-item folder-conversation-item"
+              :class="{ 
+                active: conversation.conversationId === currentConversationId,
+                'being-dragged': draggedConversationId === conversation.conversationId
+              }"
+              @click="selectConversation(conversation.conversationId)"
+              draggable="true"
+              @dragstart="handleDragStart(conversation, $event)"
+              @dragend="handleDragEnd"
+            >
+              <div class="conversation-title-container">
+                <img :src="getPersonaIcon(conversation.personaId)" alt="Persona Icon" class="persona-icon" />
+                <div
+                  v-if="editingConversationId !== conversation.conversationId"
+                  class="conversation-title"
+                  @dblclick="startEditConversationTitle(conversation)"
+                >
+                  <VTooltip placement="top" popper-class="tooltip-content">
+                    <template #popper>
+                      {{ conversation.title }} 
+                    </template>
+                    <span>{{ conversation.title }}</span>
+                  </VTooltip>
+                </div>
+                <div v-else class="conversation-title-edit">
+                  <input
+                    ref="conversationTitleInput"
+                    v-model="editedConversationTitle"
+                    @keyup.enter="saveConversationTitle(conversation.conversationId)"
+                    @blur="saveConversationTitle(conversation.conversationId)"
+                    @keyup.esc="cancelEdit(conversation.title)"
+                    class="conversation-title-input"
+                  />
+                </div>
+              </div>
+              <div class="conversation-actions" v-if="conversation.conversationId === currentConversationId">
+                <div class="action-buttons">
+                  <VTooltip placement="bottom" popper-class="tooltip-content">
+                    <template #popper>
+                      Rename
+                    </template>
+                    <button @click.stop="startEditConversationTitle(conversation)" class="action-button edit-button">
+                      <font-awesome-icon icon="edit" />
+                    </button>
+                  </VTooltip>
+                  <VTooltip placement="bottom" popper-class="tooltip-content">
+                    <template #popper>
+                      Duplicate
+                    </template>
+                    <button @click.stop="duplicateConversation(conversation)" class="action-button duplicate-button">
+                      <font-awesome-icon icon="copy" />
+                    </button>
+                  </VTooltip>
+                  <VTooltip placement="bottom" popper-class="tooltip-content">
+                    <template #popper>
+                      Generate Title
+                    </template>
+                    <button @click.stop="reGenerateChatTitle(conversation.conversationId)" class="action-button generate-button">
+                      <font-awesome-icon icon="refresh" />
+                    </button>
+                  </VTooltip>
+                </div>
+                <VTooltip placement="bottom" popper-class="tooltip-content">
+                  <template #popper>
+                    Delete
+                  </template>
+                  <button @click.stop="confirmDeleteConversation(conversation.conversationId)" class="action-button delete-button">
+                    <font-awesome-icon icon="trash" />
+                  </button>
+                </VTooltip>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div
-          v-for="conversation in sortedConversationList"
+          v-for="conversation in rootConversations"
           :key="conversation.conversationId"
           class="conversation-item"
-          :class="{ active: conversation.conversationId === currentConversationId }"
+          :class="{ 
+            active: conversation.conversationId === currentConversationId,
+            'being-dragged': draggedConversationId === conversation.conversationId
+          }"
           @click="selectConversation(conversation.conversationId)"
+          draggable="true"
+          @dragstart="handleDragStart(conversation, $event)"
+          @dragend="handleDragEnd"
         >
           <div class="conversation-title-container">
             <img :src="getPersonaIcon(conversation.personaId)" alt="Persona Icon" class="persona-icon" />
-          <div
-            v-if="editingConversationId !== conversation.conversationId"
-            class="conversation-title"
-            @dblclick="startEditConversationTitle(conversation)"
-          >
-            <VTooltip placement="top" popper-class="tooltip-content">
-              <template #popper>
-                {{ conversation.title }} 
-              </template>
-              <span>{{ conversation.title }}</span>
-            </VTooltip>
-          </div>
+            <div
+              v-if="editingConversationId !== conversation.conversationId"
+              class="conversation-title"
+              @dblclick="startEditConversationTitle(conversation)"
+            >
+              <VTooltip placement="top" popper-class="tooltip-content">
+                <template #popper>
+                  {{ conversation.title }} 
+                </template>
+                <span>{{ conversation.title }}</span>
+              </VTooltip>
+            </div>
             <div v-else class="conversation-title-edit">
               <input
                 ref="conversationTitleInput"
@@ -165,12 +311,37 @@
     @save="saveEditedPersona"
   />
   <PrimeConfirmDialog />
+  <PrimeDialog v-model:visible="createFolderDialog" header="Create Folder" :style="{ width: '300px' }">
+    <div class="folder-dialog-content">
+      <PrimeInputText v-model="newFolderName" placeholder="Folder Name" class="w-full" autofocus />
+    </div>
+    <template #footer>
+      <PrimeButton label="Cancel" @click="closeCreateFolderDialog" class="p-button-text" />
+      <PrimeButton label="Create" @click="createFolder" :disabled="!newFolderName.trim()" />
+    </template>
+  </PrimeDialog>
+  <PrimeDialog v-model:visible="moveToFolderDialog" header="Move to Folder" :style="{ width: '300px' }">
+    <div class="folder-dialog-content">
+      <PrimeDropdown 
+        v-model="selectedFolderId" 
+        :options="folderOptions" 
+        optionLabel="name" 
+        optionValue="id" 
+        placeholder="Select Folder"
+        class="w-full"
+      />
+    </div>
+    <template #footer>
+      <PrimeButton label="Cancel" @click="closeMoveToFolderDialog" class="p-button-text" />
+      <PrimeButton label="Move" @click="moveConversationToFolder" />
+    </template>
+  </PrimeDialog>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue';
 import { useConversationStore } from '@/store/conversation';
-import type { Conversation } from '@/types/conversation';
+import type { Conversation, ConversationFolder } from '@/types/conversation';
 import { useChatStore } from '@/store/chat';
 import { storeToRefs } from 'pinia';
 import { llmService } from '@/services/domain/llm-service';
@@ -181,11 +352,21 @@ import { v4 as uuidv4 } from 'uuid';
 import type { UserDefinedPersona } from '@/types/personas';
 import PersonaDialog from '@/components/PersonaDialog.vue';
 import { useConfirm } from 'primevue/useconfirm';
+import PrimeDialog from 'primevue/dialog';
+import PrimeInputText from 'primevue/inputtext';
+import PrimeDropdown from 'primevue/dropdown';
 
 const confirm = useConfirm();
-
+const toast = useToast();
+const chatStore = useChatStore();
+const conversationStore = useConversationStore();
 const personaStore = usePersonaStore();
+const isDropdownOpen = ref(false);
 
+const { conversationList, currentConversationId, folders } = storeToRefs(conversationStore);
+const { selectConversation, updateConversationTitle, deleteConversation } = conversationStore;
+
+// ペルソナ管理関連の変数
 const showPersonasManagement = computed(() => personaStore.showPersonasManagement);
 const userDefinedPersonas = computed(() => personaStore.userDefinedPersonas);
 
@@ -193,6 +374,188 @@ const addPersonaDialog = ref(false);
 const editPersonaDialog = ref(false);
 const selectedPersona = ref<UserDefinedPersona | undefined>(undefined);
 
+// 会話編集関連
+const editingConversationId = ref('');
+const editedConversationTitle = ref('');
+const conversationTitleInput = ref<any | null>(null);
+
+// フォルダ編集関連
+const editingFolderId = ref('');
+const editedFolderName = ref('');
+const folderNameInput = ref<any | null>(null);
+
+// フォルダダイアログ関連
+const createFolderDialog = ref(false);
+const newFolderName = ref('');
+const moveToFolderDialog = ref(false);
+const selectedFolderId = ref<string | null>(null);
+const currentMovingConversationId = ref('');
+
+const sidebarHeight = ref('100vh');
+
+// ドラッグアンドドロップ関連
+const draggedConversationId = ref('');
+const isDraggingOver = ref(false);
+const dragOverTarget = ref<string | 'root'>('root');
+let folderExpandTimeout: number | null = null;
+
+// ドラッグ開始処理
+function handleDragStart(conversation: Conversation, event: DragEvent) {
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', conversation.conversationId);
+    draggedConversationId.value = conversation.conversationId;
+    
+    // Set a timeout to add a class that will apply opacity transition
+    setTimeout(() => {
+      const element = event.target as HTMLElement;
+      if (element) {
+        element.classList.add('dragging');
+      }
+    }, 0);
+  }
+}
+
+// ドラッグ終了処理
+function handleDragEnd() {
+  draggedConversationId.value = '';
+  isDraggingOver.value = false;
+  dragOverTarget.value = 'root';
+  
+  // Clear any pending folder expand timeout
+  if (folderExpandTimeout !== null) {
+    clearTimeout(folderExpandTimeout);
+    folderExpandTimeout = null;
+  }
+  
+  // Remove dragging class from all elements
+  document.querySelectorAll('.dragging').forEach(el => {
+    el.classList.remove('dragging');
+  });
+}
+
+// フォルダへのドラッグオーバー処理
+function handleFolderDragOver(folderId: string, event: DragEvent) {
+  // Stop propagation to prevent the root dragover handler from also being triggered
+  event.stopPropagation();
+  
+  if (draggedConversationId.value) {
+    isDraggingOver.value = true;
+    dragOverTarget.value = folderId;
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
+    
+    // Find the folder
+    const folder = folders.value.find(f => f.id === folderId);
+    
+    // If the folder is not expanded, set a timeout to expand it after hovering
+    if (folder && !folder.isExpanded) {
+      // Clear any existing timeout for other folders
+      if (folderExpandTimeout !== null) {
+        clearTimeout(folderExpandTimeout);
+      }
+      
+      // Set a new timeout to expand this folder after 800ms of hovering
+      folderExpandTimeout = window.setTimeout(() => {
+        conversationStore.toggleFolderExpanded(folderId);
+        folderExpandTimeout = null;
+      }, 800);
+    }
+  }
+}
+
+// ルートへのドラッグオーバー処理
+function handleRootDragOver(event: DragEvent) {
+  // Clear any pending folder expand timeout when dragging over root
+  if (folderExpandTimeout !== null) {
+    clearTimeout(folderExpandTimeout);
+    folderExpandTimeout = null;
+  }
+  
+  if (draggedConversationId.value) {
+    isDraggingOver.value = true;
+    dragOverTarget.value = 'root';
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
+  }
+}
+
+// フォルダへのドロップ処理
+async function handleFolderDrop(folderId: string, event: DragEvent) {
+  // Stop propagation to prevent the root drop handler from also being triggered
+  event.stopPropagation();
+  
+  // Clear any pending folder expand timeout
+  if (folderExpandTimeout !== null) {
+    clearTimeout(folderExpandTimeout);
+    folderExpandTimeout = null;
+  }
+  
+  if (event.dataTransfer) {
+    const conversationId = event.dataTransfer.getData('text/plain');
+    if (conversationId) {
+      try {
+        // Find conversation to check if it's already in this folder
+        const conversation = conversationList.value.find(c => c.conversationId === conversationId);
+        if (conversation && conversation.folderId !== folderId) {
+          await conversationStore.moveConversationToFolder(conversationId, folderId);
+          toast.add({
+            severity: 'success',
+            summary: 'Conversation Moved',
+            detail: 'Conversation has been moved to the folder',
+            life: 3000
+          });
+        }
+      } catch (error) {
+        console.error('Error moving conversation:', error);
+        toast.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to move conversation',
+          life: 3000
+        });
+      }
+    }
+  }
+  isDraggingOver.value = false;
+  dragOverTarget.value = 'root';
+}
+
+// ルートへのドロップ処理
+async function handleRootDrop(event: DragEvent) {
+  if (event.dataTransfer) {
+    const conversationId = event.dataTransfer.getData('text/plain');
+    if (conversationId) {
+      try {
+        // Find conversation to check if it's already in root
+        const conversation = conversationList.value.find(c => c.conversationId === conversationId);
+        if (conversation && conversation.folderId !== null) {
+          await conversationStore.moveConversationToFolder(conversationId, null);
+          toast.add({
+            severity: 'success',
+            summary: 'Conversation Moved',
+            detail: 'Conversation has been moved to root',
+            life: 3000
+          });
+        }
+      } catch (error) {
+        console.error('Error moving conversation:', error);
+        toast.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to move conversation',
+          life: 3000
+        });
+      }
+    }
+  }
+  isDraggingOver.value = false;
+  dragOverTarget.value = 'root';
+}
+
+// ペルソナ関連の関数
 const openAddPersonaDialog = () => {
   addPersonaDialog.value = true;
 };
@@ -240,35 +603,33 @@ const confirmDeletePersona = (personaId: string) => {
   });
 };
 
-const toast = useToast();
-const chatStore = useChatStore();
-const conversationStore = useConversationStore();
-const isDropdownOpen = ref(false);
+// ルートの会話（フォルダに属さない会話）を取得
+const rootConversations = computed(() => {
+  const rootConvs = conversationStore.getRootConversations;
+  return [...rootConvs].sort((a, b) => {
+    return new Date(b.updatedAt ?? '').getTime() - new Date(a.updatedAt ?? '').getTime();
+  });
+});
 
-const { conversationList, currentConversationId } = storeToRefs(conversationStore);
-const { selectConversation, updateConversationTitle, deleteConversation } = conversationStore;
+// フォルダ内の会話を取得する関数
+const getConversationsInFolder = (folderId: string) => {
+  const folderConvs = conversationStore.getConversationsInFolder(folderId);
+  return [...folderConvs].sort((a, b) => {
+    return new Date(b.updatedAt ?? '').getTime() - new Date(a.updatedAt ?? '').getTime();
+  });
+};
 
-const editingConversationId = ref('');
-const editedConversationTitle = ref('');
-
-const conversationTitleInput = ref<any | null>(null);
-
-const sidebarHeight = ref('100vh');
+// 「フォルダに移動」ドロップダウン用のオプション
+const folderOptions = computed(() => {
+  return [
+    { name: 'Root (No folder)', id: null as string | null },
+    ...folders.value.map(folder => ({ name: folder.name, id: folder.id }))
+  ];
+});
 
 const updateSidebarHeight = () => {
   sidebarHeight.value = `${window.innerHeight-75}px`;
 };
-
-const sortedConversationList = computed(() => {
-  return [...conversationList.value].map(conversation => {
-    if (!conversation.updatedAt) {
-      conversation.updatedAt = conversation.createdAt;
-    }
-    return conversation;
-  }).sort((a, b) => {
-    return new Date(b.updatedAt ?? '').getTime() - new Date(a.updatedAt ?? '').getTime();
-  });
-});
 
 onMounted(() => {
   updateSidebarHeight();
@@ -279,6 +640,95 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('resize', updateSidebarHeight);
 });
+
+function openCreateFolderDialog() {
+  newFolderName.value = '';
+  createFolderDialog.value = true;
+}
+
+function closeCreateFolderDialog() {
+  createFolderDialog.value = false;
+}
+
+async function createFolder() {
+  if (newFolderName.value.trim()) {
+    await conversationStore.createFolder(newFolderName.value.trim());
+    closeCreateFolderDialog();
+    toast.add({
+      severity: 'success',
+      summary: 'Folder Created',
+      detail: 'New folder has been created',
+      life: 3000
+    });
+  }
+}
+
+function toggleFolder(folderId: string) {
+  conversationStore.toggleFolderExpanded(folderId);
+}
+
+function startEditFolderName(folder: ConversationFolder) {
+  editingFolderId.value = folder.id;
+  editedFolderName.value = folder.name;
+  nextTick(() => {
+    if (folderNameInput.value) {
+      const input = folderNameInput.value[0];
+      input.focus();
+      input.setSelectionRange(0, input.value.length);
+    }
+  });
+}
+
+function cancelFolderEdit() {
+  editingFolderId.value = '';
+}
+
+async function saveFolderName(folderId: string) {
+  if (editedFolderName.value.trim()) {
+    await conversationStore.updateFolderName(folderId, editedFolderName.value.trim());
+  }
+  editingFolderId.value = '';
+}
+
+function confirmDeleteFolder(folderId: string) {
+  confirm.require({
+    message: 'Are you sure you want to delete this folder? Conversations will be moved to root.',
+    header: 'Delete Folder',
+    icon: 'pi pi-exclamation-triangle',
+    accept: () => {
+      conversationStore.deleteFolder(folderId).then(() => {
+        toast.add({
+          severity: 'success',
+          summary: 'Folder Deleted',
+          detail: 'Folder and its contents have been deleted',
+          life: 3000
+        });
+      });
+    }
+  });
+}
+
+function openMoveToFolderDialog(conversation: Conversation) {
+  currentMovingConversationId.value = conversation.conversationId;
+  selectedFolderId.value = conversation.folderId ?? null;
+  moveToFolderDialog.value = true;
+}
+
+function closeMoveToFolderDialog() {
+  moveToFolderDialog.value = false;
+  currentMovingConversationId.value = '';
+}
+
+async function moveConversationToFolder() {
+  await conversationStore.moveConversationToFolder(currentMovingConversationId.value, selectedFolderId.value);
+  closeMoveToFolderDialog();
+  toast.add({
+    severity: 'success',
+    summary: 'Conversation Moved',
+    detail: 'Conversation has been moved to the selected folder',
+    life: 3000
+  });
+}
 
 function createNewConversation() {
   conversationStore.createNewConversation();
@@ -778,4 +1228,185 @@ function duplicatePersona(persona: UserDefinedPersona) {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
+.create-folder-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  background-color: #4a5f7d;
+  color: white;
+  border: 1px solid #253546;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  transition: background-color 0.3s, box-shadow 0.3s;
+  border-radius: 5px;
+  font-size: medium;
+  font-weight: 600;
+  font-family: inherit;
+  width: 35px;
+  height: 40px;
+}
+
+.create-folder-button:hover {
+  background-color: #5a7190;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+}
+
+.create-folder-button:active {
+  background-color: #3d5166;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.folder-container {
+  margin-bottom: 10px;
+}
+
+.folder-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.folder-header:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.folder-icon {
+  margin-right: 8px;
+  color: #e6e6e6;
+}
+
+.folder-name {
+  flex: 1;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-name-edit {
+  flex: 1;
+}
+
+.folder-name-input {
+  width: 100%;
+  padding: 3px;
+  border: none;
+  background: #324457;
+  color: inherit;
+  outline: none;
+  box-sizing: border-box;
+  font-size: inherit;
+  font-family: inherit;
+  font-weight: 500;
+  border-radius: 5%;
+}
+
+.folder-actions {
+  display: flex;
+  visibility: hidden;
+}
+
+.folder-header:hover .folder-actions {
+  visibility: visible;
+}
+
+.folder-action-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #fff;
+  padding: 5px;
+  border-radius: 5px;
+  transition: background-color 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-left: 5px;
+}
+
+.folder-action-button:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.folder-conversations {
+  margin-left: 15px;
+  padding-left: 10px;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.folder-conversation-item {
+  margin-top: 5px;
+}
+
+.folder-dialog-content {
+  margin: 20px 0;
+}
+
+.move-button {
+  color: #a8c5ff;
+}
+
+/* Drag and Drop styles */
+.being-dragged {
+  opacity: 0.5;
+}
+
+.dragging {
+  opacity: 0.5;
+}
+
+.drop-target {
+  background-color: rgba(74, 144, 226, 0.2);
+  border: 2px dashed #4a90e2;
+  border-radius: 5px;
+  transition: all 0.2s ease;
+}
+
+.folder-header.drop-target {
+  padding: 8px 10px;
+  background-color: rgba(74, 144, 226, 0.25);
+  border: 2px dashed #4a90e2;
+  border-radius: 5px;
+  transition: all 0.2s ease;
+  box-shadow: 0 0 5px rgba(74, 144, 226, 0.3);
+}
+
+.conversation-list.drop-target {
+  padding: 4px;
+  background-color: rgba(74, 144, 226, 0.05);
+  border: 1px dashed rgba(74, 144, 226, 0.4);
+  border-radius: 5px;
+  transition: all 0.2s ease;
+}
+
+.conversation-item {
+  cursor: grab;
+}
+
+.conversation-item:active {
+  cursor: grabbing;
+}
+
+.drag-helper {
+  font-size: 12px;
+  color: #a8c5ff;
+  margin-bottom: 8px;
+  padding: 4px 8px;
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.drag-helper svg {
+  margin-right: 5px;
+}
 </style>

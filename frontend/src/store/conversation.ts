@@ -6,27 +6,57 @@ import { storageService } from '@/services/storage/indexeddb-service';
 import { conversationService } from '@/services/domain/conversation-service';
 import type { Message } from '@/types/messages';
 import { useSettingsStore } from '@/store/settings';
-import type { Conversation, ConversationState } from '@/types/conversation';
+import type { Conversation, ConversationState, ConversationFolder } from '@/types/conversation';
 
 const CONVERSATION_LIST_KEY = 'conversationList';
+const CONVERSATION_FOLDERS_KEY = 'conversationFolders';
 
 export const useConversationStore = defineStore('conversation', {
   state: (): ConversationState => ({
     currentConversationId: null,
     conversationList: [],
+    folders: [],
   }),
   actions: {
     async initializeConversationStore() {
-      this.conversationList = await storageService.getConversationList();
+      // 会話リストの取得と初期化
+      const savedConversations = await storageService.getConversationList();
+      this.conversationList = savedConversations || [];
+      
+      // 現在の会話IDの取得と初期化
       this.currentConversationId = await storageService.getCurrentConversationId();
+      
+      // フォルダデータの読み込み
+      try {
+        const savedFolders = await localforage.getItem<ConversationFolder[]>(CONVERSATION_FOLDERS_KEY);
+        // nullチェックと型変換を確実に行う
+        this.folders = Array.isArray(savedFolders) ? savedFolders : [];
+      } catch (error) {
+        console.error('Error loading folders:', error);
+        this.folders = [];
+      }
     },
 
     async updateConversationList() {
-      const clonedConversationList = this.conversationList.map(conversation => ({
-        ...conversation,
-        settings: { ...conversation.settings },
-      }));
-      await localforage.setItem(CONVERSATION_LIST_KEY, clonedConversationList);
+      // 会話リストをシリアライズ可能な形に整形
+      const serializableConversations = this.conversationList.map(conversation => {
+        // 必要なプロパティのみを抽出したプレーンオブジェクトを作成
+        return {
+          conversationId: conversation.conversationId,
+          title: conversation.title,
+          createdAt: conversation.createdAt,
+          updatedAt: conversation.updatedAt,
+          system: conversation.system,
+          personaId: conversation.personaId,
+          settings: { ...conversation.settings },
+          historyLength: conversation.historyLength,
+          folderId: conversation.folderId,
+          files: conversation.files ? { ...conversation.files } : undefined
+        };
+      });
+      
+      // シリアライズ可能な形にしたデータを保存
+      await localforage.setItem(CONVERSATION_LIST_KEY, serializableConversations);
     },
 
     async createNewConversation() {
@@ -236,5 +266,80 @@ export const useConversationStore = defineStore('conversation', {
         throw error;
       }
     },
+
+    // フォルダ関連のアクション
+    async createFolder(name: string) {
+      const folderId = `folder-${uuidv4()}`;
+      const newFolder: ConversationFolder = {
+        id: folderId,
+        name,
+        isExpanded: true
+      };
+      
+      // フォルダを先頭に追加
+      this.folders.unshift(newFolder);
+      await this.saveFolders();
+      return folderId;
+    },
+    
+    async updateFolderName(folderId: string, newName: string) {
+      const folderIndex = this.folders.findIndex(f => f.id === folderId);
+      if (folderIndex !== -1) {
+        this.folders[folderIndex].name = newName;
+        await this.saveFolders();
+      }
+    },
+    
+    async deleteFolder(folderId: string) {
+      // フォルダに属する会話をルートに戻す
+      this.conversationList.forEach(conversation => {
+        if (conversation.folderId === folderId) {
+          conversation.folderId = null;
+        }
+      });
+      
+      this.folders = this.folders.filter(f => f.id !== folderId);
+      await this.saveFolders();
+      await this.updateConversationList();
+    },
+    
+    async toggleFolderExpanded(folderId: string) {
+      const folderIndex = this.folders.findIndex(f => f.id === folderId);
+      if (folderIndex !== -1) {
+        this.folders[folderIndex].isExpanded = !this.folders[folderIndex].isExpanded;
+        await this.saveFolders();
+      }
+    },
+    
+    async moveConversationToFolder(conversationId: string, folderId: string | null) {
+      const conversationIndex = this.conversationList.findIndex(c => c.conversationId === conversationId);
+      if (conversationIndex !== -1) {
+        this.conversationList[conversationIndex].folderId = folderId;
+        await this.updateConversationList();
+      }
+    },
+    
+    async saveFolders() {
+      // フォルダデータをシリアライズ可能な形に整形
+      const serializableFolders = this.folders.map(folder => ({
+        id: folder.id,
+        name: folder.name,
+        isExpanded: folder.isExpanded
+      }));
+      
+      // シリアライズ可能な形にしたデータを保存
+      await localforage.setItem(CONVERSATION_FOLDERS_KEY, serializableFolders);
+    },
   },
+  getters: {
+    // フォルダ内の会話を取得するゲッター
+    getConversationsInFolder: (state) => (folderId: string | null) => {
+      return state.conversationList.filter(conversation => conversation.folderId === folderId);
+    },
+    
+    // ルート（フォルダに属さない）会話を取得するゲッター
+    getRootConversations: (state) => {
+      return state.conversationList.filter(conversation => !conversation.folderId);
+    }
+  }
 });
