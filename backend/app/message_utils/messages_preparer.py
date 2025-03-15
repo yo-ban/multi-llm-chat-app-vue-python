@@ -71,10 +71,17 @@ async def prepare_anthropic_messages(messages: List[Dict[str, Any]]) -> List[Dic
     Returns:
         List of messages formatted for Anthropic API
     """
-    return [
-        {
+    anthropic_messages = []
+
+    last_message = messages[-1]
+    for content in last_message["content"]:
+        if content["type"] == "text":
+            content["cache_control"] = {"type": "ephemeral"}
+
+    for msg in messages:
+        anthropic_messages.append({
             "role": msg["role"],
             "content": msg["content"]
-        }
-        for msg in messages
-    ] 
+        })
+
+    return anthropic_messages

@@ -4,7 +4,7 @@ from typing import AsyncGenerator, Any, Dict, List
 from openai import AsyncOpenAI
 from app.function_calling.tool_handlers import openai_handle_tool_call, gemini_handle_tool_call
 from app.function_calling.tool_definitions import get_tool_definitions, get_gemini_tool_definitions
-from app.message_utils.usage_parser import parse_usage, parse_usage_gemini
+from app.message_utils.usage_parser import parse_usage, parse_usage_gemini, parse_usage_anthropic
 from app.logger.logging_utils import get_logger, log_error, log_info, log_warning, log_debug
 from google.genai.client import Client
 from google.genai.types import (
@@ -437,6 +437,7 @@ async def anthropic_stream_generator(response) -> AsyncGenerator[str, None]:
     Generate streaming response for Anthropic API
     """
     try:
+        usage = {}
         async for event in response:
             if event.type == "content_block_start":
                 if event.content_block.type == "thinking":
@@ -450,7 +451,18 @@ async def anthropic_stream_generator(response) -> AsyncGenerator[str, None]:
                     yield f"data: {json.dumps({'text': event.delta.text})}\n\n"
             elif event.type == "content_block_stop":
                 pass
+            elif event.type == "message_start":
+                message = event.message
+                if hasattr(message, 'usage'):
+                    usage_start = await parse_usage_anthropic(message.usage)
+                    log_info("Token usage in Anthropic in message_start", usage_start)
+                    usage.update(usage_start)
             elif event.type == "message_delta":
+                if hasattr(event, 'usage'):
+                    usage_delta = await parse_usage_anthropic(event.usage)
+                    log_info("Token usage in Anthropic in message_delta", usage_delta)
+                    usage.update(usage_delta)
+                    yield f"data: {json.dumps(usage)}\n\n"
                 yield f"data: {json.dumps({'stop_reason': event.delta.stop_reason})}\n\n"
             elif event.type == "message_stop":
                 yield f"data: {json.dumps({'text': '[DONE]'})}\n\n"

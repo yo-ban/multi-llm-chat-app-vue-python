@@ -28,6 +28,26 @@ async def parse_usage(usage: Any) -> Dict[str, Any]:
 
     return usage_info 
 
+async def parse_usage_anthropic(usage: Any) -> Dict[str, Any]:
+    """
+    Parse usage information from Anthropic's response.
+    """
+    completion_usage = getattr(usage, 'output_tokens', 0)
+    prompt_usage = getattr(usage, 'input_tokens', 0)
+
+    cache_creation_usage = getattr(usage, 'cache_creation_input_tokens', 0)
+    cache_read_usage = getattr(usage, 'cache_read_input_tokens', 0)
+
+    usage_info = {
+        "usage": {
+            "completion_usage": completion_usage,
+            "prompt_usage": prompt_usage,
+            "cache_creation_usage": cache_creation_usage,
+            "cache_read_usage": cache_read_usage
+        }
+    }
+    return usage_info
+
 async def parse_usage_gemini(usage: Any) -> Dict[str, Any]:
     """
     Parse usage information from Gemini's response.

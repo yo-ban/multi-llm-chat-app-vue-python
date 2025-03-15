@@ -138,7 +138,6 @@ class ChatHandler:
                 {
                     "type": "text",
                     "text": system,
-                    "cache_control": {"type": "ephemeral"}
                 }
             ],
             "model": model,
