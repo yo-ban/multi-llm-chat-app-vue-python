@@ -8,7 +8,7 @@
     </div>
     <div class="message-body">
       <div class="message-content" :class="{ 'editing': isEditing }">
-        <div v-if="images && images.length > 0" class="message-images" v-memo="[images]">
+        <div v-if="images && images.length > 0" class="message-images">
           <div v-for="(image, index) in images" :key="index" class="message-image-wrapper">
             <PrimeImage :src="image" alt="Message Image" class="message-image" preview>
               <template #indicatoricon>
