@@ -1,6 +1,6 @@
 <template>
   <div id="app" :class="{ 'sidebar-hidden': isSidebarHidden }">
-    <div class="sidebar-wrapper">
+    <div class="sidebar-wrapper" :class="{ 'resizing': isResizing }" :style="sidebarWidthStyle">
       <div class="sidebar-left">
         <div class="sidebar-item" @click="toggleSidebar">
           <font-awesome-icon
@@ -33,9 +33,14 @@
           </div>
         </VTooltip>
       </div>
-      <transition name="sidebar">
+      <transition name="sidebar-fade" mode="out-in">
         <div class="sidebar-right" v-if="!isSidebarHidden">
           <SidebarMenu />
+          <div 
+            class="resize-handle" 
+            @mousedown="startResize" 
+            title="ドラッグしてサイドバーの幅を調整"
+          ></div>
         </div>
       </transition>
     </div>
@@ -95,6 +100,14 @@ storageService.initialize();
 const isSidebarHidden = ref(false);
 const isSidebarManuallyHidden = ref(false);
 const isSettingsDialogVisible = ref(false);
+const sidebarWidth = ref(350); // デフォルトのサイドバー幅
+const minSidebarWidth = ref(250); // 最小サイドバー幅
+const maxSidebarWidth = ref(600); // 最大サイドバー幅
+const isResizing = ref(false);
+const startMouseX = ref(0);
+const startWidth = ref(0);
+let lastResizeTime = 0;
+const resizeThrottle = 16; // 約60FPS相当
 
 // const showApiKey = ref(Object.keys(MODELS).reduce((acc, vendor) => {
 //   acc[vendor] = false;
@@ -126,11 +139,13 @@ const updateSidebarVisibility = () => {
 const toggleSidebar = () => {
   isSidebarHidden.value = !isSidebarHidden.value;
   isSidebarManuallyHidden.value = isSidebarHidden.value;
+  
 };
 
 const closeDrawerOnMobile = () => {
   if (window.innerWidth <= 768 && !isSidebarHidden.value) {
     isSidebarHidden.value = true;
+    isSidebarManuallyHidden.value = true;
   }
 };
 
@@ -171,11 +186,66 @@ watch(
   }
 );
 
+const sidebarWidthStyle = computed(() => {
+  if (isSidebarHidden.value) {
+    return { width: '50px' };
+  }
+  return { width: `${sidebarWidth.value}px` };
+});
+
+/**
+ * リサイズ開始時の処理
+ */
+const startResize = (e: MouseEvent) => {
+  isResizing.value = true;
+  // リサイズ開始時のマウス位置とサイドバー幅を記録
+  startMouseX.value = e.clientX;
+  startWidth.value = sidebarWidth.value;
+  
+  document.addEventListener('mousemove', handleResize);
+  document.addEventListener('mouseup', stopResize);
+  document.body.style.cursor = 'ew-resize';
+  document.body.style.userSelect = 'none';
+  e.preventDefault();
+};
+
+/**
+ * リサイズ中の処理
+ */
+const handleResize = (e: MouseEvent) => {
+  if (!isResizing.value) return;
+  
+  // 前回の要求がまだ処理中の場合は、新しいフレームでのみ処理
+  const now = Date.now();
+  if (now - lastResizeTime < resizeThrottle) return;
+  lastResizeTime = now;
+  
+  // マウスの移動距離を計算し、即座にサイドバーの幅を更新
+  const deltaX = e.clientX - startMouseX.value;
+  const newWidth = startWidth.value + deltaX;
+  
+  // 最小値と最大値の範囲内に収める
+  sidebarWidth.value = Math.max(minSidebarWidth.value, Math.min(maxSidebarWidth.value, newWidth));
+};
+
+/**
+ * リサイズ終了時の処理
+ */
+const stopResize = () => {
+  isResizing.value = false;
+  document.removeEventListener('mousemove', handleResize);
+  document.removeEventListener('mouseup', stopResize);
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+  
+};
+
 onMounted(async () => {
   await conversationStore.initializeConversationStore();
   await settingsStore.loadSettings();
   updateSidebarVisibility();
   window.addEventListener('resize', updateSidebarVisibility);
+  
 });
 
 onBeforeUnmount(() => {
@@ -250,13 +320,15 @@ body {
 
 .sidebar-wrapper {
   display: flex;
-  width: 350px;
+  min-width: 50px;
   overflow: hidden;
-  transition: width 0.35s ease;
+  transition: width 0.2s ease-out;
+  will-change: width; /* GPU高速化のヒント */
 }
 
-.sidebar-wrapper.sidebar-hidden {
-  width: 50px;
+/* リサイズ中はトランジションを無効にする */
+.sidebar-wrapper.resizing {
+  transition: none !important;
 }
 
 .sidebar-left {
@@ -280,38 +352,22 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  transition: color 0.3s;
+  transition: color 0.3s, background-color 0.3s;
   border-radius: 10%;
 }
 
 .sidebar-item:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(255, 255, 255, 0.2);
 }
 
 .animate-icon-open {
-  animation: rotate-open 0.4s forwards;
+  transform: rotate(90deg);
+  transition: transform 0.2s ease;
 }
 
 .animate-icon-close {
-  animation: rotate-close 0.4s forwards;
-}
-
-@keyframes rotate-open {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(90deg);
-  }
-}
-
-@keyframes rotate-close {
-  0% {
-    transform: rotate(90deg);
-  }
-  100% {
-    transform: rotate(0deg);
-  }
+  transform: rotate(0deg);
+  transition: transform 0.2s ease;
 }
 
 .sidebar-right {
@@ -320,51 +376,74 @@ body {
   padding: 15px;
   color: white;
   z-index: 100;
-  transition: transform 0.35s ease;
-  overflow: hidden; 
-  white-space: nowrap;
   position: relative;
+  overflow-y: auto;
+  overflow-x: hidden;
+  white-space: nowrap;
+  will-change: transform, opacity; /* GPU高速化のヒント */
 }
 
-.sidebar-right::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: #34495e;
-  z-index: 200;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-  pointer-events: none;
-}
-
-.sidebar-hidden .sidebar-right::before {
-  opacity: 1;
-}
 .sidebar-right h1 {
-  font-size:18px;
+  font-size: 18px;
   font-weight: 500;
   margin-bottom: 20px;
 }
 
-.sidebar-enter-active,
-.sidebar-leave-active {
-  transition: transform 0.35s ease;
+/* リサイズハンドル */
+.resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 8px; /* 幅を太くして掴みやすくする */
+  height: 100%;
+  background: transparent;
+  cursor: ew-resize;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.sidebar-enter,
-.sidebar-leave-to {
-  transform: translateX(-100%);
+
+.resize-handle::after {
+  content: '';
+  width: 2px;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.1);
+  transition: background 0.2s ease;
+}
+
+.resize-handle:hover::after,
+.resize-handle:active::after {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* 改善したアニメーション - 軽量化 */
+.sidebar-fade-enter-active,
+.sidebar-fade-leave-active {
+  transition: opacity 0.15s ease, transform 0.15s ease-out;
+}
+
+.sidebar-fade-enter-from,
+.sidebar-fade-leave-to {
+  opacity: 0;
+  transform: translateX(-15px);
+}
+
+#app.sidebar-hidden .sidebar-wrapper {
+  width: 50px !important;
+  transition: width 0.2s ease-out;
 }
 
 .chat-view-wrapper {
   flex: 1;
   display: flex;
+  transition: width 0.2s ease-out;
+  will-change: width; /* GPU高速化のヒント */
 }
 
-#app.sidebar-hidden .sidebar-wrapper {
-  width: 50px;
+/* リサイズ中はチャット表示部分のトランジションも無効にする */
+.resizing ~ .chat-view-wrapper {
+  transition: none !important;
 }
 
 #app.sidebar-hidden .chat-view-wrapper {
@@ -479,11 +558,12 @@ body {
     left: 0;
     top: 0;
     bottom: 0;
-    transform: none;
+    z-index: 1000;
   }
 
-  .sidebar-wrapper.sidebar-hidden {
-    transform: translateX(-100%);
+  #app.sidebar-hidden .sidebar-wrapper {
+    transform: none;
+    width: 50px !important;
   }
 
   .sidebar-right {
@@ -492,16 +572,12 @@ body {
     right: 0;
     top: 0;
     bottom: 0;
-    overflow: hidden; 
-    white-space: nowrap;
-  }
-
-  .sidebar-right.sidebar-hidden {
-    transform: translateX(-100%);
+    z-index: 900;
   }
 
   .chat-view-wrapper {
     margin-left: 50px;
+    width: calc(100% - 50px) !important;
   }
 }
 </style>
