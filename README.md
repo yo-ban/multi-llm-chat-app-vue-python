@@ -10,7 +10,7 @@
 ![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115.0-009688?logo=fastapi&logoColor=white)
 
-A versatile chat application that enables interaction with multiple Large Language Models (LLMs) through a unified interface. This application supports various AI models including OpenAI, Anthropic, Gemini, DeepSeek, and custom models through OpenRouter, offering features like image analysis, web search, and file processing capabilities.
+A versatile chat application that enables interaction with multiple Large Language Models (LLMs) through a unified interface. This application supports various AI models including OpenAI, Anthropic, Gemini, and custom models through OpenRouter, offering features like image analysis, web search, and file processing capabilities.
 
 > **Note**: This is a learning project created for exploring and understanding various LLM APIs and web application development. The architecture and implementation choices are kept simple for educational purposes and may not reflect production-grade best practices.
 
@@ -20,7 +20,6 @@ A versatile chat application that enables interaction with multiple Large Langua
   - OpenAI
   - Anthropic
   - Google AI Studio
-  - DeepSeek
   - OpenRouter (Custom model IDs)
 - **Real-time Chat**: Interactive conversations with streaming responses
 - **Message Management**: Edit and delete both user and assistant messages at any time
@@ -29,6 +28,7 @@ A versatile chat application that enables interaction with multiple Large Langua
 - **File Processing**: Upload and analyze various file formats (PDF, HTML, Markdown, etc.)
 - **Persona Management**: Create and manage custom AI assistant roles
 - **Conversation Management**: Export, import, and manage chat histories
+- **Image Generation**: Support image generation with Gemini 2.0 Flash Experimental
 
 ## 📸 Screenshots
 

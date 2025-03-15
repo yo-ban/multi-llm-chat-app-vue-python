@@ -525,7 +525,7 @@ async function deleteImage(messageId: string, imageIndex: number) {
   if (messageIndex !== -1) {
     const message = chatStore.messages[messageIndex];
     if (message.images && message.images.length > imageIndex) {
-      message.images.splice(imageIndex, 1);
+      message.images = message.images.filter((_, idx) => idx !== imageIndex);
       await updateConversationHistory(conversationStore.currentConversationId!, chatStore.messages);
     }
   }

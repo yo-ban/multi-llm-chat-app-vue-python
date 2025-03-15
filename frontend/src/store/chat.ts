@@ -27,7 +27,7 @@ export const useChatStore = defineStore('chat', {
           if (!lastMessage.images) {
             lastMessage.images = [];
           }
-          lastMessage.images.push(image);
+          lastMessage.images = [...lastMessage.images, image];
         }
       }
     },
