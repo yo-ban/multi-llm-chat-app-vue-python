@@ -102,12 +102,37 @@
       <div class="persona-list">
         <div class="persona-grid">
           <div v-for="persona in userDefinedPersonas" :key="persona.id" class="persona-card" >
-            <img :src="persona.image" :alt="persona.name" class="persona-image" @click="editPersona(persona)" />
-            <div class="persona-name">{{ persona.name }}</div>
+            <VTooltip placement="top" popper-class="tooltip-content">
+              <template #popper>
+                {{ persona.name }}
+              </template>
+              <img :src="persona.image" :alt="persona.name" class="persona-image" @click="editPersona(persona)" />
+            </VTooltip>
+            <VTooltip placement="top" popper-class="tooltip-content">
+              <template #popper>
+                {{ persona.name }}
+              </template>
+              <div class="persona-name">{{ persona.name }}</div>
+            </VTooltip>
             <div class="persona-actions">
-              <PrimeButton icon="pi pi-pencil" class="p-button-rounded p-button-text" @click="editPersona(persona)" />
-              <PrimeButton icon="pi pi-trash" class="p-button-rounded p-button-text" @click="confirmDeletePersona(persona.id)" />
-              <PrimeButton icon="pi pi-download" class="p-button-rounded p-button-text" @click="exportPersona(persona)" />              
+              <VTooltip placement="bottom" popper-class="tooltip-content">
+                <template #popper>
+                  Edit
+                </template>
+                <PrimeButton icon="pi pi-pencil" class="p-button-rounded p-button-text" @click="editPersona(persona)" />
+              </VTooltip>
+              <VTooltip placement="bottom" popper-class="tooltip-content">
+                <template #popper>
+                  Delete
+                </template>
+                <PrimeButton icon="pi pi-trash" class="p-button-rounded p-button-text" @click="confirmDeletePersona(persona.id)" />
+              </VTooltip>
+              <VTooltip placement="bottom" popper-class="tooltip-content">
+                <template #popper>
+                  Export
+                </template>
+                <PrimeButton icon="pi pi-download" class="p-button-rounded p-button-text" @click="exportPersona(persona)" />
+              </VTooltip>
             </div>
           </div>
         </div>
