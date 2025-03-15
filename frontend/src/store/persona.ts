@@ -66,6 +66,40 @@ export const usePersonaStore = defineStore('persona', {
       input.click();
     },
 
+    async duplicatePersona(personaId: string) {
+      try {
+        // 複製するペルソナを検索
+        const personaToDuplicate = this.userDefinedPersonas.find(
+          p => p.id === personaId
+        );
+        
+        if (!personaToDuplicate) {
+          throw new Error(`Persona with ID ${personaId} not found`);
+        }
+        
+        // 新しいペルソナIDを生成
+        const newPersonaId = `persona-${uuidv4()}`;
+        
+        // ペルソナのディープコピーを作成
+        const duplicatedPersona: UserDefinedPersona = {
+          ...JSON.parse(JSON.stringify(personaToDuplicate)), // ディープコピー
+          id: newPersonaId,
+          name: `Copy ${personaToDuplicate.name}`
+        };
+        
+        // 複製したペルソナをリストに追加
+        this.userDefinedPersonas.push(duplicatedPersona);
+        
+        // ペルソナリストの変更を保存
+        await this.savePersonas();
+        
+        return newPersonaId;
+      } catch (error) {
+        console.error('Error duplicating persona:', error);
+        throw error;
+      }
+    },
+
     togglePersonasManagement() {
       this.showPersonasManagement = !this.showPersonasManagement;
     },

@@ -187,5 +187,54 @@ export const useConversationStore = defineStore('conversation', {
         throw error;
       }
     },
+
+    async duplicateConversation(conversationId: string) {
+      try {
+        // 複製する会話を検索
+        const conversationToDuplicate = this.conversationList.find(
+          c => c.conversationId === conversationId
+        );
+        
+        if (!conversationToDuplicate) {
+          throw new Error(`Conversation with ID ${conversationId} not found`);
+        }
+        
+        // 新しい会話IDを生成
+        const newConversationId = `conv-${uuidv4()}`;
+        const nowDate = new Date().toISOString();
+        
+        // 会話のディープコピーを作成
+        const duplicatedConversation: Conversation = {
+          ...JSON.parse(JSON.stringify(conversationToDuplicate)), // ディープコピー
+          conversationId: newConversationId,
+          title: `Copy-${nowDate} ${conversationToDuplicate.title}`,
+          createdAt: nowDate,
+          updatedAt: nowDate
+        };
+        
+        // 複製した会話をリストに追加
+        this.conversationList.unshift(duplicatedConversation);
+        
+        // 会話リストの変更を保存
+        await storageService.saveConversationList(this.conversationList);
+        
+        // 元の会話のメッセージを取得
+        const messages = await storageService.getConversationMessages(conversationId);
+        
+        // メッセージもコピーして保存（もし存在すれば）
+        if (messages && messages.length > 0) {
+          await storageService.updateConversationMessages(newConversationId, JSON.parse(JSON.stringify(messages)));
+        }
+        
+        // 新しい会話を選択して返す
+        this.currentConversationId = newConversationId;
+        await storageService.saveCurrentConversationId(this.currentConversationId);
+        
+        return newConversationId;
+      } catch (error) {
+        console.error('Error duplicating conversation:', error);
+        throw error;
+      }
+    },
   },
 });

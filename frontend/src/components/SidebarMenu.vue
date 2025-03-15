@@ -62,6 +62,14 @@
               </VTooltip>
               <VTooltip placement="bottom" popper-class="tooltip-content">
                 <template #popper>
+                  Duplicate
+                </template>
+                <button @click.stop="duplicateConversation(conversation)" class="action-button duplicate-button">
+                  <font-awesome-icon icon="copy" />
+                </button>
+              </VTooltip>
+              <VTooltip placement="bottom" popper-class="tooltip-content">
+                <template #popper>
                   Generate Title
                 </template>
                 <button @click.stop="reGenerateChatTitle(conversation.conversationId)" class="action-button generate-button">
@@ -120,6 +128,12 @@
                   Edit
                 </template>
                 <PrimeButton icon="pi pi-pencil" class="p-button-rounded p-button-text" @click="editPersona(persona)" />
+              </VTooltip>
+              <VTooltip placement="bottom" popper-class="tooltip-content">
+                <template #popper>
+                  Duplicate
+                </template>
+                <PrimeButton icon="pi pi-copy" class="p-button-rounded p-button-text" @click="duplicatePersona(persona)" />
               </VTooltip>
               <VTooltip placement="bottom" popper-class="tooltip-content">
                 <template #popper>
@@ -340,6 +354,48 @@ async function reGenerateChatTitle(conversationId: string) {
       console.error('Error generating chat title:', error);
     });
   }
+}
+
+function duplicateConversation(conversation: Conversation) {
+  conversationStore.duplicateConversation(conversation.conversationId)
+    .then(() => {
+      toast.add({ 
+        severity: 'success', 
+        summary: 'Conversation Duplicated', 
+        detail: 'The conversation has been duplicated successfully', 
+        life: 3000 
+      });
+    })
+    .catch((error) => {
+      console.error('Error duplicating conversation:', error);
+      toast.add({ 
+        severity: 'error', 
+        summary: 'Duplication Failed', 
+        detail: 'Failed to duplicate the conversation', 
+        life: 3000 
+      });
+    });
+}
+
+function duplicatePersona(persona: UserDefinedPersona) {
+  personaStore.duplicatePersona(persona.id)
+    .then(() => {
+      toast.add({ 
+        severity: 'success', 
+        summary: 'Role Duplicated', 
+        detail: 'The assistant role has been duplicated successfully', 
+        life: 3000 
+      });
+    })
+    .catch((error) => {
+      console.error('Error duplicating persona:', error);
+      toast.add({ 
+        severity: 'error', 
+        summary: 'Duplication Failed', 
+        detail: 'Failed to duplicate the assistant role', 
+        life: 3000 
+      });
+    });
 }
 </script>
 
@@ -722,4 +778,4 @@ async function reGenerateChatTitle(conversationId: string) {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
-</style>@/services/llm
+</style>
