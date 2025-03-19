@@ -7,7 +7,7 @@
       <div class="role">{{ personaRole }}</div>
     </div>
     <div class="message-body">
-      <div class="message-content" :class="{ 'editing': isEditing }">
+      <div class="message-content" :class="{ 'editing': isEditing, 'streaming': props.streaming && role === 'assistant' }">
         <div v-if="images && images.length > 0" class="message-images">
           <div v-for="(image, index) in images" :key="index" class="message-image-wrapper">
             <PrimeImage :src="image" alt="Message Image" class="message-image" preview>
@@ -170,9 +170,127 @@ const editedText = ref('');
 const hovering = ref(false);
 const editTextarea = ref<HTMLTextAreaElement | null>(null);
 
+// スムーズなタイピングエフェクト用の変数
+const smoothText = ref('');
+const targetText = ref('');
+const typingInterval = ref<number | null>(null);
+const baseTypingSpeed = ref(20); // 基本タイピング速度（ミリ秒）
+const lastPunctuationTime = ref(0);
+
+// スムーズ表示のためにタイピングエフェクトを実装
+function updateSmoothText() {
+  if (targetText.value.length > smoothText.value.length) {
+    const currentLength = smoothText.value.length;
+    const targetLength = targetText.value.length;
+    const remaining = targetLength - currentLength;
+    
+    // 追加する文字数の計算 (テキスト長さと状況に応じて調整)
+    let charsToAdd = 1;
+    
+    // 通常テキストの場合は残りの量に応じて適応
+    charsToAdd = Math.max(1, Math.floor(remaining / 100));
+    
+    // 残りテキストが少なくなると遅くする
+    if (remaining < 20) {
+      charsToAdd = 1;
+    }
+    
+    // 文の終わりの句読点で少し一時停止する
+    const nextChar = targetText.value.charAt(currentLength);
+    const isPunctuation = ['.', '!', '?', '。', '！', '？'].includes(nextChar);
+    const now = Date.now();
+    
+    if (isPunctuation && (now - lastPunctuationTime.value > 1000)) {
+      lastPunctuationTime.value = now;
+      // 句読点を追加して一時停止
+      smoothText.value = targetText.value.substring(0, currentLength + 1);
+      return;
+    }
+    
+    // 実際にテキストを追加
+    smoothText.value = targetText.value.substring(0, currentLength + charsToAdd);
+
+    // 状況に応じて速度を調整
+    adjustTypingSpeed();
+  } else {
+    // 目標のテキストに到達したら停止
+    if (typingInterval.value) {
+      clearInterval(typingInterval.value);
+      typingInterval.value = null;
+    }
+  }
+}
+
+// 状況に応じてタイピング速度を調整
+function adjustTypingSpeed() {
+  let newSpeed = baseTypingSpeed.value;
+
+  // 文が長くなるほど若干速くする
+  const textLengthFactor = 1 - Math.min(0.5, smoothText.value.length / 5000);
+  newSpeed = Math.max(10, Math.floor(newSpeed * textLengthFactor));
+  
+  // 速度が変わったらインターバルを再設定
+  if (typingInterval.value) {
+    clearInterval(typingInterval.value);
+    typingInterval.value = window.setInterval(updateSmoothText, newSpeed);
+  }
+}
+
+// 新しいテキストを受け取ったときの処理
+watch(() => props.streamedText, (newText) => {
+  if (props.streaming && newText) {
+    // 前回のテキストから新しいテキストへの変更を処理
+    targetText.value = newText;
+    
+    // 初回表示または大幅なテキスト追加の場合
+    if (!smoothText.value) {
+      // 初回表示時は少し先に表示してからアニメーション
+      const initialDisplayLength = Math.min(100, Math.floor(newText.length * 0.3));
+      smoothText.value = newText.substring(0, initialDisplayLength);
+    } else if (newText.length < smoothText.value.length) {
+      // テキストが減った場合（まれなケース）
+      smoothText.value = newText;
+    } else if (newText.length - smoothText.value.length > 500) {
+      // 大量テキストが一度に来た場合、前のテキストは保持して新しい部分のみ一部先行表示
+      
+      // すでに表示しているテキストが新しいテキストに含まれているか確認
+      if (newText.startsWith(smoothText.value)) {
+        // 既存テキストを保持し、追加分の一部を先行表示
+        const additionalText = newText.substring(smoothText.value.length);
+        const additionalDisplayLength = Math.floor(additionalText.length * 0.3);
+        smoothText.value = newText.substring(0, smoothText.value.length + additionalDisplayLength);
+      } else {
+        // 既存テキストが新テキストと一致しない場合（まれなケース）は新テキストの一部を表示
+        const displayLength = Math.floor(newText.length * 0.3);
+        smoothText.value = newText.substring(0, displayLength);
+      }
+    }
+        
+    // インターバルがまだ設定されていなければ設定
+    if (!typingInterval.value) {
+      typingInterval.value = window.setInterval(updateSmoothText, baseTypingSpeed.value);
+    }
+  } else {
+    // ストリーミングが終了したら、すぐに完全なテキストを表示
+    smoothText.value = newText || '';
+    if (typingInterval.value) {
+      clearInterval(typingInterval.value);
+      typingInterval.value = null;
+    }
+  }
+}, { immediate: true });
+
+// コンポーネントがアンマウントされたときにインターバルをクリア
+onBeforeUnmount(() => {
+  if (typingInterval.value) {
+    clearInterval(typingInterval.value);
+    typingInterval.value = null;
+  }
+});
+
 const displayText = computed(() => {
   if (props.role === 'assistant') {
-    return props.streaming ? props.streamedText : props.text;
+    return props.streaming ? smoothText.value : props.text;
   } else {
     return props.text;
   }
@@ -565,4 +683,20 @@ img {
   margin-block-end: 0.2em;
 }
 
+/* タイピングエフェクトの最後に表示するカーソルのアニメーション */
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.assistant .message-content.streaming::after {
+  content: '|';
+  display: inline-block;
+  width: 0.5em;
+  animation: cursor-blink 0.8s infinite;
+  color: #0d47a1;
+  vertical-align: baseline;
+  font-weight: normal;
+  margin-left: 1px;
+}
 </style>
