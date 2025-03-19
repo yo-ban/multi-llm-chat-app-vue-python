@@ -190,3 +190,72 @@ def get_gemini_tool_definitions(without_human_fallback: bool = False) -> types.T
         tool_definitions.append(need_ask_human_function)
 
     return types.Tool(function_declarations=tool_definitions)
+
+def get_anthropic_tool_definitions(without_human_fallback: bool = False) -> List[Dict[str, Any]]:
+    """
+    Get all function definitions for Anthropic Claude API function calling.
+    Centralizes all tool definitions in one place for better maintainability.
+
+    Returns:
+        List[Dict[str, Any]]: A list of tool definitions in Anthropic Claude API format.
+    """
+    # Web Search Tool
+    web_search_tool = {
+        "name": "web_search",
+        "description": WEB_SEARCH_TOOL_DESCRIPTION,
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": WEB_SEARCH_TOOL_PARAMETERS_DESCRIPTION["query"]
+                }
+            },
+            "required": ["query"]
+        }
+    }
+    
+    # Web Browsing Tool
+    web_browsing_tool = {
+        "name": "web_browsing",
+        "description": WEB_BROWSING_TOOL_DESCRIPTION,
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": WEB_BROWSING_TOOL_PARAMETERS_DESCRIPTION["url"]
+                },
+                "query": {
+                    "type": "string",
+                    "description": WEB_BROWSING_TOOL_PARAMETERS_DESCRIPTION["query"]
+                }
+            },
+            "required": ["url", "query"]
+        }
+    }
+    
+    # Need-Asking-Human Tool (Fallback)
+    need_ask_human_tool = {
+        "name": "need_ask_human",
+        "description": NEED_ASK_HUMAN_TOOL_DESCRIPTION,
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "clarification_points": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": NEED_ASK_HUMAN_TOOL_PARAMETERS_DESCRIPTION["clarification_points"]
+                }
+            },
+            "required": ["clarification_points"]
+        }
+    }
+    
+    tool_definitions = [web_search_tool, web_browsing_tool]
+    if not without_human_fallback:
+        tool_definitions.append(need_ask_human_tool)
+    
+    return tool_definitions

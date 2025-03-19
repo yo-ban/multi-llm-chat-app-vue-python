@@ -209,3 +209,67 @@ async def gemini_handle_tool_call(
             "error": str(e)
         })
         raise
+
+async def anthropic_handle_tool_call(
+    tool_name: str,
+    tool_input: Dict[str, Any],
+    tool_id: str
+) -> AsyncGenerator[Dict[str, Any], None]:
+    """
+    Handle a tool call from Anthropic Claude API and execute the requested tool.
+    
+    Args:
+        tool_name: The name of the tool to execute
+        tool_input: The input parameters for the tool
+        tool_id: The ID of the tool call
+        
+    Yields:
+        Tool execution status updates for frontend
+    Returns:
+        The tool execution results will be returned via the last yielded status update
+    """
+    result = None
+    try:
+        if tool_name == "web_search":
+            query = tool_input.get("query")
+            num_results = tool_input.get("num_results", 5)
+            
+            if query:
+                log_info("Executing web search", {"query": query, "num_results": num_results})
+                yield {"type": "tool_execution", "tool": "web_search", "query": query}
+                
+                results = await web_search(query, num_results)
+                result = format_search_results(results)
+                
+        elif tool_name == "web_browsing":
+            url = tool_input.get("url")
+            query = tool_input.get("query")
+            
+            if url and query:
+                log_info("Executing web extraction", {"url": url, "query": query})
+                yield {"type": "tool_execution", "tool": "web_browsing", "url": url}
+                
+                browse_result = await web_browsing(url, query)
+                result = format_web_extraction(browse_result)
+        
+        elif tool_name == "need_ask_human":
+            clarification_points = tool_input.get("clarification_points")
+
+            if clarification_points:
+                log_info("Executing need_ask_human", {"clarification_points": clarification_points})
+                result = await need_ask_human(clarification_points)
+
+        else:
+            log_warning(f"Unknown tool called: {tool_name}")
+            
+        # Return the final result in the last status update
+        if result:
+            log_info("Tool execution complete", {"tool": tool_name, "result": result})
+            yield {"type": "tool_execution_complete", "tool": tool_name, "result": result}
+            
+    except Exception as e:
+        log_error(f"Error handling tool call: {str(e)}", {
+            "tool": tool_name,
+            "error": str(e)
+        })
+        raise

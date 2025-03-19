@@ -2,8 +2,8 @@ import json
 import base64
 from typing import AsyncGenerator, Any, Dict, List
 from openai import AsyncOpenAI
-from app.function_calling.tool_handlers import openai_handle_tool_call, gemini_handle_tool_call
-from app.function_calling.tool_definitions import get_tool_definitions, get_gemini_tool_definitions
+from app.function_calling.tool_handlers import openai_handle_tool_call, gemini_handle_tool_call, anthropic_handle_tool_call
+from app.function_calling.tool_definitions import get_tool_definitions, get_gemini_tool_definitions, get_anthropic_tool_definitions
 from app.message_utils.usage_parser import parse_usage, parse_usage_gemini, parse_usage_anthropic
 from app.logger.logging_utils import get_logger, log_error, log_info, log_warning, log_debug
 from google.genai.client import Client
@@ -432,43 +432,285 @@ async def openai_non_stream_generator(
     yield 'data: {"text": "[DONE]"}\n\n'
 
 
-async def anthropic_stream_generator(response) -> AsyncGenerator[str, None]:
+async def anthropic_stream_generator(
+    response, 
+    anthropic_client=None, 
+    params=None, 
+    messages=None
+) -> AsyncGenerator[str, None]:
     """
-    Generate streaming response for Anthropic API
+    Generate streaming response for Anthropic API.
+    Handles both regular text responses and tool use cases with recursive tool handling.
+    
+    Args:
+        response: Initial Anthropic API streaming response
+        anthropic_client: Optional Anthropic client for tool result submission
+        params: Original API request parameters for creating follow-up requests
+        messages: Conversation history for context maintenance
+        
+    Yields:
+        Streaming response data in SSE format
     """
     try:
         usage = {}
-        async for event in response:
-            if event.type == "content_block_start":
-                if event.content_block.type == "thinking":
-                    print(f"思考：{event.content_block.thinking}", end="", flush=True)
-                elif event.content_block.type == "text":
-                    yield f"data: {json.dumps({'text': event.content_block.text})}\n\n"
-            elif event.type == "content_block_delta":
-                if event.delta.type == "thinking_delta":
-                    print(f"{event.delta.thinking}", end="", flush=True)
-                elif event.delta.type == "text_delta":
-                    yield f"data: {json.dumps({'text': event.delta.text})}\n\n"
-            elif event.type == "content_block_stop":
-                pass
-            elif event.type == "message_start":
-                message = event.message
-                if hasattr(message, 'usage'):
-                    usage_start = await parse_usage_anthropic(message.usage)
-                    log_info("Token usage in Anthropic in message_start", usage_start)
-                    usage.update(usage_start)
-            elif event.type == "message_delta":
-                if hasattr(event, 'usage'):
-                    usage_delta = await parse_usage_anthropic(event.usage)
-                    log_info("Token usage in Anthropic in message_delta", usage_delta)
-                    usage.update(usage_delta)
-                    yield f"data: {json.dumps(usage)}\n\n"
-                yield f"data: {json.dumps({'stop_reason': event.delta.stop_reason})}\n\n"
-            elif event.type == "message_stop":
-                yield f"data: {json.dumps({'text': '[DONE]'})}\n\n"
-            elif event.type == "ping":
-                yield ": ping\n\n"
-            elif event.type == "error":
-                raise Exception(event.error.message)
+        tool_input_json = ""
+        partial_text = ""
+        current_tool_name = None
+        current_tool_id = None
+        should_continue = True
+        tool_calls_count = 0
+        
+        while should_continue:
+            should_continue = False  # Will be set to True if we need another iteration for tool execution
+            
+            async for event in response:
+                if event.type == "message_start":
+                    message = event.message
+                    if hasattr(message, 'usage'):
+                        usage_start = await parse_usage_anthropic(message.usage)
+                        log_info("Token usage in Anthropic in message_start", usage_start)
+                        usage.update(usage_start)
+                        
+                elif event.type == "content_block_start":
+                    if hasattr(event, 'content_block') and event.content_block:
+                        if event.content_block.type == "thinking":
+                            print(f"思考：{event.content_block.thinking}", end="", flush=True)
+                        elif event.content_block.type == "text":
+                            yield f"data: {json.dumps({'text': event.content_block.text})}\n\n"
+                            partial_text += event.content_block.text
+                        elif event.content_block.type == "tool_use":
+                            # Tool use started - send tool call start event
+                            current_tool_name = event.content_block.name
+                            current_tool_id = event.content_block.id
+                            tool_input_json = ""  # Reset the tool input JSON
+                        
+                elif event.type == "content_block_delta":
+                    if event.delta.type == "thinking_delta":
+                        print(f"{event.delta.thinking}", end="", flush=True)
+                    elif event.delta.type == "text_delta":
+                        yield f"data: {json.dumps({'text': event.delta.text})}\n\n"
+                        partial_text += event.delta.text
+                    elif event.delta.type == "input_json_delta":
+                        # Accumulate the tool input JSON
+                        tool_input_json += event.delta.partial_json
+                        
+                elif event.type == "content_block_stop":
+                    if current_tool_name and current_tool_id:
+                        # Tool use completed - try to parse the JSON and handle the tool call
+                        try:
+                            tool_input = json.loads(tool_input_json) if tool_input_json else {}
+                            
+                            # Execute the tool if we have a client to send results back to
+                            if anthropic_client and current_tool_id and params is not None and messages is not None:
+                                yield f"data: {json.dumps({'type': 'tool_call_start', 'tool': current_tool_name, 'id': current_tool_id})}\n\n"
+                                log_info("Executing tool", {
+                                    "tool": current_tool_name,
+                                    "tool_use_id": current_tool_id
+                                })
+                                # Process the tool call
+                                tool_result = None
+                                async for status in anthropic_handle_tool_call(current_tool_name, tool_input, current_tool_id):
+                                    # Forward tool execution status to client
+                                    yield f"data: {json.dumps(status)}\n\n"
+                                    
+                                    # Capture the final result
+                                    if status["type"] == "tool_execution_complete":
+                                        tool_result = status["result"]
+                                
+                                if tool_result:
+                                    # Create a copy of the original parameters for the next request
+                                    next_params = params.copy()
+                                    log_info("partial_text", partial_text)
+
+                                    tool_use_message = {
+                                        "role": "assistant",
+                                        "content": [
+                                            {
+                                                "type": "text",
+                                                "text": partial_text
+                                            },
+                                            {
+                                                "type": "tool_use",
+                                                "id": current_tool_id,
+                                                "name": current_tool_name,
+                                                "input": tool_input
+                                            }
+                                        ]
+                                    }
+                                    # append the tool use message to the messages
+                                    next_params["messages"].append(tool_use_message)
+
+                                    # Create a user message with the tool result
+                                    tool_result_message = {
+                                        "role": "user",
+                                        "content": [
+                                            {
+                                                "type": "tool_result",
+                                                "tool_use_id": current_tool_id,
+                                                "content": tool_result
+                                            }
+                                        ]
+                                    }
+                                    
+                                    # Update messages for the next request
+                                    next_params["messages"].append(tool_result_message)
+                                    
+                                    # Make sure tools are included in the next request
+                                    if tool_calls_count > 0 and "tools" in next_params:
+                                        next_params["tools"] = get_anthropic_tool_definitions()
+                                        
+                                    log_info("Submitting tool result for continuation", {
+                                        "tool": current_tool_name,
+                                        "tool_use_id": current_tool_id
+                                    })
+                                    # log_info("Next params messages", next_params["messages"])
+                                    
+                                    # Create a new response with the tool result
+                                    response = await anthropic_client.messages.create(**next_params)
+                                    
+                                    # Set flag to continue processing with the new response
+                                    should_continue = True
+                                    tool_calls_count += 1
+                                    
+                                    # Reset tracking variables for next iteration
+                                    current_tool_name = None
+                                    current_tool_id = None
+                                    partial_text = ""
+
+                                    # Break the inner loop to start processing the new response
+                                    break
+                            
+                        except json.JSONDecodeError:
+                            log_error(f"Failed to parse tool input JSON: {tool_input_json}")
+                            yield f"data: {json.dumps({'type': 'tool_call_end', 'tool': current_tool_name, 'input': {}})}\n\n"
+                        
+                        # Reset tool tracking variables if not continuing
+                        if not should_continue:
+                            current_tool_name = None
+                            current_tool_id = None
+                        
+                elif event.type == "message_delta":
+                    if hasattr(event, 'usage'):
+                        usage_delta = await parse_usage_anthropic(event.usage)
+                        log_info("Token usage in Anthropic in message_delta", usage_delta)
+                        usage.update(usage_delta)
+                        yield f"data: {json.dumps(usage)}\n\n"
+                        
+                    # Forward stop reason to client
+                    if hasattr(event, 'delta') and hasattr(event.delta, 'stop_reason'):
+                        # stop_reason is not "tool_use" means the response is finished
+                        if event.delta.stop_reason != "tool_use":
+                            yield f"data: {json.dumps({'stop_reason': event.delta.stop_reason})}\n\n"
+                        elif event.delta.stop_reason == "tool_use":
+                            # in tool use, continue the loop
+                            log_info("Tool use continues")
+                            should_continue = True
+                        
+                elif event.type == "message_stop":
+                    if not should_continue:  # Only emit DONE if we're not continuing with a tool result
+                        yield f"data: {json.dumps({'text': '[DONE]'})}\n\n"
+                        
+                elif event.type == "ping":
+                    yield ": ping\n\n"
+                    
+                elif event.type == "error":
+                    raise Exception(event.error.message)
+            
+            # If we're not continuing due to a tool call, break the outer loop
+            if not should_continue:
+                break
+                
     except Exception as e:
+        log_error(f"Error in Anthropic stream generator: {str(e)}")
         yield f"data: {json.dumps({'error': str(e)})}\n\n" 
+
+async def anthropic_non_stream_generator(
+    response, 
+    anthropic_client=None, 
+    params=None, 
+    messages=None
+) -> AsyncGenerator[str, None]:
+    """
+    Generate non-streaming response for Anthropic API.
+    Handles both regular text responses and tool use cases.
+    
+    Args:
+        response: Initial Anthropic API response
+        anthropic_client: Optional Anthropic client for tool result submission
+        params: Original API request parameters for creating follow-up requests
+        messages: Conversation history for context maintenance
+        
+    Yields:
+        Response data in SSE format
+    """
+    try:
+        content = response.content
+        
+        # Check if there's a tool use in the response
+        has_tool_use = False
+        for block in content:
+            if block.type == "tool_use":
+                has_tool_use = True
+                
+                # Send the tool use start event
+                yield f'data: {json.dumps({"type": "tool_call_start", "tool": block.name, "id": block.id})}\n\n'
+                
+                # Parse the tool input
+                try:
+                    tool_input = json.loads(block.input) if block.input else {}
+                    yield f'data: {json.dumps({"type": "tool_call_end", "tool": block.name, "input": tool_input})}\n\n'
+                    
+                    # Execute the tool
+                    tool_result = None
+                    async for status in anthropic_handle_tool_call(block.name, tool_input, block.id):
+                        yield f'data: {json.dumps(status)}\n\n'
+                        if status["type"] == "tool_execution_complete":
+                            tool_result = status["result"]
+                    
+                    if tool_result and anthropic_client and params:
+                        # Create a user message with the tool result
+                        tool_params = params.copy()
+                        tool_params["messages"] = [{
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "tool_result",
+                                    "tool_use_id": block.id,
+                                    "content": tool_result
+                                }
+                            ]
+                        }]
+                        
+                        # Continue the conversation with the tool result
+                        tool_response = await anthropic_client.messages.create(**tool_params)
+                        
+                        # Process the response content
+                        for tool_block in tool_response.content:
+                            if tool_block.type == "text":
+                                yield f'data: {json.dumps({"text": tool_block.text})}\n\n'
+                
+                except Exception as e:
+                    log_error(f"Error handling tool use: {str(e)}")
+                    yield f'data: {json.dumps({"error": str(e)})}\n\n'
+                
+                break  # Only handle the first tool use in non-streaming mode
+        
+        # If no tool use, just return the text content
+        if not has_tool_use:
+            for block in content:
+                if block.type == "text":
+                    yield f'data: {json.dumps({"text": block.text})}\n\n'
+                elif block.type == "thinking":
+                    if block.thinking:
+                        print(f"思考：{block.thinking}")
+
+        # Include usage information if available
+        if hasattr(response, 'usage'):
+            usage = await parse_usage_anthropic(response.usage)
+            yield f"data: {json.dumps(usage)}\n\n"
+
+        yield 'data: {"text": "[DONE]"}\n\n'
+        
+    except Exception as e:
+        log_error(f"Error in Anthropic non-stream generator: {str(e)}")
+        yield f'data: {json.dumps({"error": str(e)})}\n\n' 

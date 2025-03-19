@@ -22,7 +22,8 @@ from app.message_utils.response_generator import (
     gemini_non_stream_generator,
     openai_stream_generator,
     openai_non_stream_generator,
-    anthropic_stream_generator
+    anthropic_stream_generator,
+    anthropic_non_stream_generator
 )
 from app.message_utils.messages_preparer import (
     prepare_api_messages, 
@@ -31,8 +32,8 @@ from app.message_utils.messages_preparer import (
 )
 from app.misc_utils.image_utils import upload_image_to_gemini
 from app.models.models import ChatRequest
-from app.function_calling.tool_definitions import get_tool_definitions, get_gemini_tool_definitions
-from app.logger.logging_utils import log_info
+from app.function_calling.tool_definitions import get_tool_definitions, get_gemini_tool_definitions, get_anthropic_tool_definitions
+from app.logger.logging_utils import log_info, log_error
 
 class ChatHandler:
     def __init__(self, api_key: str):
@@ -164,27 +165,29 @@ class ChatHandler:
                 "budget_tokens": budget_tokens
             }
 
+        if websearch:
+            params["tools"] = get_anthropic_tool_definitions(without_human_fallback=True)
+
         response = await anthropic.messages.create(**params)
 
         if stream:
             return StreamingResponse(
-                anthropic_stream_generator(response),
+                anthropic_stream_generator(
+                    response=response,
+                    anthropic_client=anthropic,
+                    params=params,
+                    messages=anthropic_messages
+                ),
                 media_type="text/event-stream"
             )
         else:
-            async def generate_non_stream_response():
-                content = response.content
-                for block in content:
-                    if block.type == "text":
-                        yield f'data: {json.dumps({"text": block.text})}\n\n'
-                    elif block.type == "thinking":
-                        if block.thinking:
-                            print(f"思考：{block.thinking}")
-
-                yield 'data: {"text": "[DONE]"}\n\n'
-
             return StreamingResponse(
-                generate_non_stream_response(),
+                anthropic_non_stream_generator(
+                    response=response,
+                    anthropic_client=anthropic,
+                    params=params,
+                    messages=anthropic_messages
+                ),
                 media_type="text/event-stream"
             )
 
@@ -370,8 +373,8 @@ class ChatHandler:
                 openai_stream_generator(
                     response,
                     openai_client=openrouter,
-                    messages=openrouter_messages,
-                    model=model
+                    openai_messages=openrouter_messages,
+                    completion_args=completion_args
                 ),
                 media_type="text/event-stream"
             )
@@ -438,6 +441,7 @@ class ChatHandler:
                     temperature=chat_request.temperature,
                     stream=chat_request.stream,
                     system=chat_request.system,
+                    websearch=chat_request.websearch,
                     reasoning_effort=chat_request.reasoningEffort,
                     is_reasoning_supported=chat_request.isReasoningSupported
                 )

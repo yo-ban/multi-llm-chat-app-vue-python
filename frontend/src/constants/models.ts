@@ -8,7 +8,8 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       name: 'Claude 3.7 Sonnet',
       contextWindow: 200000,
       maxTokens: 8192,
-      multimodal: true
+      multimodal: true,
+      supportFunctionCalling: true,
     },
     CLAUDE_3_7_SONNET_THINKING: {
       id: 'claude-3-7-sonnet-20250219-thinking',
