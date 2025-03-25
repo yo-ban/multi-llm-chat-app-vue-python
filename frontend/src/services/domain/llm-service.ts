@@ -3,7 +3,7 @@ import { API_BASE_URL, API_MESSAGES_ENDPOINT } from '@/constants/api';
 import { useSettingsStore } from '@/store/settings';
 import type { APISettings } from '@/types/api';
 import type { ToolCall } from '@/types/tools';
-import { WEB_SEARCH_TOOL_SUFFIX, REASONING_PREFIX_OPENAI } from '@/constants/personas';
+import { REASONING_PREFIX_OPENAI } from '@/constants/personas';
 
 /**
  * LLMサービスのインターフェース
@@ -172,9 +172,9 @@ class LLMServiceImpl implements LLMService {
       console.log("API Settings:", settings);
 
       let systemMessage = system;
-      if (settings.websearch) {
-        systemMessage = `${system}${WEB_SEARCH_TOOL_SUFFIX}`;
-      }
+      // if (settings.websearch) {
+      //   systemMessage = `${system}${WEB_SEARCH_TOOL_SUFFIX}`;
+      // }
 
       if (settings.isReasoningSupported && settings.vendor === "openai") {
         systemMessage = `${REASONING_PREFIX_OPENAI}\n\n${systemMessage}`;

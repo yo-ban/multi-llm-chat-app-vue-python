@@ -32,8 +32,8 @@ from app.message_utils.messages_preparer import (
 )
 from app.misc_utils.image_utils import upload_image_to_gemini
 from app.models.models import ChatRequest
-from app.function_calling.tool_definitions import get_tool_definitions, get_gemini_tool_definitions, get_anthropic_tool_definitions
-from app.logger.logging_utils import log_info, log_error
+from app.function_calling.tool_definitions import get_tool_definitions, get_gemini_tool_definitions, get_anthropic_tool_definitions, TOOL_USE_INSTRUCTION
+from app.logger.logging_utils import log_info, log_error, log_warning
 
 class ChatHandler:
     def __init__(self, api_key: str):
@@ -93,6 +93,7 @@ class ChatHandler:
             except Exception as e:
                 # If the error indicates that stream mode is unsupported, fall back.
                 if "Unsupported value: 'stream'" in str(e):
+                    log_warning("Stream mode is unsupported, falling back to non-streaming mode")
                     completion_args["stream"] = False
                     completion_args.pop("stream_options")
                     # Delegate non-streamed handling to the common function.
@@ -165,18 +166,25 @@ class ChatHandler:
                 "budget_tokens": budget_tokens
             }
 
+        response = None
+
         if websearch:
             params["tools"] = get_anthropic_tool_definitions(without_human_fallback=True)
-
-        response = await anthropic.messages.create(**params)
+            if "claude-3-7" in model:
+                params["betas"] = ["token-efficient-tools-2025-02-19"]
+                response = await anthropic.beta.messages.create(**params)
+            else:
+                response = await anthropic.messages.create(**params)
+        else:
+            response = await anthropic.messages.create(**params)
 
         if stream:
             return StreamingResponse(
                 anthropic_stream_generator(
                     response=response,
                     anthropic_client=anthropic,
-                    params=params,
-                    messages=anthropic_messages
+                    messages=anthropic_messages,
+                    params=params
                 ),
                 media_type="text/event-stream"
             )
@@ -400,6 +408,11 @@ class ChatHandler:
         """
         try:
             messages = await prepare_api_messages(chat_request.messages, multimodal=chat_request.multimodal)
+
+            if chat_request.websearch:
+                system = f"{chat_request.system}\n\n{TOOL_USE_INSTRUCTION}"
+            else:
+                system = chat_request.system
             
             if chat_request.model.startswith('openai-'):
                 return await self.handle_openai(
@@ -408,7 +421,7 @@ class ChatHandler:
                     max_tokens=chat_request.maxTokens,
                     temperature=chat_request.temperature,
                     stream=chat_request.stream,
-                    system=chat_request.system,
+                    system=system,
                     websearch=chat_request.websearch,
                     reasoning_effort=chat_request.reasoningEffort,
                     is_reasoning_supported=chat_request.isReasoningSupported,
@@ -420,7 +433,7 @@ class ChatHandler:
                     max_tokens=chat_request.maxTokens,
                     temperature=chat_request.temperature,
                     stream=chat_request.stream,
-                    system=chat_request.system,
+                    system=system,
                     websearch=chat_request.websearch,
                     image_generation=chat_request.imageGeneration
                 )
@@ -431,7 +444,7 @@ class ChatHandler:
                     max_tokens=chat_request.maxTokens,
                     temperature=chat_request.temperature,
                     stream=chat_request.stream,
-                    system=chat_request.system
+                    system=system
                 )
             else:  # Anthropic models
                 return await self.handle_anthropic(
@@ -440,7 +453,7 @@ class ChatHandler:
                     max_tokens=chat_request.maxTokens,
                     temperature=chat_request.temperature,
                     stream=chat_request.stream,
-                    system=chat_request.system,
+                    system=system,
                     websearch=chat_request.websearch,
                     reasoning_effort=chat_request.reasoningEffort,
                     is_reasoning_supported=chat_request.isReasoningSupported

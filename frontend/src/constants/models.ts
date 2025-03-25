@@ -82,6 +82,7 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       contextWindow: 128000,
       maxTokens: 16384,
       multimodal: true,
+      supportFunctionCalling: true,
     },
     OPENAI_CHATGPT_4_O: {
       id: 'openai-chatgpt-4o-latest',

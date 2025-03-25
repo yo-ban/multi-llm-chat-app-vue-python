@@ -25,7 +25,7 @@ SKIP_GEMINI_EXTENSIONS = [
     '.py',
     '.txt',
     '.md',
-    '.csv',
+    # '.csv',
 ] 
 
 # Supported MIME types for Gemini document processing
@@ -120,7 +120,35 @@ async def retrieve_page_data(url: str, content_type: Optional[str] = None, is_we
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
             'Accept-Language': 'en-US,en;q=0.9'
         })
-        await page.goto(url, wait_until="networkidle")
+        success_playwright = False
+        try:
+            # First attempt with networkidle strategy but with a shorter timeout
+            await page.goto(url, wait_until="networkidle", timeout=10000)
+            success_playwright = True
+
+        except Exception as e:
+            log_warning(f"Initial navigation with networkidle timed out, trying alternative approach: {str(e)}")
+            
+            try:
+                # Alternative approach: navigate without waiting, then use waitForFunction
+                await page.goto(url, wait_until="domcontentloaded", timeout=10000)
+                success_playwright = True
+
+            except Exception as e:
+
+                try:
+                    # Wait for DOM to be ready and URL to be loaded
+                    await page.wait_for_function("""
+                        () => {
+                            const readyStateCondition = document.readyState === 'interactive' || document.readyState === 'complete';
+                            return readyStateCondition;
+                        }
+                    """, timeout=10000)
+                    success_playwright = True
+
+                except Exception as e:
+                    log_error(f"Error during navigation: {str(e)}")
+                    success_playwright = False
 
         # Add a random delay of 500 to 2000 milliseconds to simulate human behavior
         await asyncio.sleep(random.randint(500, 2000) / 1000)
@@ -131,26 +159,40 @@ async def retrieve_page_data(url: str, content_type: Optional[str] = None, is_we
         # ページテキストを取得
         # text = await page.evaluate("() => document.body.innerText")
         page_html = await page.content()
-        text = md(page_html)
-        text_buffer = BytesIO(text.encode('utf-8'))
-        
+
         # スクリーンショットを取得
         screenshot_bytes = await page.screenshot(full_page=True)
         screenshot_buffer = BytesIO(screenshot_bytes)
-        
+
         await browser.close()
 
         try:
-            # テキストとスクリーンショットをGemini APIにアップロード
-            text_file = client.files.upload(
-                file=text_buffer,
-                config={"mime_type": "text/plain"}
-            )
-            screenshot_file = client.files.upload(
-                file=screenshot_buffer,
-                config={"mime_type": "image/png"}
-            )
-            return [screenshot_file, text_file], True
+            if success_playwright:
+                text = md(page_html)
+                text_buffer = BytesIO(text.encode('utf-8'))
+
+                # テキストとスクリーンショットをGemini APIにアップロード
+                text_file = client.files.upload(
+                    file=text_buffer,
+                    config={"mime_type": "text/plain"}
+                )
+                screenshot_file = client.files.upload(
+                    file=screenshot_buffer,
+                    config={"mime_type": "image/png"}
+                )
+                return [screenshot_file, text_file], True
+            
+            else:
+                response = httpx.get("https://r.jina.ai/" + url)
+                response.raise_for_status()
+                text = md(response.text)
+                text_buffer = BytesIO(text.encode('utf-8'))
+                # テキストとスクリーンショットをGemini APIにアップロード
+                text_file = client.files.upload(
+                    file=text_buffer,
+                    config={"mime_type": "text/plain"}
+                )
+                return [text_file], True
             
         except Exception as e:
             log_error(f"Error uploading files to Gemini: {str(e)}")

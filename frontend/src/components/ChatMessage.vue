@@ -690,7 +690,6 @@ img {
 }
 
 .assistant .message-content.streaming::after {
-  content: '|';
   display: inline-block;
   width: 0.5em;
   animation: cursor-blink 0.8s infinite;
