@@ -72,7 +72,14 @@ export const useConversationStore = defineStore('conversation', {
         const newConversationId = `conv-${uuidv4()}`;
         const nowDate = new Date().toISOString();
         const settingsStore = useSettingsStore();
-        const model = settingsStore.getModelById(settingsStore.defaultModel);
+        
+        // Ensure we have a valid default model, validate if using OpenRouter
+        let modelId = settingsStore.defaultModel;
+        if (settingsStore.defaultVendor === 'openrouter') {
+          modelId = settingsStore.validateModelSelection(modelId, settingsStore.defaultVendor);
+        }
+        
+        const model = settingsStore.getModelById(modelId);
         const newConversation: Conversation = {
           conversationId: newConversationId,
           title: 'New Chat',
@@ -80,11 +87,11 @@ export const useConversationStore = defineStore('conversation', {
           updatedAt: nowDate,
           system: '',
           settings: {
-            model: settingsStore.defaultModel,
+            model: modelId,
             maxTokens: settingsStore.defaultMaxTokens,
             vendor: settingsStore.defaultVendor,
             temperature: model?.unsupportsTemperature ? undefined : settingsStore.defaultTemperature,
-            reasoningEffort: settingsStore.getEffectiveReasoningEffort(settingsStore.defaultModel),
+            reasoningEffort: settingsStore.getEffectiveReasoningEffort(modelId),
             websearch: settingsStore.defaultWebSearch,
             multimodal: model?.multimodal ?? false,
             imageGeneration: model?.imageGeneration ?? false,
@@ -114,6 +121,12 @@ export const useConversationStore = defineStore('conversation', {
     async updateConversationSettings(conversationId: string, settings: APISettings) {
       const conversationIndex = this.conversationList.findIndex(c => c.conversationId === conversationId);
       if (conversationIndex !== -1) {
+        // If this is an OpenRouter vendor, validate the model selection
+        if (settings.vendor === 'openrouter') {
+          const settingsStore = useSettingsStore();
+          settings.model = settingsStore.validateModelSelection(settings.model, settings.vendor);
+        }
+        
         this.conversationList[conversationIndex].settings = settings;
         await storageService.saveConversationList(this.conversationList);
       }

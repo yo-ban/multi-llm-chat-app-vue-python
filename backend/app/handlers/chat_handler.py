@@ -370,7 +370,18 @@ class ChatHandler:
             "messages": openrouter_messages,
             "max_tokens": max_tokens,
             "stream": stream,
-            "temperature": temperature
+            "temperature": temperature,
+            "extra_body": { 
+                "provider": {
+                    "order": [
+                        "DeepInfra",
+                        "Parasail"
+                    ],
+                    "ignore": [
+                        "Hyperbolic"
+                    ]
+                }
+            }
         }
 
         response = await openrouter.chat.completions.create(**completion_args)

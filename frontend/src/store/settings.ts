@@ -47,6 +47,26 @@ export const useSettingsStore = defineStore('settings', {
         return undefined;
       }
       return this.defaultReasoningEffort || model.defaultReasoningEffort || 'medium';
+    },
+
+    // Check if a given modelId is valid for the specified vendor
+    // Returns the valid modelId, or a fallback if necessary
+    validateModelSelection(modelId: string, vendor: string): string {
+      // Only perform validation for OpenRouter vendor
+      if (vendor !== 'openrouter') return modelId;
+      
+      // If there are OpenRouter models and the current model exists, keep it
+      if (this.openrouterModels.length > 0) {
+        const modelExists = this.openrouterModels.some(m => m.id === modelId);
+        if (modelExists) {
+          return modelId; // Model is valid
+        } else if (this.openrouterModels.length > 0) {
+          return this.openrouterModels[0].id; // Fallback to first available model
+        }
+      }
+      
+      // If we have no OpenRouter models yet, preserve the current selection
+      return modelId;
     }
   },
 });

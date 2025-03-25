@@ -160,12 +160,13 @@ const currentConversationSettings = computed<APISettings>(() => {
   
   // OpenRouterの場合、モデルの存在確認
   if (settings.vendor === 'openrouter') {
-    const modelExists = settingsStore.openrouterModels.some(m => m.id === settings.model);
-    if (!modelExists && settingsStore.openrouterModels.length > 0) {
-      // モデルが見つからない場合は最初のOpenRouterモデルを使用
+    // settingsStoreのvalidateModelSelectionメソッドを使用して有効なモデルIDを取得
+    const validModelId = settingsStore.validateModelSelection(settings.model, settings.vendor);
+    if (validModelId !== settings.model) {
+      // モデルIDが変更された場合は、新しい設定を返す
       return {
         ...settings,
-        model: settingsStore.openrouterModels[0].id
+        model: validModelId
       };
     }
   }
@@ -209,7 +210,36 @@ const selectedModel = computed(() => {
   console.log("model:", model)
   console.log("vendor:", vendor)
   
-  // モデルIDを直接使用して検索
+  // OpenRouterの場合は openrouterModels から検索
+  if (vendor === 'openrouter') {
+    // openrouterModels から指定されたモデルIDを検索
+    const openRouterModel = settingsStore.openrouterModels.find(m => m.id === model);
+    if (openRouterModel) {
+      return openRouterModel;
+    }
+    
+    // モデルが見つからない場合でも、openrouterModelsが空でなければそこから取得
+    if (settingsStore.openrouterModels.length > 0) {
+      // 現在選択されているモデルが存在しない場合は、一番目のモデルを返す
+      return settingsStore.openrouterModels[0];
+    }
+    
+    // openrouterModelsが空の場合は現在のモデルIDを持つ最小限のモデル情報を返す
+    // （読み込み完了前の一時的な状態を処理するため）
+    return {
+      id: model,
+      name: model.split('/').pop() || model,
+      contextWindow: 8000,
+      maxTokens: 8000,
+      multimodal: false,
+      supportsReasoning: false,
+      unsupportsTemperature: false,
+      supportFunctionCalling: false,
+      imageGeneration: false
+    };
+  }
+  
+  // 通常のベンダー（OpenRouter以外）の場合は従来の実装を使用
   const vendorModels = MODELS[vendor] || {};
   for (const key in vendorModels) {
     if (vendorModels[key].id === model) {
@@ -348,11 +378,11 @@ function updateIsCustomSystemMessageSelected(isCustomSelected: boolean) {
 
 async function updateSettings(settings: APISettings) {
   if (conversationStore.currentConversationId) {
-    // OpenRouterの場合の追加検証
+    // OpenRouterの場合は設定ストアの検証メソッドを使用
     if (settings.vendor === 'openrouter') {
-      const modelExists = settingsStore.openrouterModels.some(m => m.id === settings.model);
-      if (!modelExists && settingsStore.openrouterModels.length > 0) {
-        settings.model = settingsStore.openrouterModels[0].id;
+      const validModelId = settingsStore.validateModelSelection(settings.model, settings.vendor);
+      if (validModelId !== settings.model) {
+        settings.model = validModelId;
       }
     }
     

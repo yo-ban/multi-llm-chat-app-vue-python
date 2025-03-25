@@ -340,11 +340,30 @@ const availableModels = computed(() => {
 
 const selectedModel = computed(() => {
   if (localSettings.value.vendor === 'openrouter') {
+    // まず指定されたモデルIDを検索
     const model = settingsStore.openrouterModels.find(m => m.id === localSettings.value.model);
     if (model) return model;
-    // If no matching model found, return first available model or fallback
-    return settingsStore.openrouterModels[0] || MODELS.anthropic.CLAUDE_3_5_SONNET;
+    
+    // モデルが見つからず、openrouterModelsが空でない場合は最初のモデルを返す
+    if (settingsStore.openrouterModels.length > 0) {
+      return settingsStore.openrouterModels[0];
+    }
+    
+    // openrouterModelsが空の場合（非同期ロード中など）は仮のモデル情報を返す
+    return {
+      id: localSettings.value.model,
+      name: localSettings.value.model.split('/').pop() || localSettings.value.model,
+      contextWindow: 8000,
+      maxTokens: 8000,
+      multimodal: false,
+      supportsReasoning: false,
+      unsupportsTemperature: false,
+      supportFunctionCalling: false,
+      imageGeneration: false
+    };
   }
+  
+  // OpenRouter以外の場合は従来のロジックを使用
   return Object.values(MODELS[localSettings.value.vendor] || {})
     .find((m) => m.id === localSettings.value.model) || MODELS.anthropic.CLAUDE_3_5_SONNET;
 });
@@ -391,6 +410,20 @@ watch(
   (newVendor, oldVendor) => {
     if (newVendor === oldVendor) return;
 
+    // OpenRouter の場合は特別処理：モデルリストが空でも現在の選択を維持する
+    if (newVendor === 'openrouter') {
+      // 何もしない - 既存のモデル選択を保持
+      // displayedModel は selectedModel の computed プロパティで更新される
+      displayedModel.value = selectedModel.value;
+      
+      // ダイアログが開いていない場合のみ設定を更新
+      if (!isModelDialogOpen.value) {
+        emit('update:settings', { ...localSettings.value });
+      }
+      return;
+    }
+
+    // OpenRouter 以外の場合は通常処理
     // 現在のモデルが新しいベンダーで利用可能かチェック
     const modelExists = availableModels.value.some((m: Model) => m.id === localSettings.value.model);
     
@@ -500,13 +533,13 @@ watch(
   () => settingsStore.openrouterModels,
   (newModels) => {
     if (localSettings.value.vendor === 'openrouter') {
-      // If current model is not found in the new models list, switch to the first available model
-      const currentModel = newModels.find(m => m.id === localSettings.value.model);
-      if (!currentModel && newModels.length > 0) {
-        localSettings.value.model = newModels[0].id;
+      // Use validateModelSelection to check and get a valid model ID
+      const validModelId = settingsStore.validateModelSelection(localSettings.value.model, localSettings.value.vendor);
+      if (validModelId !== localSettings.value.model) {
+        localSettings.value.model = validModelId;
+        displayedModel.value = selectedModel.value;
+        emit('update:settings', { ...localSettings.value });
       }
-      displayedModel.value = selectedModel.value;
-      emit('update:settings', { ...localSettings.value });
     }
   },
   { immediate: true }
@@ -514,10 +547,12 @@ watch(
 
 // Add a new watcher to handle model updates when the selected model changes
 watch(selectedModel, (newModel) => {
-  if (localSettings.value.vendor === 'openrouter' && 
-      !settingsStore.openrouterModels.find(m => m.id === localSettings.value.model) && 
-      settingsStore.openrouterModels.length > 0) {
-    localSettings.value.model = settingsStore.openrouterModels[0].id;
+  if (localSettings.value.vendor === 'openrouter') {
+    // Use the validateModelSelection method here too
+    const validModelId = settingsStore.validateModelSelection(localSettings.value.model, localSettings.value.vendor);
+    if (validModelId !== localSettings.value.model) {
+      localSettings.value.model = validModelId;
+    }
   }
 }, { immediate: true });
 
