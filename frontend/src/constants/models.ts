@@ -102,12 +102,14 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       multimodal: true,
       supportFunctionCalling: true,
     },
-    GEMINI_2_0_PRO_EXP: {
-      id: 'gemini-2.0-pro-exp-02-05',
-      name: 'Gemini 2.0 Pro Experimental',
-      contextWindow: 2097152,
-      maxTokens: 8192,
+    GEMINI_2_5_PRO_EXP: {
+      id: 'gemini-2.5-pro-exp-03-25',
+      name: 'Gemini 2.5 Pro Experimental 03-25',
+      contextWindow: 1048576,
+      maxTokens: 65536,
       multimodal: true,
+      supportFunctionCalling: true,
+      supportsReasoning: true,
     },
     GEMINI_2_0_FLASH_THINKING_EXP: {
       id: 'gemini-2.0-flash-thinking-exp-01-21',
@@ -117,14 +119,21 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       multimodal: true,
       supportsReasoning: true,
     },
-    GEMINI_2_0_FLASH_EXP: {
-      id: 'gemini-2.0-flash-exp',
-      name: 'Gemini 2.0 Flash Experimental',
+    GEMINI_2_0_FLASH_EXP_IMAGE_GENERATION: {
+      id: 'gemini-2.0-flash-exp-image-generation',
+      name: 'Gemini 2.0 Flash (Image Generation) Experimental',
       contextWindow: 32768,
       maxTokens: 8192,
       multimodal: true,
       imageGeneration: true,
       supportFunctionCalling: true,
+    },
+    GEMINI_2_0_PRO_EXP: {
+      id: 'gemini-2.0-pro-exp-02-05',
+      name: 'Gemini 2.0 Pro Experimental',
+      contextWindow: 2097152,
+      maxTokens: 8192,
+      multimodal: true,
     },
   },
   openrouter: {
