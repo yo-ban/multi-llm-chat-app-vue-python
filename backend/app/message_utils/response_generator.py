@@ -13,7 +13,8 @@ from google.genai.types import (
     Content,
     Part,
     ToolConfig,
-    FunctionCallingConfig
+    FunctionCallingConfig,
+    GenerateContentResponsePromptFeedback
 )
 
 # Get logger instance
@@ -90,101 +91,110 @@ async def gemini_stream_generator(
 
             async for event in response:
                 # Handle function calls if present
-                if event.candidates[0].content:
-                    if event.candidates[0].content.parts:
-                        part = event.candidates[0].content.parts[0]
+                if hasattr(event, 'candidates') and event.candidates:
+                    if hasattr(event.candidates[0], 'content') and event.candidates[0].content:
+                        if event.candidates[0].content.parts:
+                            part = event.candidates[0].content.parts[0]
 
-                        if part.function_call:
-                            has_function_call = True
+                            if part.function_call:
+                                has_function_call = True
 
-                            # Initialize parts lists
-                            function_call_parts = []
-                            function_response_parts = []
-                            text_parts = []
+                                # Initialize parts lists
+                                function_call_parts = []
+                                function_response_parts = []
+                                text_parts = []
 
-                            # Add text parts if present
-                            if text:
-                                text_parts.append(Part.from_text(text=text))
+                                # Add text parts if present
+                                if text:
+                                    text_parts.append(Part.from_text(text=text))
 
-                            # Handle function calls
-                            for function_call in event.function_calls:
-                                # Notify about tool call start
-                                yield f"data: {json.dumps({'type': 'tool_call_start', 'tool': function_call.name})}\n\n"
+                                # Handle function calls
+                                for function_call in event.function_calls:
+                                    # Notify about tool call start
+                                    yield f"data: {json.dumps({'type': 'tool_call_start', 'tool': function_call.name})}\n\n"
+                                    
+                                    # Handle the tool call
+                                    tool_result = None
+                                    async for status in handle_tool_call(function_call.name, function_call.args):
+                                        if status["type"] == "tool_execution_complete":
+                                            tool_result = status["result"]
+                                        else:
+                                            # Forward status updates to frontend
+                                            yield f"data: {json.dumps(status)}\n\n"
+
+                                    # Create function call part with the tool result
+                                    function_call_part = Part.from_function_call(
+                                        name=function_call.name,
+                                        args=function_call.args
+                                    )
+                                    function_call_parts.append(function_call_part)
+
+                                    # Create function response part with the tool result
+                                    function_response_part = Part.from_function_response(
+                                        name=function_call.name,
+                                        response={"output": tool_result}
+                                    )
+                                    function_response_parts.append(function_response_part)
                                 
-                                # Handle the tool call
-                                tool_result = None
-                                async for status in handle_tool_call(function_call.name, function_call.args):
-                                    if status["type"] == "tool_execution_complete":
-                                        tool_result = status["result"]
-                                    else:
-                                        # Forward status updates to frontend
-                                        yield f"data: {json.dumps(status)}\n\n"
+                                    yield f"data: {json.dumps({'type': 'tool_call_end', 'tool': function_call.name})}\n\n"
 
-                                # Create function call part with the tool result
-                                function_call_part = Part.from_function_call(
-                                    name=function_call.name,
-                                    args=function_call.args
+                                # Create function call content
+                                function_call_content = Content(
+                                    role="model",
+                                    parts=text_parts + function_call_parts
                                 )
-                                function_call_parts.append(function_call_part)
 
-                                # Create function response part with the tool result
-                                function_response_part = Part.from_function_response(
-                                    name=function_call.name,
-                                    response={"output": tool_result}
+                                # Create function response content
+                                function_response_content = Content(
+                                    role="user",
+                                    parts=function_response_parts
                                 )
-                                function_response_parts.append(function_response_part)
+
+                                # Update running history with function call and response
+                                running_history.append(function_call_content)
+                                running_history.append(function_response_content)
+
+                                # Change tool config to AUTO
+                                tool_config = ToolConfig(
+                                    function_calling_config=FunctionCallingConfig(mode='AUTO')
+                                )
+                                running_args["tool_config"] = tool_config
+
+                                if tool_calls_count > 0:
+                                    running_args["tools"] = [get_gemini_tool_definitions()]
+
+                                tool_calls_count += 1
+
+                                # Get new response incorporating tool results
+                                response = await gemini_client.aio.models.generate_content_stream(
+                                    model=model,
+                                    contents=running_history,
+                                    config=GenerateContentConfig(**running_args)
+                                )
+                                
+                                break  # Break inner loop to start new response processing
                             
-                                yield f"data: {json.dumps({'type': 'tool_call_end', 'tool': function_call.name})}\n\n"
+                            if part.inline_data:
+                                async for inline_chunk in _yield_inline_image(part.inline_data):
+                                    yield inline_chunk
 
-                            # Create function call content
-                            function_call_content = Content(
-                                role="model",
-                                parts=text_parts + function_call_parts
-                            )
+                            if part.thought:
+                                yield f"data: {json.dumps({'text': part.thought})}\n\n"
 
-                            # Create function response content
-                            function_response_content = Content(
-                                role="user",
-                                parts=function_response_parts
-                            )
+                            # Handle regular text content
+                            if part.text:
+                                text += event.text
+                                yield f"data: {json.dumps({'text': event.text})}\n\n"
 
-                            # Update running history with function call and response
-                            running_history.append(function_call_content)
-                            running_history.append(function_response_content)
-
-                            # Change tool config to AUTO
-                            tool_config = ToolConfig(
-                                function_calling_config=FunctionCallingConfig(mode='AUTO')
-                            )
-                            running_args["tool_config"] = tool_config
-
-                            if tool_calls_count > 0:
-                                running_args["tools"] = [get_gemini_tool_definitions()]
-
-                            tool_calls_count += 1
-
-                            # Get new response incorporating tool results
-                            response = await gemini_client.aio.models.generate_content_stream(
-                                model=model,
-                                contents=running_history,
-                                config=GenerateContentConfig(**running_args)
-                            )
-                            
-                            break  # Break inner loop to start new response processing
-                        
-                        if part.inline_data:
-                            async for inline_chunk in _yield_inline_image(part.inline_data):
-                                yield inline_chunk
-
-                        # Handle regular text content
-                        if part.text:
-                            text += event.text
-                            yield f"data: {json.dumps({'text': event.text})}\n\n"
-
-                        if event.candidates:
-                            if event.candidates[0].finish_reason:
-                                if event.usage_metadata:
-                                    latest_usage = event.usage_metadata
+                            if event.candidates:
+                                if event.candidates[0].finish_reason:
+                                    if event.usage_metadata:
+                                        latest_usage = event.usage_metadata
+                    
+                else:
+                    if hasattr(event, 'prompt_feedback'):
+                        prompt_feedback: GenerateContentResponsePromptFeedback = event.prompt_feedback
+                        yield f"data: {json.dumps({'text': prompt_feedback.model_dump_json()})}\n\n"
 
             # If no function calls were made, we're done
             if not has_function_call:

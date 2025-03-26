@@ -82,7 +82,8 @@ const scrollTop = ref(0);
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
 const fileUploaderRef = ref<InstanceType<typeof FileUploader> | null>(null);
 
-const acceptedFileTypeImages = ref('image/*');
+// png, jpg, jpeg
+const acceptedFileTypeImages = ref('.png, .jpeg, .jpg');
 
 const conversationStore = useConversationStore();
 
@@ -180,7 +181,7 @@ const onPaste = async (event: ClipboardEvent) => {
   const validImages: string[] = [];
 
   for (const item of Array.from(items)) {
-    if (item.type.indexOf('image') !== -1) {
+    if (item.type.indexOf('image') !== -1 && isMultimodalModel.value) {
       const blob = item.getAsFile();
       if (blob) {
         const reader = new FileReader();

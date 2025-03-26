@@ -14,7 +14,8 @@ from google.genai.types import (
     HarmCategory,
     HarmBlockThreshold,
     Content,
-    Part
+    Part,
+    ThinkingConfig
 )
 
 from app.message_utils.response_generator import (
@@ -249,6 +250,11 @@ class ChatHandler:
             "response_mime_type": "text/plain"
         }
 
+        # if is_reasoning_supported:
+        #     completion_args["thinking_config"] = ThinkingConfig(
+        #         include_thoughts=True
+        #     )
+
         if image_generation:
             completion_args["response_modalities"] = [
                 "IMAGE",
@@ -446,7 +452,8 @@ class ChatHandler:
                     stream=chat_request.stream,
                     system=system,
                     websearch=chat_request.websearch,
-                    image_generation=chat_request.imageGeneration
+                    image_generation=chat_request.imageGeneration,
+                    is_reasoning_supported=chat_request.isReasoningSupported,
                 )
             elif "/" in chat_request.model:  # OpenRouter models
                 return await self.handle_openrouter(
