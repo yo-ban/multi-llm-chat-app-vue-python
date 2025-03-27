@@ -1,6 +1,6 @@
 import os
 import asyncio
-from typing import List, Dict
+from typing import List, Dict, Any
 import aiohttp
 from google import genai
 from google.genai.types import (
@@ -33,7 +33,7 @@ async def resolve_redirect_url(url: str) -> str:
         return url
         
     try:
-        async with aiohttp.ClientSession(max_field_size=8190*2, max_line_size=8190*2) as session:
+        async with aiohttp.ClientSession(max_field_size=8190*2, max_line_size=8190*2, timeout=aiohttp.ClientTimeout(total=10)) as session:
             async with session.get(url, allow_redirects=True) as response:
                 # Get the final URL after all redirects
                 final_url = str(response.url)
@@ -41,6 +41,16 @@ async def resolve_redirect_url(url: str) -> str:
     except Exception as e:
         log_error(f"Error resolving URL {url}: {str(e)}")
         return url
+
+async def format_search_results(results: List[SearchResult]) -> str:
+    """Format web search results into a readable text format."""
+    formatted_text = []
+    for i, result in enumerate(results, 1):
+        formatted_text.append(f"{i}. {result.title}")
+        formatted_text.append(f"   {result.link}")
+        if result.snippet:
+            formatted_text.append(f"   {result.snippet}\n")
+    return "\n".join(formatted_text)
 
 async def extract_sources_from_metadata(metadata: GroundingMetadata, num_results: int) -> List[SearchResult]:
     """
@@ -85,7 +95,7 @@ async def extract_sources_from_metadata(metadata: GroundingMetadata, num_results
     results = list(source_map.values())[:num_results]
     return results
 
-async def web_search(query: str, num_results: int = 5) -> List[SearchResult]:
+async def web_search(query: str, num_results: int = 5) -> str:
     """
     Perform a web search using Gemini's built-in search capability
     
@@ -94,7 +104,7 @@ async def web_search(query: str, num_results: int = 5) -> List[SearchResult]:
         num_results: Number of results to return (default: 5)
         
     Returns:
-        List of SearchResult objects
+        str: Formatted search results as a string
     """
     try:
         
@@ -178,7 +188,8 @@ async def web_search(query: str, num_results: int = 5) -> List[SearchResult]:
             "info_length": len(results) if results else 0
         })
 
-        return results
+        formatted_results = await format_search_results(results)
+        return formatted_results
         
     except Exception as e:
         log_error(f"Gemini search error: {str(e)}", additional_info={"query": query, "num_results": num_results})

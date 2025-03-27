@@ -8,28 +8,28 @@ from app.logger.logging_utils import get_logger, log_error, log_info, log_warnin
 # Get logger instance
 logger = get_logger()
 
-def format_search_results(results: List[Any]) -> str:
-    """Format web search results into a readable text format."""
-    formatted_text = []
-    for i, result in enumerate(results, 1):
-        formatted_text.append(f"{i}. {result.title}")
-        formatted_text.append(f"   {result.link}")
-        if result.snippet:
-            formatted_text.append(f"   {result.snippet}\n")
-    return "\n".join(formatted_text)
+# def format_search_results(results: List[Any]) -> str:
+#     """Format web search results into a readable text format."""
+#     formatted_text = []
+#     for i, result in enumerate(results, 1):
+#         formatted_text.append(f"{i}. {result.title}")
+#         formatted_text.append(f"   {result.link}")
+#         if result.snippet:
+#             formatted_text.append(f"   {result.snippet}\n")
+#     return "\n".join(formatted_text)
 
-def format_web_extraction(result: Dict[str, Any]) -> str:
-    """Format web extraction results into a readable text format."""
-    if result.get("status") == "error":
-        return f"Error extracting content: {result.get('error', 'Unknown error')}"
+# def format_web_extraction(result: Dict[str, Any]) -> str:
+#     """Format web extraction results into a readable text format."""
+#     if result.get("status") == "error":
+#         return f"Error extracting content: {result.get('error', 'Unknown error')}"
     
-    formatted_text = []
-    formatted_text.append(f"Extracted from: {result['url']}")
-    if result.get("extracted_info"):
-        formatted_text.append(f"\n{result['extracted_info']}")
-    if result.get("error"):
-        formatted_text.append(f"\n{result['error']}")
-    return "\n".join(formatted_text)
+#     formatted_text = []
+#     formatted_text.append(f"Extracted from: {result['url']}")
+#     if result.get("extracted_info"):
+#         formatted_text.append(f"\n{result['extracted_info']}")
+#     if result.get("error"):
+#         formatted_text.append(f"\n{result['error']}")
+#     return "\n".join(formatted_text)
 
 async def handle_tool_call(
     tool_name: str,
@@ -57,8 +57,7 @@ async def handle_tool_call(
                 log_info("Executing web search", {"query": query, "num_results": num_results})
                 yield {"type": "tool_execution", "tool": "web_search", "query": query}
                 
-                results = await web_search(query, num_results)
-                result = format_search_results(results)
+                result = await web_search(query, num_results)
                 
         elif tool_name == "web_browsing":
             url = tool_input.get("url")
@@ -68,8 +67,8 @@ async def handle_tool_call(
                 log_info("Executing web extraction", {"url": url, "query": query})
                 yield {"type": "tool_execution", "tool": "web_browsing", "url": url}
                 
-                browse_result = await web_browsing(url, query)
-                result = format_web_extraction(browse_result)
+                result = await web_browsing(url, query)
+
             else:
                 log_warning("No URL or query provided for web browsing")
                 yield {"type": "error", "message": "Invalid arguments provided for web browsing"}

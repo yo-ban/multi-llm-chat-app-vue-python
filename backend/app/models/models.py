@@ -40,3 +40,17 @@ class SearchResult(BaseModel):
     title: str
     link: str
     snippet: str 
+
+class WebExtractionResult(BaseModel):
+    """
+    Represents a web extraction result
+    """
+    url: str
+    query: str
+    status: str
+    timestamp: str
+    content_type: str
+    is_web_page: bool
+    extracted_info: str | List[str] | None = None
+    error: Optional[str] = None
+    stack_trace: Optional[str] = None

@@ -19,7 +19,7 @@ from google.genai.types import (
     Part
 )
 from app.message_utils.usage_parser import parse_usage_gemini
-
+from app.models.models import WebExtractionResult
 SKIP_GEMINI_EXTENSIONS = [
     '.ipynb',
     '.py',
@@ -49,6 +49,19 @@ WEB_MIME_TYPES = {
     'application/xhtml+xml': '.html',
     'application/html': '.html'
 }
+
+async def format_web_extraction(result: WebExtractionResult) -> str:
+    """Format web extraction results into a readable text format."""
+    if result.status == "error":
+        return f"Error extracting content: {result.error or 'Unknown error'}"
+    
+    formatted_text = []
+    formatted_text.append(f"Extracted from: {result.url}")
+    if result.extracted_info:
+        formatted_text.append(f"\n{result.extracted_info}")
+    if result.error:
+        formatted_text.append(f"\n{result.error}")
+    return "\n".join(formatted_text)
 
 async def retrieve_page_data(url: str, content_type: Optional[str] = None, is_web_page: Optional[bool] = None) -> Tuple[List[File] | str, bool]:
     """
@@ -425,7 +438,7 @@ async def detect_mime_type(url: str) -> Tuple[str, bool]:
         )
         return mime_type, is_web_page
 
-async def web_browsing(url: str, query: str) -> Dict[str, Any]:
+async def web_browsing(url: str, query: str) -> str:
     """
     Extract information from a specified URL based on a query using Playwright for web pages
     and direct download for documents, then use Gemini 2.0 Flash for information extraction.
@@ -442,15 +455,7 @@ async def web_browsing(url: str, query: str) -> Dict[str, Any]:
         query (str): The query specifying what information to extract
 
     Returns:
-        Dict[str, Any]: A dictionary containing:
-            - url: The target URL
-            - query: The search query
-            - extracted_info: The extracted relevant information
-            - error: Error message if an error occurred (optional)
-            - status: Status of the extraction ("success" or "error")
-            - timestamp: ISO format timestamp of when the extraction was performed
-            - content_type: The type of content that was processed
-            - is_web_page: Whether the content was processed as a web page
+        str: A string containing the extracted information
 
     Raises:
         Exception: Any exceptions during content retrieval or information extraction are caught and returned in the response dictionary
@@ -466,42 +471,40 @@ async def web_browsing(url: str, query: str) -> Dict[str, Any]:
         "is_web_page": is_web_page
     })
 
-    response = {
-        "url": url,
-        "query": query,
-        "status": "error",  # Default to error, will be updated on success
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "content_type": content_type,
-        "is_web_page": is_web_page
-    }
+    response = WebExtractionResult(
+        url=url,
+        query=query,
+        status="error",  # Default to error, will be updated on success
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        content_type=content_type,
+        is_web_page=is_web_page
+    )
 
     try:
         # Retrieve content and upload to Gemini
         log_debug("Retrieving content", {
             "url": url, 
-            "content_type": response["content_type"],
-            "is_web_page": is_web_page
+            "content_type": response.content_type,
+            "is_web_page": response.is_web_page
         })
-        file_data, use_gemini = await retrieve_page_data(url, content_type, is_web_page)
+        file_data, use_gemini = await retrieve_page_data(url, response.content_type, response.is_web_page)
         
         if use_gemini:
             # Extract relevant information using Gemini
-            log_debug("Extracting relevant information using Gemini", {"query": query})
-            relevant_info = await extract_relevant_info(file_data, query)
+            log_debug("Extracting relevant information using Gemini", {"query": response.query})
+            relevant_info = await extract_relevant_info(file_data, response.query)
         else:
             relevant_info = file_data
 
         # Update response with success data
-        response.update({
-            "status": "success",
-            "extracted_info": relevant_info
-        })
+        response.status = "success"
+        response.extracted_info = relevant_info
         
         log_info("Successfully extracted information", {
-            "url": url,
-            "query": query,
-            "content_type": response["content_type"],
-            "is_web_page": is_web_page,
+            "url": response.url,
+            "query": response.query,
+            "content_type": response.content_type,
+            "is_web_page": response.is_web_page,
             "info_length": len(relevant_info) if relevant_info else 0
         })
         
@@ -509,16 +512,15 @@ async def web_browsing(url: str, query: str) -> Dict[str, Any]:
         error_msg = str(e)
         stack_trace = traceback.format_exc()
         log_error(f"Error during extraction: {error_msg}", {
-            "url": url,
-            "query": query,
-            "content_type": response["content_type"],
-            "is_web_page": is_web_page,
+            "url": response.url,
+            "query": response.query,
+            "content_type": response.content_type,
+            "is_web_page": response.is_web_page,
             "stack_trace": stack_trace
         })
         
-        response.update({
-            "error": error_msg,
-            "stack_trace": stack_trace if os.getenv("DEBUG", "false").lower() == "true" else None
-        })
+        response.error = error_msg
+        response.stack_trace = stack_trace if os.getenv("DEBUG", "false").lower() == "true" else None
     
-    return response
+    formatted_result = await format_web_extraction(response)
+    return formatted_result
