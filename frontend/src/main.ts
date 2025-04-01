@@ -32,7 +32,8 @@ import {
   faUserCircle, 
   faEye,
   faImage,
-  faCopy
+  faCopy,
+  faCodeBranch
 } from '@fortawesome/free-solid-svg-icons';
 import { faComment } from '@fortawesome/free-regular-svg-icons'  
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
@@ -72,7 +73,8 @@ library.add(
   faUserCircle,
   faEye,
   faImage,
-  faCopy
+  faCopy,
+  faCodeBranch
 );
 
 const app = createApp(App);

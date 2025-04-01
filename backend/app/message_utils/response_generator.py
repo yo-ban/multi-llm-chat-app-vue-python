@@ -3,8 +3,8 @@ import base64
 from typing import AsyncGenerator, Any, Dict, List
 from openai import AsyncOpenAI
 from anthropic import AsyncAnthropic
-from app.function_calling.tool_handlers import handle_tool_call
-from app.function_calling.tool_definitions import get_tool_definitions, get_gemini_tool_definitions, get_anthropic_tool_definitions
+from app.function_calling.handlers import handle_tool_call
+from app.function_calling.definitions import get_tool_definitions, get_gemini_tool_definitions, get_anthropic_tool_definitions
 from app.message_utils.usage_parser import parse_usage, parse_usage_gemini, parse_usage_anthropic
 from app.logger.logging_utils import get_logger, log_error, log_info, log_warning, log_debug
 from google.genai.client import Client
@@ -261,8 +261,15 @@ async def openai_stream_generator(
                                     yield f"data: {json.dumps({'type': 'tool_call_start', 'tool': tool_call.function.name, 'id': tool_call.id})}\n\n"
                             else:
                                 # Accumulate arguments
-                                if tool_call.function and tool_call.function.arguments:
-                                    tool_calls_buffer[index].function.arguments += tool_call.function.arguments
+                                current_args = tool_calls_buffer[index].function.arguments
+                                new_args_chunk = tool_call.function.arguments
+
+                                # Ensure both parts are treated as strings (empty if None) before concatenation
+                                current_args_str = current_args if current_args is not None else ""
+                                new_args_chunk_str = new_args_chunk if new_args_chunk is not None else ""
+                                
+                                # Perform safe concatenation
+                                tool_calls_buffer[index].function.arguments = current_args_str + new_args_chunk_str
                             
                             # If we have complete arguments, execute the function
                             if (tool_call.function and tool_call.function.arguments and 
@@ -530,6 +537,11 @@ async def anthropic_stream_generator(
                                     # Reset tracking variables for next iteration
                                     current_tool_name = None
                                     current_tool_id = None
+
+                                    if partial_text:
+                                        # send line break to frontend
+                                        yield f"data: {json.dumps({'text': '\n\n'})}\n\n"
+
                                     partial_text = ""
 
                                     # Break the inner loop to start processing the new response

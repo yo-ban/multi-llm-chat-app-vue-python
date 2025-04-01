@@ -30,6 +30,13 @@ ${fileDocuments}
  */
 export function countTokens(text: string): number {
   // Normalize text to NFKC form for consistent token counting
-  const normalizedText = text.normalize('NFKC');
-  return encode(normalizedText).length;
+  try {
+    const normalizedText = text.normalize('NFKC');
+    return encode(normalizedText, {
+      allowedSpecial: 'all'
+    }).length;
+  } catch (error) {
+    console.error('Error counting tokens:', error);
+    return 0;
+  }
 }

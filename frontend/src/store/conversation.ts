@@ -244,7 +244,9 @@ export const useConversationStore = defineStore('conversation', {
         
         // 新しい会話IDを生成
         const newConversationId = `conv-${uuidv4()}`;
-        const nowDate = new Date().toISOString();
+        
+        // YYYY-MM-DD
+        const nowDate = new Date().toISOString().split('T')[0];
         
         // 会話のディープコピーを作成
         const duplicatedConversation: Conversation = {
@@ -276,6 +278,69 @@ export const useConversationStore = defineStore('conversation', {
         return newConversationId;
       } catch (error) {
         console.error('Error duplicating conversation:', error);
+        throw error;
+      }
+    },
+
+    async createBranchFromMessage(messageId: string) {
+      try {
+        if (!this.currentConversationId) {
+          throw new Error('No current conversation');
+        }
+        
+        // Current conversation
+        const currentConversation = this.conversationList.find(
+          c => c.conversationId === this.currentConversationId
+        );
+        
+        if (!currentConversation) {
+          throw new Error(`Current conversation not found`);
+        }
+        
+        // Get all messages from the current conversation
+        const allMessages = await storageService.getConversationMessages(this.currentConversationId);
+        
+        // Find the index of the specified message
+        const messageIndex = allMessages.findIndex(msg => msg.id === messageId);
+        if (messageIndex === -1) {
+          throw new Error(`Message with ID ${messageId} not found`);
+        }
+        
+        // Get messages up to and including the specified message
+        const messagesUpToSpecified = allMessages.slice(0, messageIndex + 1);
+        
+        // Create a new conversation (branch)
+        const newConversationId = `conv-${uuidv4()}`;
+
+        // YYYY-MM-DD
+        const nowDate = new Date().toISOString().split('T')[0];
+        
+        // Create a copy of the current conversation with a new title
+        const branchedConversation: Conversation = {
+          ...JSON.parse(JSON.stringify(currentConversation)),
+          conversationId: newConversationId,
+          title: `Branch-${nowDate} ${currentConversation.title}`,
+          createdAt: nowDate,
+          updatedAt: nowDate,
+          historyLength: messagesUpToSpecified.length
+        };
+        
+        // Add the new conversation to the list
+        this.conversationList.unshift(branchedConversation);
+        
+        // Save conversation list changes
+        await storageService.saveConversationList(this.conversationList);
+        
+        // Save the partial messages to the new conversation
+        await storageService.updateConversationMessages(newConversationId, JSON.parse(JSON.stringify(messagesUpToSpecified)));
+        
+        // Select the new conversation
+        this.currentConversationId = newConversationId;
+        await storageService.saveCurrentConversationId(this.currentConversationId);
+        
+        return newConversationId;
+      } catch (error) {
+        console.error('Error creating branch from message:', error);
         throw error;
       }
     },

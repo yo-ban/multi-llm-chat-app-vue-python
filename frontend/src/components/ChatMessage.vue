@@ -33,21 +33,54 @@
       </div>
       <div class="message-actions-container">
         <div class="message-actions" :class="{ 'visible': hovering && !is_processing }">
-          <button @click="toggleEditMode" class="action-button" v-if="role !== 'error' && !is_processing">
-            <font-awesome-icon :icon="isEditing ? 'save' : 'edit'" />
-          </button>
-          <button v-if="isEditing" @click="cancelEdit" class="action-button">
-            <font-awesome-icon icon="times" />
-          </button>
-          <button @click="copyMessage" class="action-button" v-if="role === 'assistant' && !isEditing && !is_processing">
-            <font-awesome-icon icon="copy" />
-          </button>
-          <button @click="$emit('resend-message', id)" class="action-button" v-if="role === 'user' && !isEditing && !is_processing">
-            <font-awesome-icon icon="redo" />
-          </button>
-          <button @click="confirmDeleteMessage" class="action-button" v-if="!isEditing && !is_processing">
-            <font-awesome-icon icon="trash" />
-          </button>
+          <VTooltip placement="bottom" popper-class="tooltip-content">
+            <template #popper>
+              Edit message
+            </template>
+            <button @click="toggleEditMode" class="action-button" v-if="role !== 'error' && !is_processing">
+              <font-awesome-icon :icon="isEditing ? 'save' : 'edit'" />
+            </button>
+          </VTooltip>
+          <VTooltip placement="bottom" popper-class="tooltip-content">
+            <template #popper>
+              Cancel edit
+            </template>
+            <button v-if="isEditing" @click="cancelEdit" class="action-button">
+              <font-awesome-icon icon="times" />
+            </button>
+          </VTooltip>
+          <VTooltip placement="bottom" popper-class="tooltip-content">
+            <template #popper>
+              Copy message to clipboard
+            </template>
+            <button @click="copyMessage" class="action-button" v-if="role === 'assistant' && !isEditing && !is_processing">
+              <font-awesome-icon icon="copy" />
+            </button>
+          </VTooltip>
+          <VTooltip placement="bottom" popper-class="tooltip-content">
+            <template #popper>
+              Create branch from here
+            </template>
+            <button @click="createBranchFromHere" class="action-button" v-if="!isEditing && !is_processing">
+              <font-awesome-icon icon="code-branch" />
+            </button>
+          </VTooltip>
+          <VTooltip placement="bottom" popper-class="tooltip-content">
+            <template #popper>
+              Resend message
+            </template>
+            <button @click="$emit('resend-message', id)" class="action-button" v-if="role === 'user' && !isEditing && !is_processing">
+              <font-awesome-icon icon="redo" />
+            </button>
+          </VTooltip>
+          <VTooltip placement="bottom" popper-class="tooltip-content">
+            <template #popper>
+              Delete message
+            </template>
+            <button @click="confirmDeleteMessage" class="action-button" v-if="!isEditing && !is_processing">
+              <font-awesome-icon icon="trash" />
+            </button>
+          </VTooltip>
         </div>
       </div>
     </div>
@@ -63,6 +96,7 @@ import { PERSONAS } from '@/constants/personas';
 import { usePersonaStore } from '@/store/persona';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
+import { useConversationStore } from '@/store/conversation';
 
 // プラグインから関数をインジェクト
 const highlightCode = inject('highlightCode') as (str: string, lang: string) => string;
@@ -415,6 +449,38 @@ function copyMessage() {
       closable: true
     });
   });
+}
+
+function createBranchFromHere() {
+  const { currentConversationId } = useConversationStore();
+  if (!currentConversationId) {
+    toast.add({
+      severity: 'error',
+      summary: 'Error',
+      detail: 'No active conversation',
+      life: 3000
+    });
+    return;
+  }
+  
+  useConversationStore().createBranchFromMessage(props.id)
+    .then(() => {
+      toast.add({
+        severity: 'success',
+        summary: 'Branch Created',
+        detail: 'New conversation branch has been created',
+        life: 3000
+      });
+    })
+    .catch((error) => {
+      console.error('Error creating branch:', error);
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to create conversation branch',
+        life: 3000
+      });
+    });
 }
 
 onMounted(() => {
