@@ -81,9 +81,8 @@ class LLMServiceImpl implements LLMService {
       if (data.type === 'tool_call_start' && onUpdate) {
         onUpdate(result, { type: data.tool, status: 'start' }, true);
       } else if (data.type === 'tool_execution' && onUpdate) {
-        const toolCall: ToolCall = { type: data.tool, status: 'start' };
-        if (data.query) toolCall.query = data.query;
-        if (data.url) toolCall.url = data.url;
+        // Store the input dictionary when it arrives during execution
+        const toolCall: ToolCall = { type: data.tool, status: 'start', input: data.input }; 
         onUpdate(result, toolCall, true);
       } else if (data.type === 'tool_call_end' && onUpdate) {
         onUpdate(result, { type: data.tool, status: 'end' }, true);

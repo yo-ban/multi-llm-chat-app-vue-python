@@ -1,34 +1,4 @@
-from typing import List, Dict, Any
-from google.genai import types
-
-# Constants for Web Search Tool
-WEB_SEARCH_TOOL_DESCRIPTION = (
-    "Perform a targeted web search to retrieve relevant URLs along with concise snippets. "
-)
-
-WEB_SEARCH_TOOL_PARAMETERS_DESCRIPTION = {
-    "query": "Specific details you want to search for on the web. One issue per search.",
-    "num_results": "The number of results to return from the search."
-}
-
-# Constants for Web Browsing Tool
-WEB_BROWSING_TOOL_DESCRIPTION = (
-    "Perform an interactive web browsing session on a given URL to investigate its content in detail. "
-)
-
-WEB_BROWSING_TOOL_PARAMETERS_DESCRIPTION = {
-    "url": "The URL of the webpage to extract information from. Must be a valid HTTP/HTTPS URL.",
-    "query": "Specific details you want to extract from the webpage."
-}
-
-# Constants for Need-Asking-Human Tool (Fallback)
-NEED_ASK_HUMAN_TOOL_DESCRIPTION = (
-    "Request confirmation or clarification from the user when their query is vague, lacks specificity, or can be interpreted in multiple ways."
-)
-NEED_ASK_HUMAN_TOOL_PARAMETERS_DESCRIPTION = {
-    "clarification_points": "List of follow-up question perspectives to ask the user."
-}
-
+# Tool use instruction (preserved from original file)
 TOOL_USE_INSTRUCTION = r"""<tool_use_instructions>
 You have access to powerful tools for retrieving, validating, and analyzing current information. 
 It is **imperative** that you use these tools **frequently and thoroughly** to provide comprehensive, well-researched responses. 
@@ -54,13 +24,13 @@ Avoid relying solely on your existing knowledge; always substantiate your findin
     - Combine with additional searches or browsing sessions if the initial page is insufficient
     - For content-heavy pages, focus on the most relevant sections
 
-## 3. **Ask Human Tool** (need_ask_human)
-- **Purpose:** Request confirmation or clarification from the user when their query is vague, lacks specificity, or can be interpreted in multiple ways.
+## 3. **Request Clarification Tool** (request_clarification)
+- **Purpose:** Propose specific suggestions or questions to help the user refine and specify their vague or ambiguous request.
 - **Usage Guidelines:**
-    - Use this tool when the user's question is ambiguous or does not provide enough detail
-    - Prompt the user with specific follow-up questions regarding the desired scope, timeframe, context, or any particular details they need
-    - Ensure that follow-up questions are clear and cover multiple potential aspects of clarification
-    - Present questions concisely and in a format that is easy for users to respond to
+    - Use this tool when the user's request lacks sufficient detail or is open to multiple interpretations.
+    - Generate concrete suggestions or clarifying questions based on potential interpretations of the user's request.
+    - Aim to guide the user towards providing the necessary specifics for the request to be actionable.
+    - Present suggestions/questions clearly and concisely.
 
 ---
 
@@ -73,7 +43,7 @@ Avoid relying solely on your existing knowledge; always substantiate your findin
     - Outline your research strategy before execution
 
 2. **Select the appropriate tool(s) strategically:**
-   - If the user's query is ambiguous, start with the **Ask Human Tool**
+   - If the user's query is ambiguous or lacks detail, start with the **Request Clarification Tool** to guide them towards specificity.
    - For information gathering with no specific URL, begin with **Web Search Tool**
    - When a URL is provided or identified, use the **Web Browsing Tool** to extract details
 
@@ -143,19 +113,19 @@ A user says:
 ### Best-Practice Approach:
 
 1. **Plan Your Approach**
-    - **Identify information needs**: 
+    - **Identify information needs**:
         - Current logging implementation in user's code
         - AeroTune library's logging capabilities
         - Recommended logging practices for ML training
-    - **Research strategy**: 
+    - **Research strategy**:
         - First check if code is provided, if not request it
         - Analyze the code or search for AeroTune documentation
         - Compare against ML logging best practices
 
 2. **Execute Research Strategy**
-    - **(A) If no code snippet or URL is given**:
-        - Use **Ask Human Tool** to request code sample or repository link
-    - **(B) When code or documentation is available**:
+    - **(A) If no code snippet or URL is given, or the request is too vague**:
+        - Use **Request Clarification Tool** to propose ways to specify the request or ask clarifying questions.
+    - **(B) When code or documentation is available, or the request is specific**:
         - Use **Web Browsing Tool** to analyze the implementation
         - Use **Web Search Tool** to find "AeroTune logging best practices"
         - Use **Web Search Tool** for "ML training logging standards"
@@ -249,223 +219,3 @@ A user says:
 - Confirm that practical, actionable recommendations are clearly highlighted        
 
 </tool_use_instructions>"""
-
-def get_tool_definitions(without_human_fallback: bool = False) -> List[Dict[str, Any]]:
-    """
-    Get all function definitions for OpenAI function calling.
-    Centralizes all tool definitions in one place for better maintainability.
-
-    Returns:
-        List[Dict[str, Any]]: A list of tool definitions in OpenAI function calling format.
-    """
-    # Web Search Tool
-    web_search_tool = {
-        "type": "function",
-        "function": {
-            "name": "web_search",
-            "description": WEB_SEARCH_TOOL_DESCRIPTION,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": WEB_SEARCH_TOOL_PARAMETERS_DESCRIPTION["query"]
-                    }
-                },
-                "required": ["query"],
-                "additionalProperties": False
-            },
-            "strict": False
-        }
-    }
-    # Web Browsing Tool
-    web_browsing_tool = {
-        "type": "function",
-        "function": {
-            "name": "web_browsing",
-            "description": WEB_BROWSING_TOOL_DESCRIPTION,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "url": {
-                        "type": "string",
-                        "description": WEB_BROWSING_TOOL_PARAMETERS_DESCRIPTION["url"]
-                    },
-                    "query": {
-                        "type": "string",
-                        "description": WEB_BROWSING_TOOL_PARAMETERS_DESCRIPTION["query"]
-                    }
-                },
-                "required": ["url", "query"],
-                "additionalProperties": False
-            },
-            "strict": False
-        }
-    }
-    # Need-Asking-Human Tool (Fallback)
-    need_ask_human_tool = {
-        "type": "function",
-        "function": {
-            "name": "need_ask_human",
-            "description": NEED_ASK_HUMAN_TOOL_DESCRIPTION,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "clarification_points": {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "description": NEED_ASK_HUMAN_TOOL_PARAMETERS_DESCRIPTION["clarification_points"]
-                    }
-                },
-                "required": ["clarification_points"],
-                "additionalProperties": False
-            },
-            "strict": False
-        }
-    }
-    tool_definitions = [web_search_tool, web_browsing_tool]
-    if not without_human_fallback:
-        tool_definitions.append(need_ask_human_tool)
-    return tool_definitions
-
-def get_gemini_tool_definitions(without_human_fallback: bool = False) -> types.Tool:
-    """
-    Get all function definitions for Gemini API function calling.
-    Centralizes all tool definitions in one place for better maintainability.
-
-    Returns:
-        List[types.Tool]: A list of tool definitions in Gemini API format.
-    """
-    # Web Search Tool Definition
-    web_search_function = types.FunctionDeclaration(
-        name="web_search",
-        description=WEB_SEARCH_TOOL_DESCRIPTION,
-        parameters=types.Schema(
-            type="OBJECT",
-            properties={
-                "query": types.Schema(
-                    type="STRING",
-                    description=WEB_SEARCH_TOOL_PARAMETERS_DESCRIPTION["query"],
-                ),
-            },
-            required=["query"],
-        ),
-    )
-
-    # Web Browsing Tool Definition
-    web_browsing_function = types.FunctionDeclaration(
-        name="web_browsing",
-        description=WEB_BROWSING_TOOL_DESCRIPTION,
-        parameters=types.Schema(
-            type="OBJECT",
-            properties={
-                "url": types.Schema(
-                    type="STRING",
-                    description=WEB_BROWSING_TOOL_PARAMETERS_DESCRIPTION["url"],
-                ),
-                "query": types.Schema(
-                    type="STRING",
-                    description=WEB_BROWSING_TOOL_PARAMETERS_DESCRIPTION["query"],
-                ),
-            },
-            required=["url", "query"],
-        ),
-    )
-
-    # Need-Asking-Human Tool Definition for Gemini API
-    need_ask_human_function = types.FunctionDeclaration(
-        name="need_ask_human",
-        description=NEED_ASK_HUMAN_TOOL_DESCRIPTION,
-        parameters=types.Schema(
-            type="OBJECT",
-            properties={
-                "clarification_points": types.Schema(
-                    type="ARRAY",
-                    items=types.Schema(
-                        type="STRING",
-                    ),
-                    description=NEED_ASK_HUMAN_TOOL_PARAMETERS_DESCRIPTION["clarification_points"],
-                )
-            },
-            required=["clarification_points"],
-        ),
-    )
-
-    tool_definitions = [web_search_function, web_browsing_function]
-
-
-    if not without_human_fallback:
-        tool_definitions.append(need_ask_human_function)
-
-    return types.Tool(function_declarations=tool_definitions)
-
-def get_anthropic_tool_definitions(without_human_fallback: bool = False) -> List[Dict[str, Any]]:
-    """
-    Get all function definitions for Anthropic Claude API function calling.
-    Centralizes all tool definitions in one place for better maintainability.
-
-    Returns:
-        List[Dict[str, Any]]: A list of tool definitions in Anthropic Claude API format.
-    """
-    # Web Search Tool
-    web_search_tool = {
-        "name": "web_search",
-        "description": WEB_SEARCH_TOOL_DESCRIPTION,
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": WEB_SEARCH_TOOL_PARAMETERS_DESCRIPTION["query"]
-                }
-            },
-            "required": ["query"]
-        }
-    }
-    
-    # Web Browsing Tool
-    web_browsing_tool = {
-        "name": "web_browsing",
-        "description": WEB_BROWSING_TOOL_DESCRIPTION,
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "url": {
-                    "type": "string",
-                    "description": WEB_BROWSING_TOOL_PARAMETERS_DESCRIPTION["url"]
-                },
-                "query": {
-                    "type": "string",
-                    "description": WEB_BROWSING_TOOL_PARAMETERS_DESCRIPTION["query"]
-                }
-            },
-            "required": ["url", "query"]
-        }
-    }
-    
-    # Need-Asking-Human Tool (Fallback)
-    need_ask_human_tool = {
-        "name": "need_ask_human",
-        "description": NEED_ASK_HUMAN_TOOL_DESCRIPTION,
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "clarification_points": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "description": NEED_ASK_HUMAN_TOOL_PARAMETERS_DESCRIPTION["clarification_points"]
-                }
-            },
-            "required": ["clarification_points"]
-        }
-    }
-    
-    tool_definitions = [web_search_tool, web_browsing_tool]
-    if not without_human_fallback:
-        tool_definitions.append(need_ask_human_tool)
-    
-    return tool_definitions

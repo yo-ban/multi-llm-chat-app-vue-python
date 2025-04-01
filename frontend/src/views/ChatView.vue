@@ -52,11 +52,13 @@
     <div v-if="isStreaming || activeToolCall" class="tool-call-indicator">
       <i v-if="activeToolCall" class="pi pi-search animate-pulse" style="margin-right: 8px"></i>
       <i v-else class="pi pi-spinner pi-spin" style="margin-right: 8px"></i>
+      
+      <!-- Display based on tool type and input content -->
       <span v-if="activeToolCall?.type === 'web_search'" class="tool-status">
-        Searching<span class="animate-dots">...</span> {{ truncateText(activeToolCall.query, 30) }}
+        Searching<span class="animate-dots">...</span> {{ truncateText(activeToolCall.input?.query, 30) }}
       </span>
       <span v-else-if="activeToolCall?.type === 'web_browsing'" class="tool-status">
-        Browsing<span class="animate-dots">...</span> {{ truncateText(activeToolCall.url, 40) }}
+        Browsing<span class="animate-dots">...</span> {{ truncateText(activeToolCall.input?.url, 40) }}
       </span>
       <span v-else class="tool-status">
         <template v-if="hasStartedStreaming">
@@ -92,6 +94,7 @@ import { useSettingsStore } from '@/store/settings';
 import type { Message, AssistantMessage, UserMessage } from '@/types/messages';
 import type { MessageRole } from '@/types/common';
 import type { Conversation } from '@/types/conversation';
+import type { ToolCall } from '@/types/tools';
 
 // Services
 import { llmService } from '@/services/domain/llm-service';
@@ -250,13 +253,6 @@ const selectedModel = computed(() => {
   // モデルが見つからない場合のフォールバック
   return MODELS.anthropic.CLAUDE_3_5_SONNET;
 });
-
-interface ToolCall {
-  type: string;
-  status: 'start' | 'end';
-  query?: string;
-  url?: string;
-}
 
 const activeToolCall = ref<ToolCall | null>(null);
 const hasStartedStreaming = ref(false);

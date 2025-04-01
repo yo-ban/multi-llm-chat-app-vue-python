@@ -31,9 +31,11 @@ from app.message_utils.messages_preparer import (
     prepare_openai_messages, 
     prepare_anthropic_messages, 
 )
+
 from app.misc_utils.image_utils import upload_image_to_gemini
 from app.models.models import ChatRequest
-from app.function_calling.tool_definitions import get_tool_definitions, get_gemini_tool_definitions, get_anthropic_tool_definitions, TOOL_USE_INSTRUCTION
+from app.function_calling.definitions import get_tool_definitions, get_gemini_tool_definitions, get_anthropic_tool_definitions
+from app.function_calling.constants import TOOL_USE_INSTRUCTION
 from app.logger.logging_utils import log_info, log_error, log_warning
 
 class ChatHandler:
@@ -74,7 +76,7 @@ class ChatHandler:
             completion_args["reasoning_effort"] = reasoning_effort
 
         if websearch:
-            completion_args["tools"] = get_tool_definitions(without_human_fallback=True)
+            completion_args["tools"] = get_tool_definitions()
             completion_args["tool_choice"] = "required"
 
         # If streaming is requested, try using stream mode.
@@ -170,7 +172,7 @@ class ChatHandler:
         response = None
 
         if websearch:
-            params["tools"] = get_anthropic_tool_definitions(without_human_fallback=True)
+            params["tools"] = get_anthropic_tool_definitions()
             if "claude-3-7" in model:
                 params["betas"] = ["token-efficient-tools-2025-02-19"]
                 response = await anthropic.beta.messages.create(**params)
@@ -271,7 +273,7 @@ class ChatHandler:
                 disable=True,
                 ignore_call_history=True
             )
-            completion_args["tools"] = [get_gemini_tool_definitions(without_human_fallback=True)]
+            completion_args["tools"] = [get_gemini_tool_definitions()]
             completion_args["tool_config"] = tool_config
             completion_args["automatic_function_calling"] = automatic_function_calling
 
@@ -389,6 +391,16 @@ class ChatHandler:
                 }
             }
         }
+
+        if temperature is not None and not is_reasoning_supported:
+            completion_args["temperature"] = temperature
+            
+        if is_reasoning_supported and reasoning_effort:
+            completion_args["reasoning_effort"] = reasoning_effort
+
+        if websearch:
+            completion_args["tools"] = get_tool_definitions()
+            completion_args["tool_choice"] = "required"
 
         response = await openrouter.chat.completions.create(**completion_args)
 
