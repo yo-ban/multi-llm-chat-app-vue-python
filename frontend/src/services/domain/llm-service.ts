@@ -68,15 +68,27 @@ class LLMServiceImpl implements LLMService {
 
     // Helper function to process a single SSE line (starting with 'data:')
     async function processDataLine(line: string): Promise<boolean> {
-      const data = JSON.parse(line.slice(5));
-      if (data.error) {
-        throw new Error(data.error);
+      const dataString = line.slice(5).trim(); // Get content after 'data:' and trim whitespace
+        
+      // Handle empty data lines gracefully
+      if (!dataString) {
+          console.warn("Received empty SSE data line:", line);
+          return false; // Skip processing this line
       }
+
+      const data = JSON.parse(dataString); // Parse the JSON content
+
+      // Handle the [DONE] marker which is not JSON
       if (data.text === '[DONE]') {
         if (onUpdate) {
           await new Promise(resolve => { onUpdate(result); setTimeout(resolve, 0); });
         }
-        return true;
+        return true; // Signal completion
+      }
+
+      // Existing logic for processing parsed data...
+      if (data.error) {
+        throw new Error(data.error);
       }
       if (data.type === 'tool_call_start' && onUpdate) {
         onUpdate(result, { type: data.tool, status: 'start' }, true);

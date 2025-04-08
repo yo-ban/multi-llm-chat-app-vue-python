@@ -150,8 +150,14 @@ class IndexedDBStorageService implements StorageService {
    * @returns 会話オブジェクトの配列
    */
   async getConversationList(): Promise<Conversation[]> {
-    const list = await localforage.getItem<Conversation[]>(CONVERSATION_LIST_KEY);
-    return list || [];
+    try {
+      const list = await localforage.getItem<Conversation[]>(CONVERSATION_LIST_KEY);
+      return list || [];
+    } catch (error) {
+      console.error('Error getting conversation list from localforage:', error);
+      // Return empty array or handle error as appropriate for your application
+      return []; 
+    }
   }
 
   /**
@@ -159,13 +165,20 @@ class IndexedDBStorageService implements StorageService {
    * @param conversations 保存する会話リスト
    */
   async saveConversationList(conversations: Conversation[]): Promise<void> {
-    // ディープクローンを作成して保存
-    const clonedConversationList = conversations.map(conversation => ({
-      ...conversation,
-      settings: { ...conversation.settings },
-      files: { ...conversation.files }
-    }));
-    await localforage.setItem(CONVERSATION_LIST_KEY, clonedConversationList);
+    try {
+      // ディープクローンを作成して保存
+      const clonedConversationList = conversations.map(conversation => ({
+        ...conversation,
+        settings: { ...conversation.settings },
+        // Ensure files is always an object, even if undefined/null in source
+        files: conversation.files ? { ...conversation.files } : {}
+      }));
+      await localforage.setItem(CONVERSATION_LIST_KEY, clonedConversationList);
+    } catch (error) {
+      console.error('Error saving conversation list to localforage:', error);
+      // Optionally re-throw or handle the error (e.g., notify user)
+      // throw error; 
+    }
   }
 
   /**

@@ -111,6 +111,15 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       supportFunctionCalling: true,
       supportsReasoning: true,
     },
+    GEMINI_2_5_PRO_PREVIEW: {
+      id: 'gemini-2.5-pro-preview-03-25',
+      name: 'Gemini 2.5 Pro Preview 03-25',
+      contextWindow: 1048576,
+      maxTokens: 65536,
+      multimodal: true,
+      supportFunctionCalling: true,
+      supportsReasoning: true,
+    },
     GEMINI_2_0_FLASH_THINKING_EXP: {
       id: 'gemini-2.0-flash-thinking-exp-01-21',
       name: 'Gemini 2.0 Flash Thinking Experimental',

@@ -194,7 +194,8 @@ async def gemini_stream_generator(
                 else:
                     if hasattr(event, 'prompt_feedback'):
                         prompt_feedback: GenerateContentResponsePromptFeedback = event.prompt_feedback
-                        yield f"data: {json.dumps({'text': prompt_feedback.model_dump_json()})}\n\n"
+                        if prompt_feedback:
+                            yield f"data: {json.dumps({'text': prompt_feedback.model_dump_json()})}\n\n"
 
             # If no function calls were made, we're done
             if not has_function_call:

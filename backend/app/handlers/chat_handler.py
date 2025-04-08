@@ -50,7 +50,7 @@ class ChatHandler:
         temperature: float,
         stream: bool,
         system: str,
-        websearch: bool = True,
+        websearch: bool = False,
         reasoning_effort: Optional[str] = None,
         is_reasoning_supported: bool = False
     ) -> Any:
@@ -130,7 +130,7 @@ class ChatHandler:
         temperature: float,
         stream: bool,
         system: str,
-        websearch: bool = True,
+        websearch: bool = False,
         reasoning_effort: Optional[str] = None,
         is_reasoning_supported: bool = False
     ) -> Any:
@@ -210,7 +210,7 @@ class ChatHandler:
         temperature: float,
         stream: bool,
         system: str,
-        websearch: bool = True,
+        websearch: bool = False,
         reasoning_effort: Optional[str] = None,
         is_reasoning_supported: bool = False,
         image_generation: bool = False
@@ -361,7 +361,7 @@ class ChatHandler:
         temperature: float,
         stream: bool,
         system: str,
-        websearch: bool = True,
+        websearch: bool = False,
         reasoning_effort: Optional[str] = None,
         is_reasoning_supported: bool = False
     ) -> Any:
@@ -474,7 +474,10 @@ class ChatHandler:
                     max_tokens=chat_request.maxTokens,
                     temperature=chat_request.temperature,
                     stream=chat_request.stream,
-                    system=system
+                    system=system,
+                    websearch=chat_request.websearch,
+                    reasoning_effort=chat_request.reasoningEffort,
+                    is_reasoning_supported=chat_request.isReasoningSupported
                 )
             else:  # Anthropic models
                 return await self.handle_anthropic(

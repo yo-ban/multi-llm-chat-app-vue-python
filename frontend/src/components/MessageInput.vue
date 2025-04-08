@@ -111,8 +111,17 @@ const currentConversationSettings = computed<APISettings>(() => {
 
 const isMultimodalModel = computed(() => {
   const { vendor, model } = currentConversationSettings.value;
-  const currentModel = Object.values(MODELS[vendor] || {}).find((m) => m.id === model) 
-  console.log("currentModel?.multimodal", currentModel?.multimodal)
+  
+  let currentModel;
+  if (vendor === 'openrouter') {
+    // OpenRouterの場合は settingsStore からモデル情報を取得
+    currentModel = settingsStore.openrouterModels.find(m => m.id === model);
+  } else {
+    // それ以外のベンダーは従来のMODELS定数から取得
+    currentModel = Object.values(MODELS[vendor] || {}).find((m) => m.id === model);
+  }
+  
+  console.log(`Checking multimodal for ${vendor}/${model}:`, currentModel?.multimodal);
   return currentModel ? currentModel.multimodal : false;
 });
 

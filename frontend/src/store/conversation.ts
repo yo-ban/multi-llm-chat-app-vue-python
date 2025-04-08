@@ -8,7 +8,6 @@ import type { Message } from '@/types/messages';
 import { useSettingsStore } from '@/store/settings';
 import type { Conversation, ConversationState, ConversationFolder } from '@/types/conversation';
 
-const CONVERSATION_LIST_KEY = 'conversationList';
 const CONVERSATION_FOLDERS_KEY = 'conversationFolders';
 
 export const useConversationStore = defineStore('conversation', {
@@ -35,28 +34,6 @@ export const useConversationStore = defineStore('conversation', {
         console.error('Error loading folders:', error);
         this.folders = [];
       }
-    },
-
-    async updateConversationList() {
-      // 会話リストをシリアライズ可能な形に整形
-      const serializableConversations = this.conversationList.map(conversation => {
-        // 必要なプロパティのみを抽出したプレーンオブジェクトを作成
-        return {
-          conversationId: conversation.conversationId,
-          title: conversation.title,
-          createdAt: conversation.createdAt,
-          updatedAt: conversation.updatedAt,
-          system: conversation.system,
-          personaId: conversation.personaId,
-          settings: { ...conversation.settings },
-          historyLength: conversation.historyLength,
-          folderId: conversation.folderId,
-          files: conversation.files ? { ...conversation.files } : undefined
-        };
-      });
-      
-      // シリアライズ可能な形にしたデータを保存
-      await localforage.setItem(CONVERSATION_LIST_KEY, serializableConversations);
     },
 
     async createNewConversation() {
@@ -322,7 +299,7 @@ export const useConversationStore = defineStore('conversation', {
           title: `Branch-${nowDate} ${currentConversation.title}`,
           createdAt: nowDate,
           updatedAt: nowDate,
-          historyLength: messagesUpToSpecified.length
+          historyLength: 0 // no limit
         };
         
         // Add the new conversation to the list
@@ -378,7 +355,7 @@ export const useConversationStore = defineStore('conversation', {
       
       this.folders = this.folders.filter(f => f.id !== folderId);
       await this.saveFolders();
-      await this.updateConversationList();
+      await storageService.saveConversationList(this.conversationList);
     },
     
     async toggleFolderExpanded(folderId: string) {
@@ -393,7 +370,7 @@ export const useConversationStore = defineStore('conversation', {
       const conversationIndex = this.conversationList.findIndex(c => c.conversationId === conversationId);
       if (conversationIndex !== -1) {
         this.conversationList[conversationIndex].folderId = folderId;
-        await this.updateConversationList();
+        await storageService.saveConversationList(this.conversationList);
       }
     },
     
