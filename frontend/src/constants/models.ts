@@ -145,7 +145,44 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       multimodal: true,
     },
   },
+  xai: {
+    XAI_GROK_3_MINI_BETA: {
+      id: 'xai-grok-3-mini-beta',
+      name: 'Grok 3 Mini Beta',
+      contextWindow: 131072,
+      maxTokens: 131072,
+      multimodal: false,
+      supportFunctionCalling: true,
+      supportsReasoning: true,
+      defaultReasoningEffort: 'high',
+    },
+    XAI_GROK_3_BETA: {
+      id: 'xai-grok-3-beta',
+      name: 'Grok 3 Beta',
+      contextWindow: 131072,
+      maxTokens: 131072,
+      multimodal: false,
+      supportFunctionCalling: true
+    },
+    XAI_GROK_3_MINI_FAST_BETA: {
+      id: 'xai-grok-3-mini-fast-beta',
+      name: 'Grok 3 Mini Fast Beta',
+      contextWindow: 131072,
+      maxTokens: 131072,
+      multimodal: false,
+      supportFunctionCalling: true,
+      supportsReasoning: true,
+      defaultReasoningEffort: 'high',
+    },
+    XAI_GROK_3_FAST_BETA: {
+      id: 'xai-grok-3-fast-beta',
+      name: 'Grok 3 Fast Beta',
+      contextWindow: 131072,
+      maxTokens: 131072,
+      multimodal: false,
+      supportFunctionCalling: true
+    },
+  },
   openrouter: {
-    
   },
 };

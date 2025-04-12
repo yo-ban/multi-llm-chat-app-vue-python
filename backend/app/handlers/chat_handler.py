@@ -352,6 +352,89 @@ class ChatHandler:
                 ),
                 media_type="text/event-stream"
             )
+        
+    async def handle_xai(
+        self,
+        model: str,
+        messages: list,
+        max_tokens: int,
+        temperature: float,
+        stream: bool,
+        system: str,
+        websearch: bool = False,
+        reasoning_effort: Optional[str] = None,
+        is_reasoning_supported: bool = False
+    ) -> Any:
+        """Handle XAI API requests with optional function calling.
+        
+        If a BadRequest error indicates that stream mode is unsupported,
+        the generation falls back to non-streaming mode using common logic.
+        """
+        xai = AsyncOpenAI(
+            api_key=self.api_key,
+            base_url="https://api.x.ai/v1"
+        )
+        xai_messages = await prepare_openai_messages(system, messages)
+
+        completion_args = {
+            "model": model[4:],  # Remove 'xai-' prefix
+            "messages": xai_messages,
+            "max_completion_tokens": max_tokens,
+            "stream": stream,
+        }
+        
+        if temperature is not None and not is_reasoning_supported:
+            completion_args["temperature"] = temperature
+            
+        if is_reasoning_supported and reasoning_effort:
+            completion_args["reasoning_effort"] = reasoning_effort
+
+        if websearch:
+            completion_args["tools"] = get_tool_definitions()
+            completion_args["tool_choice"] = "required"
+
+        # If streaming is requested, try using stream mode.
+        if stream:
+            completion_args["stream_options"] = { "include_usage": True }
+            try:
+                response = await xai.chat.completions.create(**completion_args)
+                return StreamingResponse(
+                    openai_stream_generator(
+                        response,
+                        openai_client=xai,
+                        openai_messages=xai_messages,
+                        completion_args=completion_args
+                    ),
+                    media_type="text/event-stream"
+                )
+            except Exception as e:
+                # If the error indicates that stream mode is unsupported, fall back.
+                if "Unsupported value: 'stream'" in str(e):
+                    log_warning("Stream mode is unsupported, falling back to non-streaming mode")
+                    completion_args["stream"] = False
+                    completion_args.pop("stream_options")
+                    # Delegate non-streamed handling to the common function.
+                    return StreamingResponse(
+                        openai_non_stream_generator(
+                            openai_client=xai, 
+                            completion_args=completion_args, 
+                            openai_messages=xai_messages
+                        ),
+                        media_type="text/event-stream"
+                    )
+                else:
+                    raise e
+        else:
+            completion_args["stream"] = False
+            # For explicit non-stream requests, delegate to the common function.
+            return StreamingResponse(
+                openai_non_stream_generator(
+                    openai_client=xai, 
+                    completion_args=completion_args, 
+                    openai_messages=xai_messages
+                ),
+                media_type="text/event-stream"
+            )
 
     async def handle_openrouter(
         self,
@@ -469,6 +552,18 @@ class ChatHandler:
                 )
             elif "/" in chat_request.model:  # OpenRouter models
                 return await self.handle_openrouter(
+                    model=chat_request.model,
+                    messages=messages,
+                    max_tokens=chat_request.maxTokens,
+                    temperature=chat_request.temperature,
+                    stream=chat_request.stream,
+                    system=system,
+                    websearch=chat_request.websearch,
+                    reasoning_effort=chat_request.reasoningEffort,
+                    is_reasoning_supported=chat_request.isReasoningSupported
+                )
+            elif chat_request.model.startswith('xai-'):
+                return await self.handle_xai(
                     model=chat_request.model,
                     messages=messages,
                     max_tokens=chat_request.maxTokens,
