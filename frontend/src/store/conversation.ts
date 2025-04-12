@@ -1,14 +1,11 @@
 import { defineStore } from 'pinia';
 import { v4 as uuidv4 } from 'uuid';
-import localforage from 'localforage';
 import type { APISettings } from '@/types/api';
 import { storageService } from '@/services/storage/indexeddb-service';
 import { conversationService } from '@/services/domain/conversation-service';
 import type { Message } from '@/types/messages';
 import { useSettingsStore } from '@/store/settings';
 import type { Conversation, ConversationState, ConversationFolder } from '@/types/conversation';
-
-const CONVERSATION_FOLDERS_KEY = 'conversationFolders';
 
 export const useConversationStore = defineStore('conversation', {
   state: (): ConversationState => ({
@@ -18,6 +15,7 @@ export const useConversationStore = defineStore('conversation', {
   }),
   actions: {
     async initializeConversationStore() {
+      let conversationListNeedsUpdate = false;
       // 会話リストの取得と初期化
       const savedConversations = await storageService.getConversationList();
       this.conversationList = savedConversations || [];
@@ -25,15 +23,35 @@ export const useConversationStore = defineStore('conversation', {
       // 現在の会話IDの取得と初期化
       this.currentConversationId = await storageService.getCurrentConversationId();
       
-      // フォルダデータの読み込み
+      // フォルダデータの読み込み (Use storageService)
       try {
-        const savedFolders = await localforage.getItem<ConversationFolder[]>(CONVERSATION_FOLDERS_KEY);
-        // nullチェックと型変換を確実に行う
-        this.folders = Array.isArray(savedFolders) ? savedFolders : [];
+        // Replace direct localforage call with storageService method
+        this.folders = await storageService.getFolders();
       } catch (error) {
-        console.error('Error loading folders:', error);
-        this.folders = [];
+        // Error logging now handled within storageService.getFolders
+        // console.error('Error loading folders:', error);
+        this.folders = []; // Keep fallback to empty array
       }
+
+      // --- Start Fallback Logic ---
+      // 有効なフォルダIDのセットを作成
+      const validFolderIds = new Set(this.folders.map(f => f.id));
+
+      // 会話リストをチェックし、無効なfolderIdをnullに設定
+      this.conversationList.forEach(conversation => {
+        if (conversation.folderId && !validFolderIds.has(conversation.folderId)) {
+          console.warn(`Conversation "${conversation.title}" (${conversation.conversationId}) had an invalid folderId "${conversation.folderId}". Moving to root.`);
+          conversation.folderId = null;
+          conversationListNeedsUpdate = true;
+        }
+      });
+
+      // もしリストに変更があれば保存する
+      if (conversationListNeedsUpdate) {
+        console.log('Saving updated conversation list after cleaning invalid folderIds.');
+        await storageService.saveConversationList(this.conversationList);
+      }
+      // --- End Fallback Logic ---
     },
 
     async createNewConversation() {
@@ -333,7 +351,8 @@ export const useConversationStore = defineStore('conversation', {
       
       // フォルダを先頭に追加
       this.folders.unshift(newFolder);
-      await this.saveFolders();
+      // Use storageService to save folders
+      await storageService.saveFolders(this.folders);
       return folderId;
     },
     
@@ -341,7 +360,8 @@ export const useConversationStore = defineStore('conversation', {
       const folderIndex = this.folders.findIndex(f => f.id === folderId);
       if (folderIndex !== -1) {
         this.folders[folderIndex].name = newName;
-        await this.saveFolders();
+        // Use storageService to save folders
+        await storageService.saveFolders(this.folders);
       }
     },
     
@@ -354,7 +374,9 @@ export const useConversationStore = defineStore('conversation', {
       });
       
       this.folders = this.folders.filter(f => f.id !== folderId);
-      await this.saveFolders();
+      // Use storageService to save folders
+      await storageService.saveFolders(this.folders);
+      // Also save the updated conversation list (folderId changes)
       await storageService.saveConversationList(this.conversationList);
     },
     
@@ -362,7 +384,8 @@ export const useConversationStore = defineStore('conversation', {
       const folderIndex = this.folders.findIndex(f => f.id === folderId);
       if (folderIndex !== -1) {
         this.folders[folderIndex].isExpanded = !this.folders[folderIndex].isExpanded;
-        await this.saveFolders();
+        // Use storageService to save folders
+        await storageService.saveFolders(this.folders);
       }
     },
     
@@ -372,18 +395,6 @@ export const useConversationStore = defineStore('conversation', {
         this.conversationList[conversationIndex].folderId = folderId;
         await storageService.saveConversationList(this.conversationList);
       }
-    },
-    
-    async saveFolders() {
-      // フォルダデータをシリアライズ可能な形に整形
-      const serializableFolders = this.folders.map(folder => ({
-        id: folder.id,
-        name: folder.name,
-        isExpanded: folder.isExpanded
-      }));
-      
-      // シリアライズ可能な形にしたデータを保存
-      await localforage.setItem(CONVERSATION_FOLDERS_KEY, serializableFolders);
     },
   },
   getters: {

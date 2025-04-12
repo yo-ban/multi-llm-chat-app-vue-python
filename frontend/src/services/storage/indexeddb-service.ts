@@ -1,6 +1,6 @@
 import localforage from 'localforage';
 import type { Message } from '@/types/messages';
-import type { Conversation } from '@/types/conversation';
+import type { Conversation, ConversationFolder } from '@/types/conversation';
 import type { GlobalSettings } from '@/types/settings';
 import type { UserDefinedPersona } from '@/types/personas';
 import { MODELS } from '@/constants/models';
@@ -10,6 +10,7 @@ const CONVERSATION_LIST_KEY = 'conversationList';
 const CURRENT_CONVERSATION_ID_KEY = 'currentConversationId';
 const GLOBAL_SETTINGS_KEY = 'globalSettings';
 const USER_PERSONAS_KEY = 'userDefinedPersonas';
+const CONVERSATION_FOLDERS_KEY = 'conversationFolders';
 
 /**
  * ストレージサービスのインターフェース
@@ -38,6 +39,10 @@ export interface StorageService {
   getConversationMessages(conversationId: string): Promise<Message[]>;
   addMessageToConversation(conversationId: string, message: Message): Promise<void>;
   updateConversationMessages(conversationId: string, messages: Message[]): Promise<void>;
+
+  // Folder related
+  getFolders(): Promise<ConversationFolder[]>;
+  saveFolders(folders: ConversationFolder[]): Promise<void>;
 }
 
 /**
@@ -266,6 +271,36 @@ class IndexedDBStorageService implements StorageService {
    */
   async removeConversation(conversationId: string): Promise<void> {
     await localforage.removeItem(conversationId);
+  }
+
+  /**
+   * Get conversation folders
+   * @returns Array of ConversationFolder objects
+   */
+  async getFolders(): Promise<ConversationFolder[]> {
+    try {
+      const folders = await localforage.getItem<ConversationFolder[]>(CONVERSATION_FOLDERS_KEY);
+      // Return a deep clone or an empty array if null/undefined
+      return folders ? folders.map(folder => ({ ...folder })) : [];
+    } catch (error) {
+      console.error('Error getting folders from localforage:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Save conversation folders
+   * @param folders Array of ConversationFolder objects to save
+   */
+  async saveFolders(folders: ConversationFolder[]): Promise<void> {
+    try {
+      // Create a deep clone before saving
+      const clonedFolders = folders.map(folder => ({ ...folder }));
+      await localforage.setItem(CONVERSATION_FOLDERS_KEY, clonedFolders);
+    } catch (error) {
+      console.error('Error saving folders to localforage:', error);
+      // Optionally re-throw or handle
+    }
   }
 }
 
