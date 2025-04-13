@@ -72,6 +72,7 @@
                 :options="Object.keys(MODELS)"
                 placeholder="Select Vendor"
                 class="settings-dropdown"
+                @change="onDialogVendorChange"
               />
             </div>
           </div>
@@ -86,6 +87,7 @@
                 optionValue="id"
                 placeholder="Select Model"
                 class="settings-dropdown"
+                @change="onDialogModelChange"
               />
             </div>
           </div>
@@ -241,7 +243,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue';
+import { ref, watch, computed, nextTick } from 'vue';
 import { MODELS } from '@/constants/models';
 import type { APISettings } from '@/types/api';
 import type { Model } from '@/types/models';
@@ -415,10 +417,11 @@ watch(
       // 何もしない - 既存のモデル選択を保持
       // displayedModel は selectedModel の computed プロパティで更新される
       displayedModel.value = selectedModel.value;
-      
-      // ダイアログが開いていない場合のみ設定を更新
+      // Don't emit if dialog is open
       if (!isModelDialogOpen.value) {
-        emit('update:settings', { ...localSettings.value });
+        // Note: vendor change might implicitly change model via selectedModel,
+        // triggering model watcher. Header handler emits already. Is this needed?
+        // emit('update:settings', { ...localSettings.value }); // Consider removing
       }
       return;
     }
@@ -431,22 +434,18 @@ watch(
     if (!modelExists) {
       if (availableModels.value.length > 0) {
         localSettings.value.model = availableModels.value[0].id;
-        localSettings.value.maxTokens = Math.min(
-          localSettings.value.maxTokens || 4096,
-          availableModels.value[0].maxTokens
-        );
+        // Don't reset maxTokens here - let the model watcher handle it or dialog handler
       } else {
+        // Fallback model
         localSettings.value.model = MODELS.anthropic.CLAUDE_3_5_SONNET.id;
-        localSettings.value.maxTokens = MODELS.anthropic.CLAUDE_3_5_SONNET.maxTokens;
       }
     }
 
     displayedModel.value = selectedModel.value;
-    
-    // Only emit updates when the dialog is not open or when changed from header dropdown
-    if (!isModelDialogOpen.value) {
-      emit('update:settings', { ...localSettings.value });
-    }
+    // Don't emit if dialog is open
+    // if (!isModelDialogOpen.value) {
+      // emit('update:settings', { ...localSettings.value }); // Consider removing
+    // }
   }
 );
 
@@ -455,6 +454,7 @@ watch(
   (newSettings) => {
     if (newSettings) {  
       console.log('Settings updated from props:', newSettings);
+      // Directly assign values from props, don't reset maxTokens here
       localSettings.value = {
         vendor: newSettings.vendor,
         model: newSettings.model,
@@ -465,10 +465,14 @@ watch(
         multimodal: newSettings.multimodal,
         imageGeneration: newSettings.imageGeneration
       };
-      displayedModel.value = selectedModel.value;
+      // Update displayedModel based on the initial settings
+      // Need to ensure selectedModel recomputes first. Using nextTick might be safest.
+      nextTick(() => {
+        displayedModel.value = selectedModel.value;
+      });
     }
   },
-  { deep: true }  // オブジェクトの深い変更も監視
+  { deep: true, immediate: true } // immediate might be needed if settings load async
 );
 
 watch(
@@ -482,49 +486,43 @@ watch(
     } else {
       model = Object.values(MODELS[localSettings.value.vendor] || {}).find((m) => m.id === newModelId);
     }
-    
+
     if (model) {
-      console.log('Model changed:', { 
-        vendor: localSettings.value.vendor, 
+      console.log('Model changed (watcher):', {
+        vendor: localSettings.value.vendor,
         modelId: newModelId,
-        maxTokens: model.maxTokens,
+        maxTokens: model.maxTokens, // Log the max tokens but don't set it here anymore
         supportsReasoning: model.supportsReasoning,
         supportFunctionCalling: model.supportFunctionCalling,
         unsupportsTemperature: model.unsupportsTemperature,
         multimodal: model.multimodal,
         imageGeneration: model.imageGeneration
       });
-      
-      localSettings.value.maxTokens = Math.min(localSettings.value.maxTokens || 4096, model.maxTokens);
+
+      // Update OTHER model-dependent settings
       localSettings.value.isReasoningSupported = model.supportsReasoning || false;
       localSettings.value.multimodal = model.multimodal || false;
       localSettings.value.imageGeneration = model.imageGeneration || false;
 
-      // Set reasoning effort based on model support and global default
       if (model.supportsReasoning && !localSettings.value.reasoningEffort) {
         localSettings.value.reasoningEffort = settingsStore.defaultReasoningEffort || 'medium';
       } else if (!model.supportsReasoning) {
         localSettings.value.reasoningEffort = undefined;
       }
 
-      // Update web search availability based on function calling support
       if (!model.supportFunctionCalling) {
         localSettings.value.websearch = false;
       }
 
-      // Handle temperature support
       if (model.unsupportsTemperature) {
         localSettings.value.temperature = undefined;
       } else if (localSettings.value.temperature === undefined) {
         localSettings.value.temperature = settingsStore.defaultTemperature;
       }
       
-      displayedModel.value = model;
-      
-      // Only emit updates when the dialog is not open or when changed from header dropdown
-      if (!isModelDialogOpen.value) {
-        emit('update:settings', { ...localSettings.value });
-      }
+      displayedModel.value = model; 
+
+      // REMOVED EMIT
     }
   }
 );
@@ -538,7 +536,7 @@ watch(
       if (validModelId !== localSettings.value.model) {
         localSettings.value.model = validModelId;
         displayedModel.value = selectedModel.value;
-        emit('update:settings', { ...localSettings.value });
+        // emit('update:settings', { ...localSettings.value });
       }
     }
   },
@@ -604,9 +602,9 @@ function closeModelSettingsDialog() {
 }
 
 function saveModelSettings() {
-  emit('update:settings', { ...localSettings.value });
+  emit('update:settings', { ...localSettings.value }); // Saves the final state
   closeModelSettingsDialog();
-  displayedModel.value = selectedModel.value;
+  displayedModel.value = selectedModel.value; 
 }
 
 function openConversationSettingsDialog() {
@@ -647,16 +645,28 @@ function onVendorChange() {
   // APIキーが設定されているかチェック
   if (!checkApiKey(localSettings.value.vendor)) {
     // APIキーが設定されていない場合は、設定ダイアログを開く
-    // openModelSettingsDialog();
-    return;
+    // openModelSettingsDialog(); 
+    // Revert vendor change if API key is missing? Needs careful consideration.
+    // For now, proceed but reset max tokens based on potentially changed model.
   }
-  emit('update:settings', { ...localSettings.value });
-  displayedModel.value = selectedModel.value;
+
+  // Important: Wait for Vue's reactivity cycle so selectedModel is updated
+  nextTick(() => {
+    // Set maxTokens to the maximum for the (potentially new default) model
+    localSettings.value.maxTokens = selectedModel.value.maxTokens;
+    console.log(`Header Vendor changed. Max tokens set to: ${localSettings.value.maxTokens} for model ${selectedModel.value.id}`);
+    displayedModel.value = selectedModel.value; 
+    emit('update:settings', { ...localSettings.value }); 
+  });
 }
 
 function onModelChange() {
-  emit('update:settings', { ...localSettings.value });
-  displayedModel.value = selectedModel.value;
+  nextTick(() => {
+    localSettings.value.maxTokens = selectedModel.value.maxTokens;
+    console.log(`Header Model changed. Max tokens set to: ${localSettings.value.maxTokens} for model ${selectedModel.value.id}`);
+    displayedModel.value = selectedModel.value; 
+    emit('update:settings', { ...localSettings.value }); 
+  });
 }
 
 function onWebSearchChange() {
@@ -667,6 +677,23 @@ function onWebSearchChange() {
 const isWebSearchAvailable = computed(() => {
   return selectedModel.value.supportFunctionCalling || false;
 });
+
+// --- Add and Implement Dialog Handlers ---
+function onDialogVendorChange() {
+  nextTick(() => {
+    localSettings.value.maxTokens = selectedModel.value.maxTokens;
+    console.log(`Dialog Vendor changed. Max tokens set to: ${localSettings.value.maxTokens} for model ${selectedModel.value.id}`);
+    // DO NOT EMIT settings update here
+  });
+}
+
+function onDialogModelChange() {
+  nextTick(() => {
+    localSettings.value.maxTokens = selectedModel.value.maxTokens;
+    console.log(`Dialog Model changed. Max tokens set to: ${localSettings.value.maxTokens} for model ${selectedModel.value.id}`);
+    // DO NOT EMIT settings update here
+  });
+}
 </script>
 
 <style scoped>
@@ -888,10 +915,6 @@ const isWebSearchAvailable = computed(() => {
     outline: 2px solid var(--primary-color);
     outline-offset: -2px;
   }
-}
-
-:deep(.p-menuitem-link[aria-hidden="true"]) {
-  aria-hidden: false !important;
 }
 
 :deep(.vendor-dropdown .p-dropdown-item),
