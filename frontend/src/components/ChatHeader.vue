@@ -496,7 +496,8 @@ watch(
         supportFunctionCalling: model.supportFunctionCalling,
         unsupportsTemperature: model.unsupportsTemperature,
         multimodal: model.multimodal,
-        imageGeneration: model.imageGeneration
+        imageGeneration: model.imageGeneration,
+        defaultReasoningEffort: model.defaultReasoningEffort,
       });
 
       // Update OTHER model-dependent settings
@@ -504,10 +505,14 @@ watch(
       localSettings.value.multimodal = model.multimodal || false;
       localSettings.value.imageGeneration = model.imageGeneration || false;
 
-      if (model.supportsReasoning && !localSettings.value.reasoningEffort) {
-        localSettings.value.reasoningEffort = settingsStore.defaultReasoningEffort || 'medium';
-      } else if (!model.supportsReasoning) {
+      if (model.supportsReasoning) {
+        // Prioritize model's default, then global default, then 'medium'
+        localSettings.value.reasoningEffort = model.defaultReasoningEffort || settingsStore.defaultReasoningEffort || 'medium';
+        console.log(`Model supports reasoning. Set reasoningEffort to: ${localSettings.value.reasoningEffort}`);
+      } else {
+        // Explicitly set to undefined if not supported
         localSettings.value.reasoningEffort = undefined;
+        console.log('Model does not support reasoning. Set reasoningEffort to undefined.');
       }
 
       if (!model.supportFunctionCalling) {
