@@ -135,7 +135,7 @@
               </div>
             </div>
           </div>
-          <div class="settings-item" v-if="selectedModel.supportsReasoning">
+          <div class="settings-item" v-if="selectedModel.supportsReasoning && selectedModel.defaultReasoningEffort">
             <label for="reasoning-effort" class="settings-label">Reasoning Effort:</label>
             <div class="settings-control">
               <PrimeDropdown
