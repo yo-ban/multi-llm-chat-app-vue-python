@@ -264,9 +264,13 @@ const onDialogHide = () => {
 const onSave = async () => {
   try {
     isSaving.value = true;
+
+    // Call the store's save action
     await settingsStore.saveSettings(tempSettings.value);
-    emit('save', tempSettings.value);
+
+    // Close the dialog (emit is removed as store is the source of truth)
     dialogVisible.value = false;
+
   } catch (error) {
     console.error('Failed to save settings:', error);
     // TODO: エラー通知の実装

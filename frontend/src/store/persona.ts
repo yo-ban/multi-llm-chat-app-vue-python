@@ -11,31 +11,36 @@ export const usePersonaStore = defineStore('persona', {
   }),
   actions: {
     async loadUserDefinedPersonas() {
-      if (this.userDefinedPersonas.length === 0) {
-        this.userDefinedPersonas = await storageService.getUserPersonas();
-      }
+      // Load all personas from storage service
+      this.userDefinedPersonas = await storageService.getAllPersonas();
     },
 
     async addPersona(persona: UserDefinedPersona) {
+      // Assume persona object is complete and valid
+      // Add to local state first for UI responsiveness
       this.userDefinedPersonas.push(persona);
-      await this.savePersonas();
+      // Save the individual persona to storage
+      await storageService.savePersona(persona);
     },
 
-    async updatePersona(personaId: string, updatedPersona: Partial<UserDefinedPersona>) {
+    async updatePersona(personaId: string, updatedFields: Partial<UserDefinedPersona>) {
       const index = this.userDefinedPersonas.findIndex(p => p.id === personaId);
       if (index !== -1) {
-        this.userDefinedPersonas[index] = { ...this.userDefinedPersonas[index], ...updatedPersona };
-        await this.savePersonas();
+        // Update local state
+        this.userDefinedPersonas[index] = { 
+          ...this.userDefinedPersonas[index], 
+          ...updatedFields 
+        };
+        // Save the updated individual persona to storage
+        await storageService.savePersona(this.userDefinedPersonas[index]);
       }
     },
 
     async deletePersona(personaId: string) {
+      // Remove from local state
       this.userDefinedPersonas = this.userDefinedPersonas.filter(p => p.id !== personaId);
-      await this.savePersonas();
-    },
-
-    async savePersonas() {
-      await storageService.saveUserPersonas(this.userDefinedPersonas);
+      // Delete the individual persona from storage
+      await storageService.deletePersona(personaId);
     },
 
     async exportPersona(persona: UserDefinedPersona) {
@@ -87,11 +92,8 @@ export const usePersonaStore = defineStore('persona', {
           name: `Copy ${personaToDuplicate.name}`
         };
         
-        // 複製したペルソナをリストに追加
-        this.userDefinedPersonas.push(duplicatedPersona);
-        
-        // ペルソナリストの変更を保存
-        await this.savePersonas();
+        // Add the duplicated persona to local state and save it individually
+        await this.addPersona(duplicatedPersona);
         
         return newPersonaId;
       } catch (error) {

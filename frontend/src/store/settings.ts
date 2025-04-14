@@ -4,32 +4,57 @@ import type { GlobalSettings } from '@/types/settings';
 import type { Model } from '@/types/models';
 import { storageService } from '@/services/storage/indexeddb-service';
 
+const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
+  apiKeys: Object.keys(MODELS).reduce((acc, vendor) => {
+    acc[vendor] = '';
+    return acc;
+  }, {} as { [key: string]: string }),
+  defaultTemperature: 0.7,
+  defaultMaxTokens: 4096,
+  defaultVendor: 'anthropic',
+  defaultModel: MODELS.anthropic.CLAUDE_3_5_SONNET.id,
+  defaultReasoningEffort: 'medium',
+  defaultWebSearch: false,
+  openrouterModels: [],
+  titleGenerationVendor: 'openai',
+  titleGenerationModel: 'openai-gpt-4o-mini',
+};
+
 export const useSettingsStore = defineStore('settings', {
   state: (): GlobalSettings => ({
-    apiKeys: Object.keys(MODELS).reduce((acc, vendor) => {
-      acc[vendor] = '';
-      return acc;
-    }, {} as { [key: string]: string }),
-    defaultTemperature: 0.7,
-    defaultMaxTokens: 4096,
-    defaultVendor: 'anthropic',
-    defaultModel: MODELS.anthropic.CLAUDE_3_5_SONNET.id,
-    defaultReasoningEffort: 'medium',  // Default reasoning effort for models that support it
-    defaultWebSearch: false,  // Default web search setting
-    openrouterModels: [],
-    titleGenerationVendor: 'openai',  // Default vendor for title generation
-    titleGenerationModel: 'openai-gpt-4o-mini',  // Default model for title generation
+    // Initialize with default values, loadSettings will overwrite
+    ...DEFAULT_GLOBAL_SETTINGS,
   }),
 
   actions: {
     async loadSettings() {
-      const settings = await storageService.getGlobalSettings();
-      this.$patch(settings);
+      const savedSettings = await storageService.getGlobalSettings();
+      // If settings exist in storage, merge them with defaults,
+      // otherwise, keep the initial default state.
+      if (savedSettings) {
+        // Basic merge, assuming savedSettings structure is mostly compatible.
+        // More robust merging might be needed for future changes.
+        const mergedSettings = {
+          ...DEFAULT_GLOBAL_SETTINGS, // Start with defaults
+          ...savedSettings,           // Overwrite with saved values
+          // Ensure apiKeys includes all current vendors, even if not saved
+          apiKeys: {
+            ...DEFAULT_GLOBAL_SETTINGS.apiKeys,
+            ...(savedSettings.apiKeys || {}),
+          }
+        };
+        this.$patch(mergedSettings);
+      } else {
+        // No saved settings, ensure state is default
+        this.$patch(DEFAULT_GLOBAL_SETTINGS);
+      }
     },
 
     async saveSettings(settings: GlobalSettings) {
-      this.$patch(settings);
+      // 1. 保存処理
       await storageService.saveGlobalSettings(settings);
+      // 2. 状態の更新
+      this.$patch(settings);
     },
 
     getModelById(modelId: string): Model | null {

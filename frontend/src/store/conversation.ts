@@ -1,11 +1,103 @@
 import { defineStore } from 'pinia';
 import { v4 as uuidv4 } from 'uuid';
+import localforage from 'localforage'; // Import default localforage for migration
 import type { APISettings } from '@/types/api';
-import { storageService } from '@/services/storage/indexeddb-service';
+import { storageService, MIGRATION_V1_TO_V2_COMPLETE_KEY } from '@/services/storage/indexeddb-service';
 import { conversationService } from '@/services/domain/conversation-service';
 import type { Message } from '@/types/messages';
 import { useSettingsStore } from '@/store/settings';
 import type { Conversation, ConversationState, ConversationFolder } from '@/types/conversation';
+import type { GlobalSettings } from '@/types/settings'; // Import for migration
+import type { UserDefinedPersona } from '@/types/personas'; // Import for migration
+
+// Define old keys used in the default store (for migration)
+const OLD_CONVERSATION_LIST_KEY = 'conversationList';
+const OLD_CONVERSATION_FOLDERS_KEY = 'conversationFolders';
+const OLD_USER_PERSONAS_KEY = 'userDefinedPersonas';
+// Global settings key didn't change fundamentally, but might be in default store
+const OLD_GLOBAL_SETTINGS_KEY = 'globalSettings'; 
+// Current conversation ID key also might be in default store
+const OLD_CURRENT_CONVERSATION_ID_KEY = 'currentConversationId';
+
+
+/**
+ * One-time migration function from old storage format to new.
+ * Reads from the default localforage store and writes to new dedicated stores.
+ */
+async function runMigrationV1ToV2() {
+  console.log('Checking if migration v1 to v2 is needed...');
+  const migrationComplete = await storageService.getMigrationStatus(MIGRATION_V1_TO_V2_COMPLETE_KEY);
+
+  if (migrationComplete) {
+    console.log('Migration v1 to v2 already complete.');
+    return;
+  }
+
+  console.log('Starting storage migration v1 to v2...');
+
+  try {
+    // Use the default localforage instance to read old data
+    const oldLocalForage = localforage; 
+
+    // 1. Migrate Global Settings
+    const oldSettings = await oldLocalForage.getItem<GlobalSettings>(OLD_GLOBAL_SETTINGS_KEY);
+    if (oldSettings) {
+      console.log('Migrating global settings...');
+      await storageService.saveGlobalSettings(oldSettings);
+      // Optionally remove old key: await oldLocalForage.removeItem(OLD_GLOBAL_SETTINGS_KEY);
+    }
+
+    // 2. Migrate Personas
+    const oldPersonas = await oldLocalForage.getItem<UserDefinedPersona[]>(OLD_USER_PERSONAS_KEY);
+    if (Array.isArray(oldPersonas)) {
+      console.log(`Migrating ${oldPersonas.length} personas...`);
+      await Promise.all(oldPersonas.map(persona => storageService.savePersona(persona)));
+      // Optionally remove old key: await oldLocalForage.removeItem(OLD_USER_PERSONAS_KEY);
+    }
+
+    // 3. Migrate Folders
+    const oldFolders = await oldLocalForage.getItem<ConversationFolder[]>(OLD_CONVERSATION_FOLDERS_KEY);
+    if (Array.isArray(oldFolders)) {
+      console.log(`Migrating ${oldFolders.length} folders...`);
+      await Promise.all(oldFolders.map(folder => storageService.saveFolder(folder)));
+      // Optionally remove old key: await oldLocalForage.removeItem(OLD_CONVERSATION_FOLDERS_KEY);
+    }
+
+    // 4. Migrate Conversations (Meta and Messages)
+    const oldConversationList = await oldLocalForage.getItem<Conversation[]>(OLD_CONVERSATION_LIST_KEY);
+    if (Array.isArray(oldConversationList)) {
+      console.log(`Migrating ${oldConversationList.length} conversations (meta + messages)...`);
+      await Promise.all(oldConversationList.map(async (conv) => {
+        // Save metadata
+        await storageService.saveConversationMeta(conv);
+        // Try to load messages from old store (using convId as key)
+        const oldMessages = await oldLocalForage.getItem<Message[]>(conv.conversationId);
+        if (Array.isArray(oldMessages)) {
+          await storageService.saveConversationMessages(conv.conversationId, oldMessages);
+          // Optionally remove old message entry: await oldLocalForage.removeItem(conv.conversationId);
+        }
+      }));
+      // Optionally remove old list key: await oldLocalForage.removeItem(OLD_CONVERSATION_LIST_KEY);
+    }
+    
+    // 5. Migrate Current Conversation ID
+    const oldCurrentId = await oldLocalForage.getItem<string>(OLD_CURRENT_CONVERSATION_ID_KEY);
+    if (oldCurrentId) {
+        console.log('Migrating current conversation ID...');
+        await storageService.saveCurrentConversationId(oldCurrentId);
+        // Optionally remove old key: await oldLocalForage.removeItem(OLD_CURRENT_CONVERSATION_ID_KEY);
+    }
+
+    // Mark migration as complete
+    await storageService.setMigrationStatus(MIGRATION_V1_TO_V2_COMPLETE_KEY, true);
+    console.log('Storage migration v1 to v2 completed successfully!');
+
+  } catch (error) {
+    console.error('Error during storage migration v1 to v2:', error);
+    // Don't mark as complete if error occurs
+  }
+}
+
 
 export const useConversationStore = defineStore('conversation', {
   state: (): ConversationState => ({
@@ -15,41 +107,34 @@ export const useConversationStore = defineStore('conversation', {
   }),
   actions: {
     async initializeConversationStore() {
-      let conversationListNeedsUpdate = false;
-      // 会話リストの取得と初期化
-      const savedConversations = await storageService.getConversationList();
-      this.conversationList = savedConversations || [];
-      
-      // 現在の会話IDの取得と初期化
+      // Run migration logic first
+      await runMigrationV1ToV2(); 
+
+      // Load data using new storage service methods
+      this.conversationList = await storageService.getAllConversationMetas();
+      this.folders = await storageService.getAllFolders();
       this.currentConversationId = await storageService.getCurrentConversationId();
       
-      // フォルダデータの読み込み (Use storageService)
-      try {
-        // Replace direct localforage call with storageService method
-        this.folders = await storageService.getFolders();
-      } catch (error) {
-        // Error logging now handled within storageService.getFolders
-        // console.error('Error loading folders:', error);
-        this.folders = []; // Keep fallback to empty array
-      }
-
       // --- Start Fallback Logic ---
-      // 有効なフォルダIDのセットを作成
+      // Create a set of valid folder IDs
       const validFolderIds = new Set(this.folders.map(f => f.id));
+      const conversationsToUpdate: Conversation[] = [];
 
-      // 会話リストをチェックし、無効なfolderIdをnullに設定
+      // Check conversation list and mark those needing update
       this.conversationList.forEach(conversation => {
         if (conversation.folderId && !validFolderIds.has(conversation.folderId)) {
           console.warn(`Conversation "${conversation.title}" (${conversation.conversationId}) had an invalid folderId "${conversation.folderId}". Moving to root.`);
           conversation.folderId = null;
-          conversationListNeedsUpdate = true;
+          conversationsToUpdate.push(conversation);
         }
       });
 
-      // もしリストに変更があれば保存する
-      if (conversationListNeedsUpdate) {
-        console.log('Saving updated conversation list after cleaning invalid folderIds.');
-        await storageService.saveConversationList(this.conversationList);
+      // Save updates for affected conversations individually
+      if (conversationsToUpdate.length > 0) {
+        console.log(`Saving updates for ${conversationsToUpdate.length} conversations after cleaning invalid folderIds.`);
+        await Promise.all(
+          conversationsToUpdate.map(conv => storageService.saveConversationMeta(conv))
+        );
       }
       // --- End Fallback Logic ---
     },
@@ -61,14 +146,15 @@ export const useConversationStore = defineStore('conversation', {
       );
     
       if (existingEmptyConversation) {
+        // If an empty "New Chat" exists, just select it
         this.currentConversationId = existingEmptyConversation.conversationId;
         await storageService.saveCurrentConversationId(this.currentConversationId);
       } else {
+        // Create a new conversation
         const newConversationId = `conv-${uuidv4()}`;
         const nowDate = new Date().toISOString();
         const settingsStore = useSettingsStore();
         
-        // Ensure we have a valid default model, validate if using OpenRouter
         let modelId = settingsStore.defaultModel;
         if (settingsStore.defaultVendor === 'openrouter') {
           modelId = settingsStore.validateModelSelection(modelId, settingsStore.defaultVendor);
@@ -92,11 +178,19 @@ export const useConversationStore = defineStore('conversation', {
             imageGeneration: model?.imageGeneration ?? false,
           },
           historyLength: 0,
+          // Ensure no messages property is included when saving meta
+          // messages: [], // Removed
         };
+
+        // Add to local state
         this.conversationList.unshift(newConversation);
-        await storageService.saveConversationList(this.conversationList);
+        // Save the metadata of the new conversation
+        await storageService.saveConversationMeta(newConversation);
+        // Select the new conversation
         this.currentConversationId = newConversationId;
         await storageService.saveCurrentConversationId(this.currentConversationId);
+        // Clear messages for the new conversation in storage (optional, but good practice)
+        await storageService.saveConversationMessages(newConversationId, []);
       }
     },
         
@@ -109,7 +203,8 @@ export const useConversationStore = defineStore('conversation', {
       const conversationIndex = this.conversationList.findIndex(c => c.conversationId === conversationId);
       if (conversationIndex !== -1) {
         this.conversationList[conversationIndex].title = newTitle;
-        await storageService.saveConversationList(this.conversationList);
+        // Save the updated individual conversation metadata
+        await storageService.saveConversationMeta(this.conversationList[conversationIndex]);
       }
     },
     
@@ -123,7 +218,8 @@ export const useConversationStore = defineStore('conversation', {
         }
         
         this.conversationList[conversationIndex].settings = settings;
-        await storageService.saveConversationList(this.conversationList);
+        // Save the updated individual conversation metadata
+        await storageService.saveConversationMeta(this.conversationList[conversationIndex]);
       }
     },
 
@@ -132,7 +228,8 @@ export const useConversationStore = defineStore('conversation', {
       if (conversationIndex !== -1) {
         this.conversationList[conversationIndex].system = system;
         this.conversationList[conversationIndex].personaId = personaId;
-        await storageService.saveConversationList(this.conversationList);
+        // Save the updated individual conversation metadata
+        await storageService.saveConversationMeta(this.conversationList[conversationIndex]);
       }
     },
     
@@ -140,7 +237,8 @@ export const useConversationStore = defineStore('conversation', {
       const conversationIndex = this.conversationList.findIndex(c => c.conversationId === conversationId);
       if (conversationIndex !== -1) {
         this.conversationList[conversationIndex].historyLength = historyLength;
-        await storageService.saveConversationList(this.conversationList);
+        // Save the updated individual conversation metadata
+        await storageService.saveConversationMeta(this.conversationList[conversationIndex]);
       }
     },
 
@@ -148,7 +246,8 @@ export const useConversationStore = defineStore('conversation', {
       const conversationIndex = this.conversationList.findIndex(c => c.conversationId === conversationId);
       if (conversationIndex !== -1) {
         this.conversationList[conversationIndex].updatedAt = new Date().toISOString();
-        await storageService.saveConversationList(this.conversationList);
+        // Save the updated individual conversation metadata
+        await storageService.saveConversationMeta(this.conversationList[conversationIndex]);
       }
     },
 
@@ -156,7 +255,8 @@ export const useConversationStore = defineStore('conversation', {
       const conversationIndex = this.conversationList.findIndex(c => c.conversationId === conversationId);
       if (conversationIndex !== -1) {
         this.conversationList[conversationIndex].files = files;
-        await storageService.saveConversationList(this.conversationList);
+        // Save the updated individual conversation metadata
+        await storageService.saveConversationMeta(this.conversationList[conversationIndex]);
       }
     },
 
@@ -166,23 +266,32 @@ export const useConversationStore = defineStore('conversation', {
         const conversation = this.conversationList[conversationIndex];
         if (conversation.files) {
           delete conversation.files[fileName];
-          await storageService.saveConversationList(this.conversationList);
+          // Save the updated individual conversation metadata
+          await storageService.saveConversationMeta(conversation);
         }
       }
     },
 
     async deleteConversation(conversationId: string) {
+      // Remove from local list first
       this.conversationList = this.conversationList.filter(c => c.conversationId !== conversationId);
-      await storageService.saveConversationList(this.conversationList);
-      await storageService.removeConversation(conversationId);
+      
+      // Call the combined delete method in storageService
+      await storageService.deleteConversation(conversationId);
 
+      // Handle selecting a new current conversation if the deleted one was active
       if (this.currentConversationId === conversationId) {
-        if (this.conversationList.length === 0){
-          await this.createNewConversation()
-        } else { 
-          this.currentConversationId = this.conversationList[0].conversationId;
-          await storageService.saveCurrentConversationId(this.currentConversationId);
+        let nextConversationId: string | null = null;
+        if (this.conversationList.length > 0) {
+          nextConversationId = this.conversationList[0].conversationId;
+        } else {
+          // No conversations left, create a new one implicitly?
+          // Or just set currentConversationId to null?
+          // For now, just setting to null and letting UI handle empty state.
+          nextConversationId = null;
         }
+        this.currentConversationId = nextConversationId;
+        await storageService.saveCurrentConversationId(this.currentConversationId);
       }
     },
 
@@ -202,24 +311,23 @@ export const useConversationStore = defineStore('conversation', {
         const importedConversation = importedData.conversation;
         const importedMessages = importedData.messages;
     
-        // 新しい会話IDを生成
         const newConversationId = `conv-${uuidv4()}`
     
-        // インポートされた会話に新しいIDを割り当てる
         const newConversation: Conversation = {
           ...importedConversation,
           conversationId: newConversationId,
+          // Ensure messages are not included in the meta object
+          // messages: undefined, // Remove this line
         };
     
-        // 会話リストに新しい会話を追加
         this.conversationList.unshift(newConversation);
     
-        // メッセージをIndexedDBに保存
-        await storageService.updateConversationMessages(newConversationId, importedMessages);
-        await storageService.saveConversationList(this.conversationList);
+        // Save metadata and messages separately
+        await storageService.saveConversationMeta(newConversation);
+        await storageService.saveConversationMessages(newConversationId, importedMessages);
     
-        // 現在の会話を選択
         this.currentConversationId = newConversationId;
+        await storageService.saveCurrentConversationId(this.currentConversationId);
       } catch (error) {
         console.error('Error importing conversation:', error);
         throw error;
@@ -228,7 +336,6 @@ export const useConversationStore = defineStore('conversation', {
 
     async duplicateConversation(conversationId: string) {
       try {
-        // 複製する会話を検索
         const conversationToDuplicate = this.conversationList.find(
           c => c.conversationId === conversationId
         );
@@ -237,36 +344,32 @@ export const useConversationStore = defineStore('conversation', {
           throw new Error(`Conversation with ID ${conversationId} not found`);
         }
         
-        // 新しい会話IDを生成
         const newConversationId = `conv-${uuidv4()}`;
+        const nowDate = new Date().toISOString();
+        const title = `Copy-${nowDate.split('T')[0]} ${conversationToDuplicate.title}`;
         
-        // YYYY-MM-DD
-        const nowDate = new Date().toISOString().split('T')[0];
-        
-        // 会話のディープコピーを作成
-        const duplicatedConversation: Conversation = {
-          ...JSON.parse(JSON.stringify(conversationToDuplicate)), // ディープコピー
+        const duplicatedConversationMeta: Omit<Conversation, 'messages'> = {
+          ...JSON.parse(JSON.stringify(conversationToDuplicate)), // Deep copy meta
           conversationId: newConversationId,
-          title: `Copy-${nowDate} ${conversationToDuplicate.title}`,
+          title,
           createdAt: nowDate,
-          updatedAt: nowDate
+          updatedAt: nowDate,
         };
+        delete (duplicatedConversationMeta as any).messages; // Ensure no messages prop
+
+        // Add to local list (casting back to Conversation for the list type)
+        this.conversationList.unshift(duplicatedConversationMeta as Conversation);
         
-        // 複製した会話をリストに追加
-        this.conversationList.unshift(duplicatedConversation);
+        // Save the duplicated metadata
+        await storageService.saveConversationMeta(duplicatedConversationMeta);
         
-        // 会話リストの変更を保存
-        await storageService.saveConversationList(this.conversationList);
-        
-        // 元の会話のメッセージを取得
         const messages = await storageService.getConversationMessages(conversationId);
         
-        // メッセージもコピーして保存（もし存在すれば）
+        // Save the duplicated messages
         if (messages && messages.length > 0) {
-          await storageService.updateConversationMessages(newConversationId, JSON.parse(JSON.stringify(messages)));
+          await storageService.saveConversationMessages(newConversationId, JSON.parse(JSON.stringify(messages)));
         }
         
-        // 新しい会話を選択して返す
         this.currentConversationId = newConversationId;
         await storageService.saveCurrentConversationId(this.currentConversationId);
         
@@ -283,7 +386,6 @@ export const useConversationStore = defineStore('conversation', {
           throw new Error('No current conversation');
         }
         
-        // Current conversation
         const currentConversation = this.conversationList.find(
           c => c.conversationId === this.currentConversationId
         );
@@ -292,44 +394,39 @@ export const useConversationStore = defineStore('conversation', {
           throw new Error(`Current conversation not found`);
         }
         
-        // Get all messages from the current conversation
         const allMessages = await storageService.getConversationMessages(this.currentConversationId);
         
-        // Find the index of the specified message
         const messageIndex = allMessages.findIndex(msg => msg.id === messageId);
         if (messageIndex === -1) {
           throw new Error(`Message with ID ${messageId} not found`);
         }
         
-        // Get messages up to and including the specified message
         const messagesUpToSpecified = allMessages.slice(0, messageIndex + 1);
         
-        // Create a new conversation (branch)
         const newConversationId = `conv-${uuidv4()}`;
 
-        // YYYY-MM-DD
-        const nowDate = new Date().toISOString().split('T')[0];
+        const nowDate = new Date().toISOString();
+        const title = `Branch-${nowDate.split('T')[0]} ${currentConversation.title}`;
         
-        // Create a copy of the current conversation with a new title
-        const branchedConversation: Conversation = {
+        const branchedConversationMeta: Omit<Conversation, 'messages'> = {
           ...JSON.parse(JSON.stringify(currentConversation)),
           conversationId: newConversationId,
-          title: `Branch-${nowDate} ${currentConversation.title}`,
-          createdAt: nowDate,
+          title: title,
+          createdAt: nowDate, // Use full ISO string?
           updatedAt: nowDate,
-          historyLength: 0 // no limit
+          historyLength: messagesUpToSpecified.length // Set history length based on branched messages
         };
+        delete (branchedConversationMeta as any).messages; // Ensure no messages prop
+
+        // Add to local list
+        this.conversationList.unshift(branchedConversationMeta as Conversation);
         
-        // Add the new conversation to the list
-        this.conversationList.unshift(branchedConversation);
+        // Save the new metadata
+        await storageService.saveConversationMeta(branchedConversationMeta);
         
-        // Save conversation list changes
-        await storageService.saveConversationList(this.conversationList);
+        // Save the partial messages
+        await storageService.saveConversationMessages(newConversationId, JSON.parse(JSON.stringify(messagesUpToSpecified)));
         
-        // Save the partial messages to the new conversation
-        await storageService.updateConversationMessages(newConversationId, JSON.parse(JSON.stringify(messagesUpToSpecified)));
-        
-        // Select the new conversation
         this.currentConversationId = newConversationId;
         await storageService.saveCurrentConversationId(this.currentConversationId);
         
@@ -349,10 +446,9 @@ export const useConversationStore = defineStore('conversation', {
         isExpanded: true
       };
       
-      // フォルダを先頭に追加
       this.folders.unshift(newFolder);
-      // Use storageService to save folders
-      await storageService.saveFolders(this.folders);
+      // Save the individual folder
+      await storageService.saveFolder(newFolder);
       return folderId;
     },
     
@@ -360,32 +456,41 @@ export const useConversationStore = defineStore('conversation', {
       const folderIndex = this.folders.findIndex(f => f.id === folderId);
       if (folderIndex !== -1) {
         this.folders[folderIndex].name = newName;
-        // Use storageService to save folders
-        await storageService.saveFolders(this.folders);
+        // Save the updated individual folder
+        await storageService.saveFolder(this.folders[folderIndex]);
       }
     },
     
     async deleteFolder(folderId: string) {
-      // フォルダに属する会話をルートに戻す
+      const conversationsToUpdate: Conversation[] = [];
+      // Update conversations in local state
       this.conversationList.forEach(conversation => {
         if (conversation.folderId === folderId) {
           conversation.folderId = null;
+          conversationsToUpdate.push(conversation);
         }
       });
       
+      // Remove folder from local state
       this.folders = this.folders.filter(f => f.id !== folderId);
-      // Use storageService to save folders
-      await storageService.saveFolders(this.folders);
-      // Also save the updated conversation list (folderId changes)
-      await storageService.saveConversationList(this.conversationList);
+      
+      // Delete the folder from storage
+      await storageService.deleteFolder(folderId);
+      
+      // Save updates for affected conversations individually
+      if (conversationsToUpdate.length > 0) {
+        await Promise.all(
+          conversationsToUpdate.map(conv => storageService.saveConversationMeta(conv))
+        );
+      }
     },
     
     async toggleFolderExpanded(folderId: string) {
       const folderIndex = this.folders.findIndex(f => f.id === folderId);
       if (folderIndex !== -1) {
         this.folders[folderIndex].isExpanded = !this.folders[folderIndex].isExpanded;
-        // Use storageService to save folders
-        await storageService.saveFolders(this.folders);
+        // Save the updated individual folder
+        await storageService.saveFolder(this.folders[folderIndex]);
       }
     },
     
@@ -393,7 +498,8 @@ export const useConversationStore = defineStore('conversation', {
       const conversationIndex = this.conversationList.findIndex(c => c.conversationId === conversationId);
       if (conversationIndex !== -1) {
         this.conversationList[conversationIndex].folderId = folderId;
-        await storageService.saveConversationList(this.conversationList);
+        // Save the updated individual conversation metadata
+        await storageService.saveConversationMeta(this.conversationList[conversationIndex]);
       }
     },
   },

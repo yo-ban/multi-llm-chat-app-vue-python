@@ -62,7 +62,6 @@ import ChatView from './views/ChatView.vue';
 import { useConversationStore } from './store/conversation';
 import { useSettingsStore } from './store/settings';
 import { usePersonaStore } from '@/store/persona';
-import { storageService } from '@/services/storage/indexeddb-service';
 import { MODELS } from '@/constants/models';
 import GlobalSettingsDialog from '@/components/settings/GlobalSettingsDialog.vue';
 import type { GlobalSettings } from '@/types/settings';
@@ -83,8 +82,6 @@ const tempSettings = reactive<GlobalSettings>({
   titleGenerationVendor: settingsStore.titleGenerationVendor,
   titleGenerationModel: settingsStore.titleGenerationModel,
 });
-
-storageService.initialize();
 
 // const availableModels = computed(() => {
 //   if (tempSettings.defaultVendor === 'openrouter') {
@@ -173,6 +170,7 @@ const openSettingsDialog = () => {
 const onSettingsSave = (settings: GlobalSettings) => {
   // 設定が保存された後の処理
   // 必要に応じて、他のコンポーネントに通知したり、状態を更新したりする
+  console.log('Settings saved:', settings);
 };
 
 watch(

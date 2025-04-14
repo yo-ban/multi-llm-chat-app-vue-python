@@ -91,14 +91,13 @@ import { useConversationStore } from '@/store/conversation';
 import { useSettingsStore } from '@/store/settings';
 
 // Types
-import type { Message, AssistantMessage, UserMessage } from '@/types/messages';
+import type { Message, AssistantMessage } from '@/types/messages';
 import type { MessageRole } from '@/types/common';
 import type { Conversation } from '@/types/conversation';
 import type { ToolCall } from '@/types/tools';
 
 // Services
 import { llmService } from '@/services/domain/llm-service';
-import { storageService } from '@/services/storage/indexeddb-service';
 
 // Utils
 import { generateSystemMessageWithFiles, countTokens } from '@/utils/message-utils';
@@ -296,14 +295,11 @@ watch(
       if (isStreaming.value) {
         cancelStreaming()
         chatStore.stopStreaming();
-        await updateConversationHistory(previousConversationID.value, chatStore.messages);
+        await chatStore.saveMessages(previousConversationID.value);
       }
       previousConversationID.value = newConversationId;
-      const messages = await storageService.getConversationMessages(newConversationId);
-      chatStore.messages = messages.map(message => ({
-        ...message,
-      }));
-      if (messages.length === 0) {
+      await chatStore.loadMessages(newConversationId);
+      if (chatStore.messages.length === 0) {
         showSystemMessageInput.value = true
       } else {
         showSystemMessageInput.value = false
@@ -312,7 +308,7 @@ watch(
         });
       }
     } else {
-      chatStore.messages = [];
+      chatStore.clearMessages();
       showSystemMessageInput.value = false;
     }
     systemMessage.value = currentConversation.value?.system || DEFAULT_PERSONA.systemMessage;
@@ -405,7 +401,7 @@ async function onSendMessage(newMessage: string, uploadedImages: string[]) {
       showSystemMessageInput.value = false;
     }
     await chatStore.addMessage('user' as MessageRole, newMessage, uploadedImages, false);
-    await updateConversationHistory(currentConversationId, chatStore.messages);
+    await chatStore.saveMessages(currentConversationId);
 
     nextTick(() => {
       scrollToBottom();
@@ -413,12 +409,6 @@ async function onSendMessage(newMessage: string, uploadedImages: string[]) {
     await sendMessage();
   }
 }
-
-const updateConversationHistory = async (conversationId: string, messages: Message[]) => {
-  if (conversationId) {
-    await storageService.updateConversationMessages(conversationId, messages);
-  }
-};
 
 async function reGenerateChatTitle() {
   const currentConversationId = conversationStore.currentConversationId;
@@ -476,7 +466,7 @@ async function sendMessage() {
     }
   } finally {
     if (currentConversationId) {
-      await updateConversationHistory(currentConversationId, chatStore.messages);
+      await chatStore.saveMessages(currentConversationId);
       await conversationStore.updateConversationDate(currentConversationId)
     }
     isStreaming.value = false;
@@ -496,65 +486,35 @@ function cancelStreaming() {
 
 async function saveEditedMessage(id: string, editedText: string) {
   await chatStore.updateMessage(id, editedText);
-
-  // Update the conversation history with the current messages
-  const currentConversationId = conversationStore.currentConversationId;
-  if (currentConversationId) {
-    await updateConversationHistory(currentConversationId, chatStore.messages);
-  }
+  await chatStore.saveMessages(conversationStore.currentConversationId!);
 }
 
 async function resendMessage(id: string) {
   hasStartedStreaming.value = false;
-  const messageIndex = chatStore.messages.findIndex(message => message.id === id);
-  console.log('Resending message with id:', id, 'Index:', messageIndex);
-  if (messageIndex !== -1) {
-    const resendMessage = chatStore.messages[messageIndex] as UserMessage;
-    chatStore.messages.splice(messageIndex);
-    await chatStore.addMessage('user', resendMessage.text, resendMessage.images, false);
-
+  const messageToResend = await chatStore.resendMessage(id);
+  
+  if (messageToResend) {
     nextTick(() => {
       scrollToBottom();
     });
-
     await sendMessage();
   }
 }
 
 async function deleteMessage(id: string) {
-  const messageIndex = chatStore.messages.findIndex(message => message.id === id);
-  if (messageIndex !== -1) {
-    const role = chatStore.messages[messageIndex].role;
-
-    if (role === 'user') {
-      chatStore.messages.splice(messageIndex, 2);
-    } else if (role === 'assistant') {
-      chatStore.messages.splice(messageIndex - 1, 2);
-    } else if (role === "error") {
-      chatStore.messages.splice(messageIndex, 1);
-    }
-    // Update the conversation history with the current messages
-    const currentConversationId = conversationStore.currentConversationId;
-    if (currentConversationId){
-      await updateConversationHistory(currentConversationId, chatStore.messages);
-    }
-    if (chatStore.messages.length === 0) {
-      showSystemMessageInput.value = true;
-      systemMessage.value = currentConversation.value?.system || DEFAULT_PERSONA.systemMessage;
-      isCustomSystemMessageSelected.value = systemMessage.value !== DEFAULT_PERSONA.systemMessage;
-    }
+  await chatStore.deleteMessage(id);
+  await chatStore.saveMessages(conversationStore.currentConversationId!);
+  
+  if (chatStore.messages.length === 0) {
+    showSystemMessageInput.value = true;
+    systemMessage.value = currentConversation.value?.system || DEFAULT_PERSONA.systemMessage;
+    isCustomSystemMessageSelected.value = systemMessage.value !== DEFAULT_PERSONA.systemMessage;
   }
 }
 
 async function deleteImage(messageId: string, imageIndex: number) {
-  const messageIndex = chatStore.messages.findIndex(message => message.id === messageId);
-  if (messageIndex !== -1) {
-    const message = chatStore.messages[messageIndex];
-    if (message.images && message.images.length > imageIndex) {
-      message.images = message.images.filter((_, idx) => idx !== imageIndex);
-      await updateConversationHistory(conversationStore.currentConversationId!, chatStore.messages);
-    }
-  }
+  await chatStore.deleteImage(messageId, imageIndex);
+  await chatStore.saveMessages(conversationStore.currentConversationId!);
 }
 
 function onScroll() {

@@ -3,306 +3,245 @@ import type { Message } from '@/types/messages';
 import type { Conversation, ConversationFolder } from '@/types/conversation';
 import type { GlobalSettings } from '@/types/settings';
 import type { UserDefinedPersona } from '@/types/personas';
-import { MODELS } from '@/constants/models';
+// import { MODELS } from '@/constants/models';
 
-// localforageのキー定数
-const CONVERSATION_LIST_KEY = 'conversationList';
+// --- Create dedicated localforage instances for each store ---
+const settingsStore = localforage.createInstance({ name: 'chatAppDB', storeName: 'settings' });
+const personasStore = localforage.createInstance({ name: 'chatAppDB', storeName: 'personas' });
+const foldersStore = localforage.createInstance({ name: 'chatAppDB', storeName: 'folders' });
+const conversationsMetaStore = localforage.createInstance({ name: 'chatAppDB', storeName: 'conversationsMeta' });
+const conversationMessagesStore = localforage.createInstance({ name: 'chatAppDB', storeName: 'conversationMessages' });
+const appStateStore = localforage.createInstance({ name: 'chatAppDB', storeName: 'appState' }); // For currentConversationId
+
 const CURRENT_CONVERSATION_ID_KEY = 'currentConversationId';
-const GLOBAL_SETTINGS_KEY = 'globalSettings';
-const USER_PERSONAS_KEY = 'userDefinedPersonas';
-const CONVERSATION_FOLDERS_KEY = 'conversationFolders';
+const GLOBAL_SETTINGS_KEY = 'globalSettingsData';
+export const MIGRATION_V1_TO_V2_COMPLETE_KEY = 'migrationV1ToV2Complete'; // Export the key
 
-/**
- * ストレージサービスのインターフェース
- * クライアントサイドストレージ（IndexedDB）へのアクセスを提供
- */
-export interface StorageService {
-  // 初期化
-  initialize(): Promise<void>;
-  
-  // グローバル設定
-  getGlobalSettings(): Promise<GlobalSettings>;
-  saveGlobalSettings(settings: GlobalSettings): Promise<void>;
-  
-  // 会話関連
-  getConversationList(): Promise<Conversation[]>;
-  saveConversationList(conversations: Conversation[]): Promise<void>;
-  getCurrentConversationId(): Promise<string | null>;
-  saveCurrentConversationId(conversationId: string): Promise<void>;
-  removeConversation(conversationId: string): Promise<void>;
-  
-  // ペルソナ関連
-  getUserPersonas(): Promise<UserDefinedPersona[]>;
-  saveUserPersonas(personas: UserDefinedPersona[]): Promise<void>;
-  
-  // メッセージ関連
-  getConversationMessages(conversationId: string): Promise<Message[]>;
-  addMessageToConversation(conversationId: string, message: Message): Promise<void>;
-  updateConversationMessages(conversationId: string, messages: Message[]): Promise<void>;
-
-  // Folder related
-  getFolders(): Promise<ConversationFolder[]>;
-  saveFolders(folders: ConversationFolder[]): Promise<void>;
+// Helper function to get all items from a store instance
+async function getAllItems<T>(store: LocalForage): Promise<T[]> {
+  const items: T[] = [];
+  try {
+    await store.iterate<T, void>((value, key) => {
+      items.push(value);
+    });
+    return items;
+  } catch (error) {
+    console.error(`Error iterating over store ${store.config().storeName}:`, error);
+    return []; // Return empty array on error
+  }
 }
 
 /**
- * IndexedDBを使用したストレージサービスの実装
+ * Updated StorageService Interface
+ */
+export interface StorageService {
+  // Global Settings (using a fixed key)
+  getGlobalSettings(): Promise<GlobalSettings | null>;
+  saveGlobalSettings(settings: GlobalSettings): Promise<void>;
+
+  // Personas (CRUD operations)
+  getAllPersonas(): Promise<UserDefinedPersona[]>;
+  savePersona(persona: UserDefinedPersona): Promise<void>;
+  deletePersona(personaId: string): Promise<void>;
+
+  // Folders (CRUD operations)
+  getAllFolders(): Promise<ConversationFolder[]>;
+  saveFolder(folder: ConversationFolder): Promise<void>;
+  deleteFolder(folderId: string): Promise<void>;
+
+  // Conversation Metadata (CRUD operations)
+  getAllConversationMetas(): Promise<Conversation[]>; // Returns array of Conversation objects (meta only)
+  saveConversationMeta(conversationMeta: Omit<Conversation, 'messages'>): Promise<void>; // Accepts meta only
+  deleteConversationMeta(conversationId: string): Promise<void>;
+
+  // Conversation Messages (CRUD operations)
+  getConversationMessages(conversationId: string): Promise<Message[]>;
+  saveConversationMessages(conversationId: string, messages: Message[]): Promise<void>; // Replaces updateConversationMessages
+  deleteConversationMessages(conversationId: string): Promise<void>; // Replaces removeConversation
+
+  // Combined Conversation Deletion
+  deleteConversation(conversationId: string): Promise<void>; // Deletes both meta and messages
+
+  // Current Conversation ID
+  getCurrentConversationId(): Promise<string | null>;
+  saveCurrentConversationId(conversationId: string | null): Promise<void>; // Allow saving null
+
+  // Migration Status
+  getMigrationStatus(key: string): Promise<boolean>;
+  setMigrationStatus(key: string, status: boolean): Promise<void>;
+}
+
+/**
+ * Updated IndexedDBStorageService Implementation
  */
 class IndexedDBStorageService implements StorageService {
-  /**
-   * ストレージを初期化する
-   */
-  async initialize(): Promise<void> {
-    await localforage.createInstance({
-      name: 'chatApp',
-      storeName: 'conversations',
-    });
-  }
 
-  /**
-   * グローバル設定を取得する
-   * @returns グローバル設定オブジェクト
-   */
-  async getGlobalSettings(): Promise<GlobalSettings> {
-    // 保存されている設定を取得
-    const savedSettings = await localforage.getItem<GlobalSettings>(GLOBAL_SETTINGS_KEY);
-    
-    // デフォルト設定
-    const defaultSettings: GlobalSettings = {
-      apiKeys: Object.keys(MODELS).reduce((acc, vendor) => {
-        acc[vendor] = '';
-        return acc;
-      }, {} as { [key: string]: string }),
-      defaultTemperature: 0.7,
-      defaultMaxTokens: 4096,
-      defaultVendor: 'anthropic',
-      defaultModel: MODELS.anthropic.CLAUDE_3_5_SONNET.id,
-      defaultReasoningEffort: 'medium',
-      openrouterModels: [],
-      defaultWebSearch: false,
-      titleGenerationVendor: 'anthropic',
-      titleGenerationModel: MODELS.anthropic.CLAUDE_3_HAIKU.id
-    };
-    
-    // 保存されている設定がない場合はデフォルト設定を返す
-    if (!savedSettings) {
-      return defaultSettings;
-    }
-    
-    // 保存された設定から、現在のMODELSに存在するベンダーのAPIキーのみを抽出
-    const validApiKeys = Object.keys(MODELS).reduce((acc, vendor) => {
-      acc[vendor] = savedSettings.apiKeys[vendor] || '';
-      return acc;
-    }, {} as { [key: string]: string });
-    
-    // 設定をマージして返す
-    return {
-      ...defaultSettings,
-      ...savedSettings,
-      apiKeys: validApiKeys, // 有効なAPIキーで上書き
-      // defaultVendorが無効な場合はデフォルト値を使用
-      defaultVendor: Object.keys(MODELS).includes(savedSettings.defaultVendor) 
-        ? savedSettings.defaultVendor 
-        : defaultSettings.defaultVendor,
-      // defaultModelが無効な場合はデフォルト値を使用
-      defaultModel: Object.values(MODELS).some(models => 
-        Object.values(models).some(model => model.id === savedSettings.defaultModel)
-      ) ? savedSettings.defaultModel : defaultSettings.defaultModel,
-      // OpenRouterモデルの設定を保持
-      openrouterModels: savedSettings.openrouterModels || [],
-    };
-  }
-
-  /**
-   * グローバル設定を保存する
-   * @param settings 保存する設定
-   */
-  async saveGlobalSettings(settings: GlobalSettings): Promise<void> {
-    console.log('Saving global settings:', settings);
-    // Deep clone the settings object to ensure all nested objects are properly copied
-    const clonedSettings: GlobalSettings = {
-      apiKeys: { ...settings.apiKeys },
-      defaultTemperature: settings.defaultTemperature,
-      defaultMaxTokens: settings.defaultMaxTokens,
-      defaultVendor: settings.defaultVendor,
-      defaultModel: settings.defaultModel,
-      defaultReasoningEffort: settings.defaultReasoningEffort,
-      openrouterModels: settings.openrouterModels.map(model => ({
-        id: model.id,
-        name: model.name,
-        contextWindow: model.contextWindow,
-        maxTokens: model.maxTokens,
-        multimodal: model.multimodal,
-        supportFunctionCalling: model.supportFunctionCalling || false
-      })),
-      defaultWebSearch: settings.defaultWebSearch,
-      titleGenerationVendor: settings.titleGenerationVendor,
-      titleGenerationModel: settings.titleGenerationModel
-    };
-    
-    console.log('Cloned settings:', clonedSettings);
+  async getGlobalSettings(): Promise<GlobalSettings | null> {
     try {
-      await localforage.setItem(GLOBAL_SETTINGS_KEY, clonedSettings);
-      console.log('Global settings saved successfully');
+      // Default settings logic should ideally be in the settings store, 
+      // this service should just load what's saved or null.
+      const settings = await settingsStore.getItem<GlobalSettings>(GLOBAL_SETTINGS_KEY);
+      return settings; // Return null if not found
+    } catch (error) {
+      console.error('Error getting global settings:', error);
+      return null;
+    }
+  }
+
+  async saveGlobalSettings(settings: GlobalSettings): Promise<void> {
+    try {
+      // Create a deep clone of the settings object
+      const settingsToSave = JSON.parse(JSON.stringify(settings));
+      await settingsStore.setItem(GLOBAL_SETTINGS_KEY, settingsToSave);
     } catch (error) {
       console.error('Error saving global settings:', error);
-      throw error; // Re-throw the error to handle it in the calling code
     }
   }
 
-  /**
-   * 会話リストを取得する
-   * @returns 会話オブジェクトの配列
-   */
-  async getConversationList(): Promise<Conversation[]> {
+  async getAllPersonas(): Promise<UserDefinedPersona[]> {
+    return getAllItems<UserDefinedPersona>(personasStore);
+  }
+
+  async savePersona(persona: UserDefinedPersona): Promise<void> {
     try {
-      const list = await localforage.getItem<Conversation[]>(CONVERSATION_LIST_KEY);
-      return list || [];
+      // Create a deep clone of the persona object
+      const personaToSave = JSON.parse(JSON.stringify(persona));
+      await personasStore.setItem(persona.id, personaToSave);
     } catch (error) {
-      console.error('Error getting conversation list from localforage:', error);
-      // Return empty array or handle error as appropriate for your application
-      return []; 
+      console.error(`Error saving persona ${persona.id}:`, error);
     }
   }
 
-  /**
-   * 会話リストを保存する
-   * @param conversations 保存する会話リスト
-   */
-  async saveConversationList(conversations: Conversation[]): Promise<void> {
+  async deletePersona(personaId: string): Promise<void> {
     try {
-      // ディープクローンを作成して保存
-      const clonedConversationList = conversations.map(conversation => ({
-        ...conversation,
-        settings: { ...conversation.settings },
-        // Ensure files is always an object, even if undefined/null in source
-        files: conversation.files ? { ...conversation.files } : {}
-      }));
-      await localforage.setItem(CONVERSATION_LIST_KEY, clonedConversationList);
+      await personasStore.removeItem(personaId);
     } catch (error) {
-      console.error('Error saving conversation list to localforage:', error);
-      // Optionally re-throw or handle the error (e.g., notify user)
-      // throw error; 
+      console.error(`Error deleting persona ${personaId}:`, error);
     }
   }
 
-  /**
-   * 現在の会話IDを取得する
-   * @returns 現在の会話ID、または会話がない場合はnull
-   */
-  async getCurrentConversationId(): Promise<string | null> {
-    return localforage.getItem<string>(CURRENT_CONVERSATION_ID_KEY);
+  async getAllFolders(): Promise<ConversationFolder[]> {
+    return getAllItems<ConversationFolder>(foldersStore);
   }
 
-  /**
-   * 現在の会話IDを保存する
-   * @param conversationId 保存する会話ID
-   */
-  async saveCurrentConversationId(conversationId: string): Promise<void> {
-    await localforage.setItem(CURRENT_CONVERSATION_ID_KEY, conversationId);
+  async saveFolder(folder: ConversationFolder): Promise<void> {
+    try {
+      // Create a deep clone of the folder object
+      const folderToSave = JSON.parse(JSON.stringify(folder));
+      await foldersStore.setItem(folder.id, folderToSave);
+    } catch (error) {
+      console.error(`Error saving folder ${folder.id}:`, error);
+    }
   }
 
-  /**
-   * ユーザー定義のペルソナを取得する
-   * @returns ユーザー定義のペルソナの配列
-   */
-  async getUserPersonas(): Promise<UserDefinedPersona[]> {
-    const personas = await localforage.getItem<UserDefinedPersona[]>(USER_PERSONAS_KEY);
-    // ディープクローンを返す
-    return personas ? personas.map(persona => ({ ...persona })) : [];
+  async deleteFolder(folderId: string): Promise<void> {
+    try {
+      await foldersStore.removeItem(folderId);
+    } catch (error) {
+      console.error(`Error deleting folder ${folderId}:`, error);
+    }
   }
 
-  /**
-   * ユーザー定義のペルソナを保存する
-   * @param personas 保存するペルソナの配列
-   */
-  async saveUserPersonas(personas: UserDefinedPersona[]): Promise<void> {
-    // ディープクローンを作成して保存
-    const clonedPersonas = personas.map(persona => ({ ...persona }));
-    await localforage.setItem(USER_PERSONAS_KEY, clonedPersonas);
+  async getAllConversationMetas(): Promise<Conversation[]> {
+    // Cast needed as we store Omit<Conversation, 'messages'> but return Conversation[]
+    const metas = await getAllItems<Omit<Conversation, 'messages'>>(conversationsMetaStore);
+    // Ensure the shape matches Conversation (even if messages isn't present)
+    return metas.map(meta => meta as Conversation);
   }
-  
-  /**
-   * 特定の会話のメッセージを取得する
-   * @param conversationId 会話ID
-   * @returns メッセージの配列
-   */
+
+  async saveConversationMeta(conversationMeta: Omit<Conversation, 'messages'>): Promise<void> {
+    try {
+      // Create a deep clone of the conversation meta object
+      const metaToSave = JSON.parse(JSON.stringify(conversationMeta));
+      await conversationsMetaStore.setItem(conversationMeta.conversationId, metaToSave);
+    } catch (error) {
+      console.error(`Error saving conversation meta ${conversationMeta.conversationId}:`, error);
+    }
+  }
+
+  async deleteConversationMeta(conversationId: string): Promise<void> {
+    try {
+      await conversationsMetaStore.removeItem(conversationId);
+    } catch (error) {
+      console.error(`Error deleting conversation meta ${conversationId}:`, error);
+    }
+  }
+
   async getConversationMessages(conversationId: string): Promise<Message[]> {
-    const messages = await localforage.getItem<Message[]>(conversationId) || [];
-    return messages.map((message: Message) => ({
-      ...message,
-      images: message.images || [],
-    }));
-  }
-
-  /**
-   * 会話にメッセージを追加する
-   * @param conversationId 会話ID
-   * @param message 追加するメッセージ
-   */
-  async addMessageToConversation(conversationId: string, message: Message): Promise<void> {
-    const messages = await this.getConversationMessages(conversationId);
-    // 画像配列のディープクローンを作成
-    const clonedMessage = { 
-      ...message, 
-      images: message.images ? [...message.images] : [] 
-    };
-    messages.push(clonedMessage);
-    await localforage.setItem(conversationId, messages);
-  }
-
-  /**
-   * 会話のメッセージを更新する
-   * @param conversationId 会話ID
-   * @param messages 更新後のメッセージ配列
-   */
-  async updateConversationMessages(conversationId: string, messages: Message[]): Promise<void> {
-    // すべてのメッセージのディープクローンを作成
-    const clonedMessages = messages.map(message => ({
-      ...message,
-      images: message.images ? [...message.images] : [],
-    }));
-    await localforage.setItem(conversationId, clonedMessages);
-  }
-
-  /**
-   * 会話のメッセージをストレージから削除する
-   * @param conversationId 削除する会話ID
-   */
-  async removeConversation(conversationId: string): Promise<void> {
-    await localforage.removeItem(conversationId);
-  }
-
-  /**
-   * Get conversation folders
-   * @returns Array of ConversationFolder objects
-   */
-  async getFolders(): Promise<ConversationFolder[]> {
     try {
-      const folders = await localforage.getItem<ConversationFolder[]>(CONVERSATION_FOLDERS_KEY);
-      // Return a deep clone or an empty array if null/undefined
-      return folders ? folders.map(folder => ({ ...folder })) : [];
+      const messages = await conversationMessagesStore.getItem<Message[]>(conversationId);
+      return messages || [];
     } catch (error) {
-      console.error('Error getting folders from localforage:', error);
+      console.error(`Error getting messages for conversation ${conversationId}:`, error);
       return [];
     }
   }
 
-  /**
-   * Save conversation folders
-   * @param folders Array of ConversationFolder objects to save
-   */
-  async saveFolders(folders: ConversationFolder[]): Promise<void> {
+  async saveConversationMessages(conversationId: string, messages: Message[]): Promise<void> {
     try {
-      // Create a deep clone before saving
-      const clonedFolders = folders.map(folder => ({ ...folder }));
-      await localforage.setItem(CONVERSATION_FOLDERS_KEY, clonedFolders);
+      // Create a deep clone of the messages array
+      const messagesToSave = JSON.parse(JSON.stringify(messages));
+      await conversationMessagesStore.setItem(conversationId, messagesToSave);
     } catch (error) {
-      console.error('Error saving folders to localforage:', error);
-      // Optionally re-throw or handle
+      console.error(`Error saving messages for conversation ${conversationId}:`, error);
+    }
+  }
+
+  async deleteConversationMessages(conversationId: string): Promise<void> {
+    try {
+      await conversationMessagesStore.removeItem(conversationId);
+    } catch (error) {
+      console.error(`Error deleting messages for conversation ${conversationId}:`, error);
+    }
+  }
+
+  async deleteConversation(conversationId: string): Promise<void> {
+    // Delete both meta and messages
+    await this.deleteConversationMeta(conversationId);
+    await this.deleteConversationMessages(conversationId);
+  }
+
+  async getCurrentConversationId(): Promise<string | null> {
+    try {
+      return await appStateStore.getItem<string>(CURRENT_CONVERSATION_ID_KEY);
+    } catch (error) {
+      console.error('Error getting current conversation ID:', error);
+      return null;
+    }
+  }
+
+  async saveCurrentConversationId(conversationId: string | null): Promise<void> {
+    try {
+      if (conversationId === null) {
+        await appStateStore.removeItem(CURRENT_CONVERSATION_ID_KEY);
+      } else {
+        await appStateStore.setItem(CURRENT_CONVERSATION_ID_KEY, conversationId);
+      }
+    } catch (error) {
+      console.error('Error saving current conversation ID:', error);
+    }
+  }
+
+  // --- Migration Status Methods ---
+  async getMigrationStatus(key: string): Promise<boolean> {
+    try {
+      const status = await appStateStore.getItem<boolean>(key);
+      return status === true; // Return true only if explicitly set to true
+    } catch (error) {
+      console.error(`Error getting migration status for key ${key}:`, error);
+      return false; // Assume not migrated on error
+    }
+  }
+
+  async setMigrationStatus(key: string, status: boolean): Promise<void> {
+    try {
+      await appStateStore.setItem(key, status);
+    } catch (error) {
+      console.error(`Error setting migration status for key ${key}:`, error);
+      // Decide if we need to re-throw or handle this
     }
   }
 }
 
-// シングルトンインスタンスをエクスポート
+// Singleton instance export
 export const storageService: StorageService = new IndexedDBStorageService(); 
