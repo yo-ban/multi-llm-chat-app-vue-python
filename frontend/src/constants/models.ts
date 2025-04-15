@@ -36,22 +36,28 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
     }
   },
   openai: {
-    OPENAI_GPT_4_O: {
-      id: 'openai-gpt-4o',
-      name: 'GPT-4o',
-      contextWindow: 128000,
-      maxTokens: 16384,
+    OPENAI_GPT_4_1: {
+      id: 'openai-gpt-4.1',
+      name: 'GPT-4.1',
+      contextWindow: 1047576,
+      maxTokens: 32768,
       multimodal: true,
-      supportsReasoning: false,
       supportFunctionCalling: true,
     },
-    OPENAI_GPT_4_O_MINI: {
-      id: 'openai-gpt-4o-mini',
-      name: 'GPT-4o Mini',
-      contextWindow: 128000,
-      maxTokens: 16384,
+    OPENAI_GPT_4_1_MINI: {
+      id: 'openai-gpt-4.1-mini',
+      name: 'GPT-4.1 Mini',
+      contextWindow: 1047576,
+      maxTokens: 32768,
       multimodal: true,
-      supportsReasoning: false,
+      supportFunctionCalling: true,
+    },
+    OPENAI_GPT_4_1_NANO: {
+      id: 'openai-gpt-4.1-nano',
+      name: 'GPT-4.1 nano',
+      contextWindow: 1047576,
+      maxTokens: 32768,
+      multimodal: true,
       supportFunctionCalling: true,
     },
     OPENAI_O1: {
@@ -76,6 +82,14 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       unsupportsTemperature: true,
       supportFunctionCalling: true,
     },
+    OPENAI_CHATGPT_4_O: {
+      id: 'openai-chatgpt-4o-latest',
+      name: 'ChatGPT-4o',
+      contextWindow: 128000,
+      maxTokens: 16384,
+      multimodal: true,
+      supportsReasoning: false,
+    },
     OPENAI_GPT_4_5_PREVIEW: {
       id: 'openai-gpt-4.5-preview',
       name: 'GPT-4.5 Preview',
@@ -84,13 +98,23 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       multimodal: true,
       supportFunctionCalling: true,
     },
-    OPENAI_CHATGPT_4_O: {
-      id: 'openai-chatgpt-4o-latest',
-      name: 'ChatGPT-4o',
+    OPENAI_GPT_4_O: {
+      id: 'openai-gpt-4o',
+      name: 'GPT-4o',
       contextWindow: 128000,
       maxTokens: 16384,
       multimodal: true,
       supportsReasoning: false,
+      supportFunctionCalling: true,
+    },
+    OPENAI_GPT_4_O_MINI: {
+      id: 'openai-gpt-4o-mini',
+      name: 'GPT-4o Mini',
+      contextWindow: 128000,
+      maxTokens: 16384,
+      multimodal: true,
+      supportsReasoning: false,
+      supportFunctionCalling: true,
     },
   },
   google: {
