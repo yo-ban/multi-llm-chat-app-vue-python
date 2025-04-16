@@ -1,5 +1,5 @@
 from typing import List, Dict, Any
-from app.schemas import Message
+from app.domain.messages.schemas import Message
 from app.misc_utils.image_utils import process_images
 from app.logger.logging_utils import log_info
 

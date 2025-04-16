@@ -3,20 +3,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 from sqlalchemy.orm import Session
 
-from app import models, schemas
-from app.crud.settings_crud import get_settings, update_settings, decrypt_settings, TEMP_USER_ID
-from app.database import SessionLocal, engine, get_db, Base # Import Base and engine for database setup
-from app.schemas import ChatRequest
+# 新しい構造からのインポート
+from app.infrastructure.database import get_db
+from app.domain.settings.schemas import SettingsCreate, SettingsResponse
+# from app.domain.settings.repository import SettingsRepository # リポジトリはサービス内で使用
+from app.domain.messages.schemas import ChatRequest
+# サービス層のインポート
+from app.application.settings.service import SettingsService
+
+# 他のハンドラやロガーのインポート
 from app.handlers.chat_handler import ChatHandler
 from app.handlers.file_handler import FileHandler
 from app.logger.logging_utils import get_logger, log_request_info, log_error, log_info
 
-# テーブル自動作成コードを削除 - 代わりにAlembicマイグレーションに依存
-# データベーススキーマの変更は以下のコマンドで実行します:
-# 1. alembic revision --autogenerate -m "変更の説明"
-# 2. alembic upgrade head
-# 
-# コンテナの起動時には、startup.shスクリプトによってマイグレーションが自動的に適用されます
+# 定数 (仮ユーザーID)
+TEMP_USER_ID = 1
 
 # Set up logging
 logger = get_logger()
@@ -34,57 +35,52 @@ app.add_middleware(
 
 # --- Settings Endpoints --- (Using temporary fixed user ID)
 
-@app.get("/api/settings", response_model=schemas.SettingsResponse)
+@app.get("/api/settings", response_model=SettingsResponse)
 def read_settings(db: Session = Depends(get_db)):
-    """Retrieve settings for the hardcoded user."""
-    db_settings = get_settings(db, user_id=TEMP_USER_ID)
-    if db_settings is None:
-        default_settings_data = schemas.SettingsCreate()
-        db_settings = update_settings(db, user_id=TEMP_USER_ID, settings_data=default_settings_data)
-    
-    return decrypt_settings(db_settings)
+    """指定されたユーザーIDの設定を取得する"""
+    settings_service = SettingsService(db)
+    return settings_service.get_settings_for_user(user_id=TEMP_USER_ID)
 
-@app.put("/api/settings", response_model=schemas.SettingsResponse)
+@app.put("/api/settings", response_model=SettingsResponse)
 def update_settings_endpoint(
-    settings_data: schemas.SettingsCreate,
+    settings_data: SettingsCreate,
     db: Session = Depends(get_db)
 ):
-    """Update settings for the hardcoded user."""
-    db_settings = update_settings(db, user_id=TEMP_USER_ID, settings_data=settings_data)
-    return decrypt_settings(db_settings)
+    """指定されたユーザーIDの設定を更新する"""
+    settings_service = SettingsService(db)
+    return settings_service.update_settings_for_user(
+        user_id=TEMP_USER_ID,
+        settings_data=settings_data
+    )
 
 # --- Existing Endpoints --- (Keep them as they are)
 
 async def get_api_key(request: Request, db: Session = Depends(get_db)) -> str:
     """
-    Dependency to extract and validate API key from request headers OR database.
-    Currently, it still reads from the header for the /api/messages endpoint.
-    TODO: Modify /api/messages to fetch the key from db_settings based on vendor.
+    APIキーをリクエストヘッダーまたはデータベースから抽出・検証する依存関係。
+    現在、/api/messages エンドポイントではヘッダーからのみ読み取る。
+    TODO: /api/messages を変更し、ベンダーに基づいてDBからキーを取得するようにする。
+          (SettingsServiceを使用して実装する)
     
     Args:
-        request: FastAPI request object
-        db: Database session
+        request: FastAPIリクエストオブジェクト
+        db: データベースセッション
         
     Returns:
-        API key string (currently from header)
+        APIキー文字列 (現在はヘッダーから)
     """
-    # --- Fetching from DB (Example - Needs integration into /api/messages) ---
-    # db_settings = get_settings(db, user_id=TEMP_USER_ID)
-    # if db_settings and db_settings.api_keys_encrypted:
-    #     try:
-    #         api_keys = json.loads(decrypt_data(db_settings.api_keys_encrypted))
-    #         # Logic to determine which key to use based on chat_request.vendor
-    #         # Example: return api_keys.get(chat_request.vendor)
-    #     except Exception as e:
-    #         print(f"Error getting API key from DB: {e}") # Log properly
-    #         pass # Fallback to header or raise error
-    # --- End Example ---
+    # TODO: SettingsServiceを使用してデータベースからAPIキーを取得するロジックを実装
+    # settings_service = SettingsService(db)
+    # settings = settings_service.get_settings_for_user(user_id=TEMP_USER_ID)
+    # api_keys = settings.apiKeys # レスポンスモデルはcamelCase
+    # vendor = chat_request.vendor # リクエストからベンダーを取得する必要あり
+    # vendor_key = api_keys.get(vendor)
+    # if vendor_key: return vendor_key
     
-    # Current implementation: Still reads from header for /api/messages
+    # 現在の実装: /api/messages ではまだヘッダーから読み取る
     api_key = request.headers.get('x-api-key')
     if not api_key:
-        # Instead of raising 401 immediately, we might allow access if DB keys exist
-        # For now, keep original behavior for /api/messages
+        # DBにキーが存在する場合でも、現状は401エラーとする
         raise HTTPException(status_code=401, detail="API key is required in header for this endpoint")
     return api_key
 
@@ -92,36 +88,28 @@ async def get_api_key(request: Request, db: Session = Depends(get_db)) -> str:
 async def messages(
     request: Request,
     chat_request: ChatRequest,
-    # Inject DB session here if needed to fetch API key from DB
-    # db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key) # Keep Depends(get_api_key) for now
+    api_key: str = Depends(get_api_key) # 現状はDepends(get_api_key)を維持
 ) -> StreamingResponse:
     """
-    Handle chat messages endpoint
-    TODO: Modify this to fetch API key from db_settings based on chat_request.vendor
-    instead of relying solely on the x-api-key header.
+    チャットメッセージのエンドポイントを処理する。
+    TODO: x-api-keyヘッダーのみに依存するのではなく、
+          chat_request.vendorに基づいてdb_settingsからAPIキーを取得するように変更する。
+          (get_api_key関数を修正し、SettingsServiceを利用する)
     
     Args:
-        request: FastAPI request object
-        chat_request: Chat request parameters
-        api_key: API key (currently from header via get_api_key)
+        request: FastAPIリクエストオブジェクト
+        chat_request: チャットリクエストパラメータ
+        api_key: APIキー (get_api_key経由で現在はヘッダーから)
         
     Returns:
-        Streaming response with chat completion
+        チャット補完を含むストリーミングレスポンス
     """
     try:
         await log_request_info(request)
         
-        # --- Fetching API key from DB (Integration point) ---
-        # 1. Get vendor from chat_request.vendor or determine from chat_request.model
-        # 2. Call get_settings to get db_settings
-        # 3. Decrypt api_keys_encrypted
-        # 4. Get the specific key for the vendor: api_key = decrypted_keys.get(vendor)
-        # 5. If key not found, raise HTTPException
-        # 6. Pass the fetched api_key to ChatHandler
-        # --- End Integration point ---
+        # TODO: DBからAPIキーを取得するロジック（get_api_key関数内で実装）
         
-        # Current implementation still uses the key from the header via Depends(get_api_key)
+        # 現在の実装はヘッダーからのキーを使用
         chat_handler = ChatHandler(api_key)
         return await chat_handler.handle_chat_request(chat_request)
         
@@ -135,14 +123,14 @@ async def extract_text(
     file: UploadFile = File(...)
 ) -> JSONResponse:
     """
-    Handle file text extraction endpoint
+    ファイルテキスト抽出エンドポイントを処理する。
     
     Args:
-        request: FastAPI request object
-        file: Uploaded file
+        request: FastAPIリクエストオブジェクト
+        file: アップロードされたファイル
         
     Returns:
-        JSON response with extracted text
+        抽出されたテキストを含むJSONレスポンス
     """
     try:
         await log_request_info(request)

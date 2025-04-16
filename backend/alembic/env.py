@@ -11,9 +11,13 @@ from alembic import context
 APP_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'app'))
 sys.path.insert(0, APP_DIR)
 
-# Import your Base model
-from app.database import Base # Assuming database.py is in the app directory
-from app.models import models # Assuming models.py is in the app directory
+# Import Base model from infrastructure layer
+from app.infrastructure.database import Base
+
+# Import domain models to ensure they are registered with Base.metadata
+# これがないと autogenerate がモデルを検出できません
+from app.domain.user.models import User
+from app.domain.settings.models import UserSettings
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -32,9 +36,8 @@ if config.config_file_name is not None:
 
 # add your model's MetaData object here
 # for 'autogenerate' support
-# from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-target_metadata = Base.metadata # Use Base from your app
+target_metadata = Base.metadata # Use Base from infrastructure
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
