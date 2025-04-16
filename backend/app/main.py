@@ -53,69 +53,68 @@ def update_settings_endpoint(
         settings_data=settings_data
     )
 
-# --- Existing Endpoints --- (Keep them as they are)
-
-async def get_api_key(request: Request, db: Session = Depends(get_db)) -> str:
-    """
-    APIキーをリクエストヘッダーまたはデータベースから抽出・検証する依存関係。
-    現在、/api/messages エンドポイントではヘッダーからのみ読み取る。
-    TODO: /api/messages を変更し、ベンダーに基づいてDBからキーを取得するようにする。
-          (SettingsServiceを使用して実装する)
-    
-    Args:
-        request: FastAPIリクエストオブジェクト
-        db: データベースセッション
-        
-    Returns:
-        APIキー文字列 (現在はヘッダーから)
-    """
-    # TODO: SettingsServiceを使用してデータベースからAPIキーを取得するロジックを実装
-    # settings_service = SettingsService(db)
-    # settings = settings_service.get_settings_for_user(user_id=TEMP_USER_ID)
-    # api_keys = settings.apiKeys # レスポンスモデルはcamelCase
-    # vendor = chat_request.vendor # リクエストからベンダーを取得する必要あり
-    # vendor_key = api_keys.get(vendor)
-    # if vendor_key: return vendor_key
-    
-    # 現在の実装: /api/messages ではまだヘッダーから読み取る
-    api_key = request.headers.get('x-api-key')
-    if not api_key:
-        # DBにキーが存在する場合でも、現状は401エラーとする
-        raise HTTPException(status_code=401, detail="API key is required in header for this endpoint")
-    return api_key
+# --- /api/messages エンドポイント --- 
 
 @app.post("/api/messages")
 async def messages(
-    request: Request,
-    chat_request: ChatRequest,
-    api_key: str = Depends(get_api_key) # 現状はDepends(get_api_key)を維持
+    request: Request,                 # リクエスト情報取得用
+    chat_request: ChatRequest,        # リクエストボディ
+    db: Session = Depends(get_db)      # DBセッションを依存関係として注入
 ) -> StreamingResponse:
     """
     チャットメッセージのエンドポイントを処理する。
-    TODO: x-api-keyヘッダーのみに依存するのではなく、
-          chat_request.vendorに基づいてdb_settingsからAPIキーを取得するように変更する。
-          (get_api_key関数を修正し、SettingsServiceを利用する)
+    データベースからユーザー設定を取得し、リクエストされたベンダーに対応するAPIキーを使用する。
     
     Args:
         request: FastAPIリクエストオブジェクト
-        chat_request: チャットリクエストパラメータ
-        api_key: APIキー (get_api_key経由で現在はヘッダーから)
+        chat_request: チャットリクエストパラメータ (ベンダー情報を含む)
+        db: データベースセッション
         
     Returns:
         チャット補完を含むストリーミングレスポンス
+        
+    Raises:
+        HTTPException(400): リクエストにベンダー情報がない場合、または設定に該当ベンダーのAPIキーがない場合
+        HTTPException(500): その他のサーバーエラー
     """
     try:
         await log_request_info(request)
-        
-        # TODO: DBからAPIキーを取得するロジック（get_api_key関数内で実装）
-        
-        # 現在の実装はヘッダーからのキーを使用
+
+        # 1. 設定サービスを使ってユーザー設定を取得
+        settings_service = SettingsService(db)
+        user_settings = settings_service.get_settings_for_user(TEMP_USER_ID)
+
+        # 2. リクエストからベンダー情報を取得
+        vendor = chat_request.vendor
+        if not vendor:
+            # TODO: vendorがない場合、model名から推測するロジックを追加することも検討
+            log_error(f"Vendor not specified in chat request for model {chat_request.model}")
+            raise HTTPException(status_code=400, detail="Vendor is required in the chat request.")
+
+        # 3. 取得した設定から該当ベンダーのAPIキーを抽出 (属性名を修正: apiKeys -> api_keys)
+        api_key = user_settings.api_keys.get(vendor)
+        if not api_key:
+            log_error(f"API key for vendor '{vendor}' not found in settings for user {TEMP_USER_ID}.")
+            raise HTTPException(
+                status_code=400, 
+                detail=f"API key for '{vendor}' is not configured. Please add it in the settings."
+            )
+            
+        # 4. 取得したAPIキーを使ってChatHandlerを初期化
         chat_handler = ChatHandler(api_key)
+        
+        # 5. チャットリクエストを処理
         return await chat_handler.handle_chat_request(chat_request)
         
+    except HTTPException as http_exc:
+        # FastAPIからのHTTPExceptionはそのまま再raiseする
+        raise http_exc
     except Exception as e:
-        log_error(e)
-        raise HTTPException(status_code=400, detail=str(e))
+        # その他の予期せぬエラー (exc_info=True を削除)
+        log_error(f"Error handling chat request: {e}")
+        raise HTTPException(status_code=500, detail="An internal server error occurred.")
+
+# --- ファイル抽出エンドポイント --- 
 
 @app.post('/api/extract-text')
 async def extract_text(
