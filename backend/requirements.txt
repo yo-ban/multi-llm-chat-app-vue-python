@@ -18,3 +18,8 @@ pytest-playwright==0.7.0
 playwright-stealth==1.0.6
 nbconvert==7.16.6
 markdownify==0.14.1
+# Add Database and Encryption related libraries
+SQLAlchemy>=1.4,<2.0 # Pin major version for stability
+psycopg2-binary # For PostgreSQL connection
+cryptography # For encrypting API keys
+alembic # For database migrations

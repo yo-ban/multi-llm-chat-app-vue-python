@@ -33,7 +33,7 @@ from app.message_utils.messages_preparer import (
 )
 
 from app.misc_utils.image_utils import upload_image_to_gemini
-from app.models.models import ChatRequest
+from app.schemas import ChatRequest
 from app.function_calling.definitions import get_tool_definitions, get_gemini_tool_definitions, get_anthropic_tool_definitions
 from app.function_calling.constants import TOOL_USE_INSTRUCTION
 from app.logger.logging_utils import log_info, log_error, log_warning

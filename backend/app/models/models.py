@@ -1,34 +1,33 @@
-from pydantic import BaseModel
-from typing import List, Optional
+from sqlalchemy import Column, Integer, String, Float, Boolean, JSON, ForeignKey, LargeBinary
+from sqlalchemy.orm import relationship
+from app.database import Base
 
-class Message(BaseModel):
-    """
-    Represents a chat message with optional image attachments
-    """
-    role: str
-    text: Optional[str]
-    images: Optional[List[str]] = []
+# --- SQLAlchemy Models for Database Tables ---
 
-class ChatRequest(BaseModel):
-    """
-    Represents a chat request with all necessary parameters
-    """
-    messages: List[Message]
-    model: str
-    temperature: float = 0
-    maxTokens: int = 4096
-    system: str = ""
-    stream: bool = True
-    reasoningEffort: Optional[str] = None  # 'low', 'medium', or 'high'
-    isReasoningSupported: bool = False
-    websearch: bool = False  # Enable web search functionality using function calling
-    multimodal: bool = False  # Whether the model supports multimodal inputs (e.g. images)
-    imageGeneration: bool = False  # Whether the model supports image generation
+class User(Base):
+    __tablename__ = "users"
 
-class ErrorResponse(BaseModel):
-    """
-    Represents a standardized error response
-    """
-    error: str
-    detail: Optional[str] = None
-    status_code: int
+    id = Column(Integer, primary_key=True, index=True)
+    # In a real app, add email, password_hash, etc.
+
+    settings = relationship("UserSettings", back_populates="user", uselist=False, cascade="all, delete-orphan")
+
+class UserSettings(Base):
+    __tablename__ = "user_settings"
+
+    user_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
+    api_keys_encrypted = Column(LargeBinary, nullable=True) # Store encrypted JSON as bytes
+    default_temperature = Column(Float, default=0.7)
+    default_max_tokens = Column(Integer, default=4096)
+    default_vendor = Column(String, default='anthropic')
+    default_model = Column(String, default='claude-3-5-sonnet-20240620') # Ensure this matches your constants
+    default_reasoning_effort = Column(String, default='medium')
+    default_web_search = Column(Boolean, default=False)
+    openrouter_models = Column(JSON, nullable=True)
+    title_generation_vendor = Column(String, default='openai')
+    title_generation_model = Column(String, default='gpt-4o-mini') # Ensure this matches your constants
+
+    user = relationship("User", back_populates="settings")
+
+# --- Pydantic Models removed from this file ---
+# They are now located in schemas.py
