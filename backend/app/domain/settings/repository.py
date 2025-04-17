@@ -76,12 +76,33 @@ class SettingsRepository:
         if openrouter_models is None:
             openrouter_models = []
             
-        # APIキーを暗号化
-        encrypted_api_keys = encrypt_data(json.dumps(api_keys))
-        
         # 既存の設定を取得
         settings = self.get_by_user_id(user_id)
-        
+
+        # 現在の復号化されたキーを取得（部分更新のため）
+        current_decrypted_keys = {}
+        if settings and settings.api_keys_encrypted:
+            try:
+                current_decrypted_keys = json.loads(decrypt_data(settings.api_keys_encrypted))
+            except Exception as e:
+                print(f"Error decrypting existing keys: {e}")
+                current_decrypted_keys = {}
+
+        # 更新するキーと現在のキーをマージ
+        updated_keys = current_decrypted_keys.copy()
+        for vendor, key_value in api_keys.items():
+            if key_value == "": # フロントエンドから空文字が送られてきたら削除
+                if vendor in updated_keys:
+                    del updated_keys[vendor]
+            elif key_value is not None: # nullでない場合のみ更新 (キー入力がなかった場合は更新しない)
+                # '*' がプレースホルダーとして送られてくる可能性を考慮 (フロント実装による)
+                # ここでは '*' 以外の場合のみ更新
+                if key_value != '********': 
+                    updated_keys[vendor] = key_value
+
+        # マージされたキーを暗号化
+        encrypted_api_keys = encrypt_data(json.dumps(updated_keys))
+
         if settings:
             # 既存の設定を更新
             settings.api_keys_encrypted = encrypted_api_keys

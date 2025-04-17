@@ -41,6 +41,13 @@ from app.logger.logging_utils import log_info, log_error, log_warning
 class ChatHandler:
     def __init__(self, api_key: str):
         self.api_key = api_key
+        self.handlers = {
+            'openai': self.handle_openai,
+            'google': self.handle_gemini,
+            'openrouter': self.handle_openrouter,
+            'xai': self.handle_xai,
+            'anthropic': self.handle_anthropic
+        }
 
     async def handle_openai(
         self,
@@ -63,7 +70,7 @@ class ChatHandler:
         openai_messages = await prepare_openai_messages(system, messages)
 
         completion_args = {
-            "model": model[7:],  # Remove 'openai-' prefix
+            "model": model,
             "messages": openai_messages,
             "max_completion_tokens": max_tokens,
             "stream": stream,
@@ -377,7 +384,7 @@ class ChatHandler:
         xai_messages = await prepare_openai_messages(system, messages)
 
         completion_args = {
-            "model": model[4:],  # Remove 'xai-' prefix
+            "model": model,
             "messages": xai_messages,
             "max_completion_tokens": max_tokens,
             "stream": stream,
@@ -508,7 +515,7 @@ class ChatHandler:
                 media_type="text/event-stream"
             ) 
 
-    async def handle_chat_request(self, chat_request: ChatRequest) -> Any:
+    async def handle_chat_request(self, chat_request: ChatRequest, vendor: str) -> Any:
         """
         Main entry point for handling chat requests
         
@@ -526,66 +533,84 @@ class ChatHandler:
             else:
                 system = chat_request.system
             
-            if chat_request.model.startswith('openai-'):
-                return await self.handle_openai(
-                    model=chat_request.model,
-                    messages=messages,
-                    max_tokens=chat_request.maxTokens,
-                    temperature=chat_request.temperature,
-                    stream=chat_request.stream,
-                    system=system,
-                    websearch=chat_request.websearch,
-                    reasoning_effort=chat_request.reasoningEffort,
-                    is_reasoning_supported=chat_request.isReasoningSupported,
-                )
-            elif chat_request.model.startswith('gemini-'):
-                return await self.handle_gemini(
-                    model=chat_request.model,
-                    messages=messages,
-                    max_tokens=chat_request.maxTokens,
-                    temperature=chat_request.temperature,
-                    stream=chat_request.stream,
-                    system=system,
-                    websearch=chat_request.websearch,
-                    image_generation=chat_request.imageGeneration,
-                    is_reasoning_supported=chat_request.isReasoningSupported,
-                )
-            elif "/" in chat_request.model:  # OpenRouter models
-                return await self.handle_openrouter(
-                    model=chat_request.model,
-                    messages=messages,
-                    max_tokens=chat_request.maxTokens,
-                    temperature=chat_request.temperature,
-                    stream=chat_request.stream,
-                    system=system,
-                    websearch=chat_request.websearch,
-                    reasoning_effort=chat_request.reasoningEffort,
-                    is_reasoning_supported=chat_request.isReasoningSupported
-                )
-            elif chat_request.model.startswith('xai-'):
-                return await self.handle_xai(
-                    model=chat_request.model,
-                    messages=messages,
-                    max_tokens=chat_request.maxTokens,
-                    temperature=chat_request.temperature,
-                    stream=chat_request.stream,
-                    system=system,
-                    websearch=chat_request.websearch,
-                    reasoning_effort=chat_request.reasoningEffort,
-                    is_reasoning_supported=chat_request.isReasoningSupported
-                )
-            else:  # Anthropic models
-                return await self.handle_anthropic(
-                    model=chat_request.model,
-                    messages=messages,
-                    max_tokens=chat_request.maxTokens,
-                    temperature=chat_request.temperature,
-                    stream=chat_request.stream,
-                    system=system,
-                    websearch=chat_request.websearch,
-                    reasoning_effort=chat_request.reasoningEffort,
-                    is_reasoning_supported=chat_request.isReasoningSupported
-                )
-                
+            handler = self.handlers.get(vendor)
+
+            if not handler:
+                raise HTTPException(status_code=400, detail=f"Unsupported vendor: {vendor}")
+
+            return await handler(
+                model=chat_request.model,
+                messages=messages,
+                max_tokens=chat_request.maxTokens,
+                temperature=chat_request.temperature,
+                stream=chat_request.stream,
+                system=system,
+                websearch=chat_request.websearch,
+                reasoning_effort=chat_request.reasoningEffort,
+                is_reasoning_supported=chat_request.isReasoningSupported,
+            )
+
+            # if vendor == 'openai':
+            #     return await self.handle_openai(
+            #         model=chat_request.model,
+            #         messages=messages,
+            #         max_tokens=chat_request.maxTokens,
+            #         temperature=chat_request.temperature,
+            #         stream=chat_request.stream,
+            #         system=system,
+            #         websearch=chat_request.websearch,
+            #         reasoning_effort=chat_request.reasoningEffort,
+            #         is_reasoning_supported=chat_request.isReasoningSupported,
+            #     )
+            # elif vendor == 'google':
+            #     return await self.handle_gemini(
+            #         model=chat_request.model,
+            #         messages=messages,
+            #         max_tokens=chat_request.maxTokens,
+            #         temperature=chat_request.temperature,
+            #         stream=chat_request.stream,
+            #         system=system,
+            #         websearch=chat_request.websearch,
+            #         image_generation=chat_request.imageGeneration,
+            #         is_reasoning_supported=chat_request.isReasoningSupported,
+            #     )
+            # elif vendor == 'openrouter':
+            #     return await self.handle_openrouter(
+            #         model=chat_request.model,
+            #         messages=messages,
+            #         max_tokens=chat_request.maxTokens,
+            #         temperature=chat_request.temperature,
+            #         stream=chat_request.stream,
+            #         system=system,
+            #         websearch=chat_request.websearch,
+            #         reasoning_effort=chat_request.reasoningEffort,
+            #         is_reasoning_supported=chat_request.isReasoningSupported
+            #     )
+            # elif vendor == 'xai':
+            #     return await self.handle_xai(
+            #         model=chat_request.model,
+            #         messages=messages,
+            #         max_tokens=chat_request.maxTokens,
+            #         temperature=chat_request.temperature,
+            #         stream=chat_request.stream,
+            #         system=system,
+            #         websearch=chat_request.websearch,
+            #         reasoning_effort=chat_request.reasoningEffort,
+            #         is_reasoning_supported=chat_request.isReasoningSupported
+            #     )
+            # elif vendor == 'anthropic':
+            #     return await self.handle_anthropic(
+            #         model=chat_request.model,
+            #         messages=messages,
+            #         max_tokens=chat_request.maxTokens,
+            #         temperature=chat_request.temperature,
+            #         stream=chat_request.stream,
+            #         system=system,
+            #         websearch=chat_request.websearch,
+            #         reasoning_effort=chat_request.reasoningEffort,
+            #         is_reasoning_supported=chat_request.isReasoningSupported
+            #     )
+            # else:
+            #     raise HTTPException(status_code=400, detail=f"Unsupported vendor: {vendor}")
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))

@@ -48,10 +48,15 @@ def update_settings_endpoint(
 ):
     """指定されたユーザーIDの設定を更新する"""
     settings_service = SettingsService(db)
-    return settings_service.update_settings_for_user(
+
+    # サービス層が Dict[str, str] を受け取り、リポジトリで処理する
+    updated_settings_response = settings_service.update_settings_for_user(
         user_id=TEMP_USER_ID,
         settings_data=settings_data
     )
+
+    # サービス層が返した SettingsResponse (apiKeys: Dict[str, bool]) を返す
+    return updated_settings_response
 
 # --- /api/messages エンドポイント --- 
 
@@ -80,7 +85,7 @@ async def messages(
     try:
         await log_request_info(request)
 
-        # 1. 設定サービスを使ってユーザー設定を取得
+        # 1. 設定サービスを使ってユーザー設定を取得 (主にキー設定状況の確認用)
         settings_service = SettingsService(db)
         user_settings = settings_service.get_settings_for_user(TEMP_USER_ID)
 
@@ -91,20 +96,30 @@ async def messages(
             log_error(f"Vendor not specified in chat request for model {chat_request.model}")
             raise HTTPException(status_code=400, detail="Vendor is required in the chat request.")
 
-        # 3. 取得した設定から該当ベンダーのAPIキーを抽出 (属性名を修正: apiKeys -> api_keys)
-        api_key = user_settings.api_keys.get(vendor)
-        if not api_key:
-            log_error(f"API key for vendor '{vendor}' not found in settings for user {TEMP_USER_ID}.")
+        # 3. 取得した設定から該当ベンダーのAPIキーが *設定されているか* を確認
+        # (user_settings.api_keys は存在しないため、api_keys_status を使用)
+        if not user_settings.api_keys_status.get(vendor):
+            log_error(f"API key for vendor '{vendor}' not configured for user {TEMP_USER_ID}.")
             raise HTTPException(
                 status_code=400, 
                 detail=f"API key for '{vendor}' is not configured. Please add it in the settings."
             )
+
+        # 4. 設定されている場合、実際のAPIキーを取得
+        api_key = settings_service.get_decrypted_api_key(TEMP_USER_ID, vendor)
+        if not api_key:
+            # このケースは通常発生しないはず (Status=Trueなのにキーが取得できない場合)
+            log_error(f"Configured API key for vendor '{vendor}' could not be retrieved for user {TEMP_USER_ID}.")
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Could not retrieve configured API key for '{vendor}'."
+            )
             
-        # 4. 取得したAPIキーを使ってChatHandlerを初期化
+        # 5. 取得したAPIキーを使ってChatHandlerを初期化
         chat_handler = ChatHandler(api_key)
         
-        # 5. チャットリクエストを処理
-        return await chat_handler.handle_chat_request(chat_request)
+        # 6. チャットリクエストを処理
+        return await chat_handler.handle_chat_request(chat_request, vendor)
         
     except HTTPException as http_exc:
         # FastAPIからのHTTPExceptionはそのまま再raiseする

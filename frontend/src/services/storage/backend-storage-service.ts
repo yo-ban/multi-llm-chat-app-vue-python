@@ -1,16 +1,20 @@
-import type { GlobalSettings } from '@/types/settings';
-import type { StorageService } from './indexeddb-service'; // Import the interface
+import type { GlobalSettings, GlobalSettingsCreate } from '@/types/settings';
 
 // Base URL for the backend API (adjust if necessary)
 const API_BASE_URL = '/api'; 
+
+export interface BackendStorageService {
+  getGlobalSettings(): Promise<GlobalSettings | null>; // 戻り値の型変更
+  // 引数の型を修正: 変更されたキー情報を受け取る
+  saveGlobalSettings(settings: Partial<GlobalSettings> & { changedApiKeys?: { [key: string]: string } }): Promise<GlobalSettings>; // 戻り値の型変更
+}
 
 /**
  * Implementation of StorageService that interacts with the backend API
  * for global settings. Other methods are not implemented as they still
  * rely on IndexedDB (for now).
  */
-class BackendStorageService implements Partial<StorageService> {
-
+class BackendStorageServiceImpl implements BackendStorageService {
   async getGlobalSettings(): Promise<GlobalSettings | null> {
     try {
       const response = await fetch(`${API_BASE_URL}/settings`, {
@@ -47,9 +51,26 @@ class BackendStorageService implements Partial<StorageService> {
     }
   }
 
-  async saveGlobalSettings(settings: GlobalSettings): Promise<void> {
+  async saveGlobalSettings(settings: Partial<GlobalSettings> & { changedApiKeys?: { [key: string]: string } }): Promise<GlobalSettings> {
     try {
       console.log('Saving settings to backend:', JSON.stringify(settings));
+
+      // バックエンドに送信するデータを作成 (SettingsCreate 形式)
+      const payload: GlobalSettingsCreate = {
+        // settings から apiKeys (boolean辞書) を除外し、changedApiKeys を apiKeys (string辞書) として設定
+        defaultTemperature: settings.defaultTemperature,
+        defaultMaxTokens: settings.defaultMaxTokens,
+        defaultVendor: settings.defaultVendor,
+        defaultModel: settings.defaultModel,
+        defaultReasoningEffort: settings.defaultReasoningEffort,
+        defaultWebSearch: settings.defaultWebSearch,
+        openrouterModels: settings.openrouterModels,
+        titleGenerationVendor: settings.titleGenerationVendor,
+        titleGenerationModel: settings.titleGenerationModel,
+        apiKeys: settings.changedApiKeys // 変更されたキー(string)を渡す
+      };
+
+
       const response = await fetch(`${API_BASE_URL}/settings`, {
         method: 'PUT',
         headers: {
@@ -57,7 +78,7 @@ class BackendStorageService implements Partial<StorageService> {
           // Add authentication headers here if/when implemented
           // 'Authorization': `Bearer ${getToken()}`
         },
-        body: JSON.stringify(settings),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
@@ -69,9 +90,9 @@ class BackendStorageService implements Partial<StorageService> {
       }
 
       // Get the saved settings from response 
-      const savedSettings = await response.json(); 
-      console.log('Settings saved successfully. Response:', JSON.stringify(savedSettings));
-
+      const savedData: GlobalSettings = await response.json(); // boolean の apiKeys を含むレスポンス
+      console.log('Settings saved successfully. Response:', JSON.stringify(savedData));
+      return savedData;
     } catch (error) {
       console.error('Network or other error saving global settings:', error);
       // Re-throw the error so the calling code (e.g., Pinia store) knows about it
@@ -91,4 +112,4 @@ class BackendStorageService implements Partial<StorageService> {
 }
 
 // Singleton instance export
-export const backendStorageService = new BackendStorageService(); 
+export const backendStorageService = new BackendStorageServiceImpl();

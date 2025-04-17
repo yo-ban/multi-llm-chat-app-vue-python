@@ -6,9 +6,9 @@ import { backendStorageService } from '@/services/storage/backend-storage-servic
 
 const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   apiKeys: Object.keys(MODELS).reduce((acc, vendor) => {
-    acc[vendor] = '';
+    acc[vendor] = false; // デフォルトは未設定 (false)
     return acc;
-  }, {} as { [key: string]: string }),
+  }, {} as { [key: string]: boolean }),
   defaultTemperature: 0.7,
   defaultMaxTokens: 4096,
   defaultVendor: 'anthropic',
@@ -37,9 +37,9 @@ export const useSettingsStore = defineStore('settings', {
           const mergedSettings = {
             ...DEFAULT_GLOBAL_SETTINGS, 
             ...savedSettings,           
-            apiKeys: { // Ensure all vendors exist, even if not saved yet
+            apiKeys: { 
               ...DEFAULT_GLOBAL_SETTINGS.apiKeys,
-              ...(savedSettings.apiKeys || {}),
+              ...(savedSettings.apiKeys || {}), // savedSettings.apiKeys は boolean 辞書のはず
             },
             // Ensure openrouterModels is an array
             openrouterModels: savedSettings.openrouterModels || [],
@@ -57,12 +57,27 @@ export const useSettingsStore = defineStore('settings', {
       }
     },
 
-    async saveSettings(settings: GlobalSettings) {
+    // changedApiKeys には実際のキー文字列または空文字列（削除用）が入る
+    async saveSettings(adjustedSettings: Partial<GlobalSettings> & { changedApiKeys?: { [key: string]: string } }) {
       try {
-        // Use backendStorageService to save settings via the API
-        await backendStorageService.saveGlobalSettings(settings);
-        // Update the local store state after successful save
-        this.$patch(settings);
+        // バックエンドに送信するペイロードを作成
+        // changedApiKeys を apiKeys として含める
+        const payloadToSend = {
+          ...this.$state, // 現在のストアの状態をベースに
+          ...adjustedSettings, // 他の変更された設定をマージ
+          changedApiKeys: adjustedSettings.changedApiKeys || {}, // 変更されたAPIキーを設定
+        };
+        // バックエンドAPIは SettingsCreate 型 (apiKeys: Dict[str, str]) を期待している
+        const savedSettingsResponse = await backendStorageService.saveGlobalSettings(payloadToSend); // API呼び出し
+
+        // APIから返却された最新の状態 (apiKeys: boolean) でストアを更新
+        this.$patch({
+          ...savedSettingsResponse,
+           // highlight-start
+          // boolean の辞書でストアを更新
+          apiKeys: savedSettingsResponse.apiKeys || DEFAULT_GLOBAL_SETTINGS.apiKeys 
+           // highlight-end
+        });
         console.log('Settings saved to backend and store updated.');
       } catch (error) {
         console.error('Failed to save settings to backend:', error);

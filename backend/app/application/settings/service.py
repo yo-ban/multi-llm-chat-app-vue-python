@@ -4,11 +4,12 @@
 設定ドメインのビジネスロジックを実装する
 """
 from sqlalchemy.orm import Session
-from typing import Dict
+from typing import Dict, Optional
 
 from app.domain.settings.repository import SettingsRepository
 from app.domain.settings.schemas import SettingsCreate, SettingsResponse
 from app.domain.settings.models import UserSettings # Type hinting用
+from app.domain.settings.constants import KNOWN_VENDORS # Import known vendors
 
 
 class SettingsService:
@@ -44,9 +45,12 @@ class SettingsService:
                 **default_settings_data.model_dump(by_alias=False) # DB列名で渡す
             )
         
-        # APIキーを復号化してレスポンスモデルを作成
-        api_keys = self.settings_repo.decrypt_api_keys(db_settings)
-        response_data = self._prepare_response_data(db_settings, api_keys)
+        # APIキーを復号化
+        decrypted_api_keys = self.settings_repo.decrypt_api_keys(db_settings)
+
+        # レスポンスデータを準備 (KNOWN_VENDORS を使って status を生成)
+        response_data = self._prepare_response_data(db_settings, decrypted_api_keys)
+
         return SettingsResponse.model_validate(response_data)
         
     def update_settings_for_user(self, user_id: int, settings_data: SettingsCreate) -> SettingsResponse:
@@ -66,24 +70,56 @@ class SettingsService:
             **settings_data.model_dump(by_alias=False) # DB列名で渡す
         )
         
-        # APIキーを復号化してレスポンスモデルを作成
-        api_keys = self.settings_repo.decrypt_api_keys(db_settings)
-        response_data = self._prepare_response_data(db_settings, api_keys)
+        # APIキーを復号化
+        decrypted_api_keys = self.settings_repo.decrypt_api_keys(db_settings)
+        
+        # レスポンスデータを準備 (KNOWN_VENDORS を使って status を生成)
+        response_data = self._prepare_response_data(db_settings, decrypted_api_keys)
+        
         return SettingsResponse.model_validate(response_data)
 
-    def _prepare_response_data(self, db_settings: UserSettings, api_keys: Dict[str, str]) -> Dict:
+    def get_decrypted_api_key(self, user_id: int, vendor: str) -> Optional[str]:
+        """
+        指定されたユーザーとベンダーの復号化されたAPIキーを取得する。
+
+        引数:
+            user_id: ユーザーID
+            vendor: APIキーを取得するベンダー名
+
+        戻り値:
+            復号化されたAPIキー文字列、または見つからない場合はNone
+        """
+        db_settings = self.settings_repo.get_by_user_id(user_id)
+        if not db_settings:
+            return None
+        
+        decrypted_api_keys = self.settings_repo.decrypt_api_keys(db_settings)
+        return decrypted_api_keys.get(vendor)
+
+    def _prepare_response_data(self, db_settings: UserSettings, decrypted_api_keys: Dict[str, str]) -> Dict:
         """
         データベースモデルと復号化されたAPIキーからレスポンス用辞書を作成するヘルパー
         
         引数:
             db_settings: UserSettingsモデルインスタンス
-            api_keys: 復号化されたAPIキーの辞書
+            decrypted_api_keys: 復号化されたAPIキーの辞書
         
         戻り値:
             レスポンススキーマに渡すための辞書
         """
+        # UserSettingsモデルからSettingsResponseに必要な基本データを取得
         response_data = SettingsResponse.model_validate(db_settings).model_dump(by_alias=True)
-        response_data['apiKeys'] = api_keys
+
+        # KNOWN_VENDORS に基づいて APIキーの状態 (boolean) を生成
+        api_keys_status = { 
+            vendor: bool(decrypted_api_keys.get(vendor)) 
+            for vendor in KNOWN_VENDORS
+        }
+        
+        response_data['apiKeys'] = api_keys_status # 生成した boolean の辞書を設定
+        
+        # openrouterModels が None の場合に空リストを設定 (安全のため)
         if response_data.get('openrouterModels') is None:
             response_data['openrouterModels'] = []
-        return response_data 
+        
+        return response_data

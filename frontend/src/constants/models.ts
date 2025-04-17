@@ -37,7 +37,7 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
   },
   openai: {
     OPENAI_GPT_4_1: {
-      id: 'openai-gpt-4.1',
+      id: 'gpt-4.1',
       name: 'GPT-4.1',
       contextWindow: 1047576,
       maxTokens: 32768,
@@ -45,7 +45,7 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       supportFunctionCalling: true,
     },
     OPENAI_GPT_4_1_MINI: {
-      id: 'openai-gpt-4.1-mini',
+      id: 'gpt-4.1-mini',
       name: 'GPT-4.1 Mini',
       contextWindow: 1047576,
       maxTokens: 32768,
@@ -53,15 +53,37 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       supportFunctionCalling: true,
     },
     OPENAI_GPT_4_1_NANO: {
-      id: 'openai-gpt-4.1-nano',
+      id: 'gpt-4.1-nano',
       name: 'GPT-4.1 nano',
       contextWindow: 1047576,
       maxTokens: 32768,
       multimodal: true,
       supportFunctionCalling: true,
     },
+    OPENAI_O3: {
+      id: 'o3',
+      name: 'o3',
+      contextWindow: 200000,
+      maxTokens: 100000,
+      multimodal: true,
+      supportsReasoning: true,
+      defaultReasoningEffort: 'medium',
+      unsupportsTemperature: true,
+      supportFunctionCalling: true,
+    },
+    OPENAI_O4_MINI: {
+      id: 'o4-mini',
+      name: 'o4-mini',
+      contextWindow: 200000,
+      maxTokens: 100000,
+      multimodal: false,
+      supportsReasoning: true,
+      defaultReasoningEffort: 'medium',
+      unsupportsTemperature: true,
+      supportFunctionCalling: true,
+    },
     OPENAI_O1: {
-      id: 'openai-o1',
+      id: 'o1',
       name: 'o1',
       contextWindow: 200000,
       maxTokens: 100000,
@@ -72,7 +94,7 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       supportFunctionCalling: true,
     },
     OPENAI_O3_MINI: {
-      id: 'openai-o3-mini',
+      id: 'o3-mini',
       name: 'o3-mini',
       contextWindow: 200000,
       maxTokens: 100000,
@@ -83,7 +105,7 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       supportFunctionCalling: true,
     },
     OPENAI_CHATGPT_4_O: {
-      id: 'openai-chatgpt-4o-latest',
+      id: 'chatgpt-4o-latest',
       name: 'ChatGPT-4o',
       contextWindow: 128000,
       maxTokens: 16384,
@@ -91,7 +113,7 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       supportsReasoning: false,
     },
     OPENAI_GPT_4_5_PREVIEW: {
-      id: 'openai-gpt-4.5-preview',
+      id: 'gpt-4.5-preview',
       name: 'GPT-4.5 Preview',
       contextWindow: 128000,
       maxTokens: 16384,
@@ -99,23 +121,14 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       supportFunctionCalling: true,
     },
     OPENAI_GPT_4_O: {
-      id: 'openai-gpt-4o',
+      id: 'gpt-4o',
       name: 'GPT-4o',
       contextWindow: 128000,
       maxTokens: 16384,
       multimodal: true,
       supportsReasoning: false,
       supportFunctionCalling: true,
-    },
-    OPENAI_GPT_4_O_MINI: {
-      id: 'openai-gpt-4o-mini',
-      name: 'GPT-4o Mini',
-      contextWindow: 128000,
-      maxTokens: 16384,
-      multimodal: true,
-      supportsReasoning: false,
-      supportFunctionCalling: true,
-    },
+    }
   },
   google: {
     GEMINI_2_0_FLASH: {
@@ -171,7 +184,7 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
   },
   xai: {
     XAI_GROK_3_MINI_BETA: {
-      id: 'xai-grok-3-mini-beta',
+      id: 'grok-3-mini-beta',
       name: 'Grok 3 Mini Beta',
       contextWindow: 131072,
       maxTokens: 131072,
@@ -181,7 +194,7 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       defaultReasoningEffort: 'high',
     },
     XAI_GROK_3_BETA: {
-      id: 'xai-grok-3-beta',
+      id: 'grok-3-beta',
       name: 'Grok 3 Beta',
       contextWindow: 131072,
       maxTokens: 131072,
@@ -189,7 +202,7 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       supportFunctionCalling: true
     },
     XAI_GROK_3_MINI_FAST_BETA: {
-      id: 'xai-grok-3-mini-fast-beta',
+      id: 'grok-3-mini-fast-beta',
       name: 'Grok 3 Mini Fast Beta',
       contextWindow: 131072,
       maxTokens: 131072,
@@ -199,7 +212,7 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       defaultReasoningEffort: 'high',
     },
     XAI_GROK_3_FAST_BETA: {
-      id: 'xai-grok-3-fast-beta',
+      id: 'grok-3-fast-beta',
       name: 'Grok 3 Fast Beta',
       contextWindow: 131072,
       maxTokens: 131072,

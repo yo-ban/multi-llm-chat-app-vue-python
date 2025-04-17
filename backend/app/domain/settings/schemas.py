@@ -13,7 +13,8 @@ class SettingsBase(BaseModel):
     
     API設定とユーザー設定の基本情報を含む
     """
-    api_keys: Dict[str, str] = Field(default_factory=dict, alias="apiKeys")
+    # api_keys: Dict[str, str] = Field(default_factory=dict, alias="apiKeys")
+    api_keys_status: Dict[str, bool] = Field(default_factory=dict, alias="apiKeys") 
     default_temperature: Optional[float] = Field(0.7, ge=0, le=2, alias="defaultTemperature")
     default_max_tokens: Optional[int] = Field(4096, gt=0, alias="defaultMaxTokens")
     default_vendor: Optional[str] = Field('anthropic', alias="defaultVendor")
@@ -29,13 +30,25 @@ class SettingsBase(BaseModel):
         from_attributes = True   # SQLAlchemyモデルからの変換を許可
 
 
-class SettingsCreate(SettingsBase):
+class SettingsCreate(BaseModel):
     """
     設定作成用スキーマ
     
     設定の作成または更新に使用されるスキーマ
     """
-    pass  # 現時点では基本クラスから追加フィールドなし
+    api_keys: Dict[str, str] = Field(default_factory=dict, alias="apiKeys")
+    default_temperature: Optional[float] = Field(0.7, ge=0, le=2, alias="defaultTemperature")
+    default_max_tokens: Optional[int] = Field(4096, gt=0, alias="defaultMaxTokens")
+    default_vendor: Optional[str] = Field('anthropic', alias="defaultVendor")
+    default_model: Optional[str] = Field('claude-3-5-sonnet-20240620', alias="defaultModel")
+    default_reasoning_effort: Optional[str] = Field('medium', alias="defaultReasoningEffort")
+    default_web_search: Optional[bool] = Field(False, alias="defaultWebSearch")
+    openrouter_models: List[Dict[str, Any]] = Field(default_factory=list, alias="openrouterModels")
+    title_generation_vendor: Optional[str] = Field('openai', alias="titleGenerationVendor")
+    title_generation_model: Optional[str] = Field('gpt-4o-mini', alias="titleGenerationModel")
+
+    class Config:
+        populate_by_name = True
 
 
 class SettingsResponse(SettingsBase):
