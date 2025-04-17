@@ -2,13 +2,13 @@ import { defineStore } from 'pinia';
 import { MODELS } from '@/constants/models';
 import type { GlobalSettings } from '@/types/settings';
 import type { Model } from '@/types/models';
-import { storageService } from '@/services/storage/indexeddb-service';
+import { backendStorageService } from '@/services/storage/backend-storage-service';
 
 const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   apiKeys: Object.keys(MODELS).reduce((acc, vendor) => {
-    acc[vendor] = '';
+    acc[vendor] = false; // デフォルトは未設定 (false)
     return acc;
-  }, {} as { [key: string]: string }),
+  }, {} as { [key: string]: boolean }),
   defaultTemperature: 0.7,
   defaultMaxTokens: 4096,
   defaultVendor: 'anthropic',
@@ -28,33 +28,63 @@ export const useSettingsStore = defineStore('settings', {
 
   actions: {
     async loadSettings() {
-      const savedSettings = await storageService.getGlobalSettings();
-      // If settings exist in storage, merge them with defaults,
-      // otherwise, keep the initial default state.
-      if (savedSettings) {
-        // Basic merge, assuming savedSettings structure is mostly compatible.
-        // More robust merging might be needed for future changes.
-        const mergedSettings = {
-          ...DEFAULT_GLOBAL_SETTINGS, // Start with defaults
-          ...savedSettings,           // Overwrite with saved values
-          // Ensure apiKeys includes all current vendors, even if not saved
-          apiKeys: {
-            ...DEFAULT_GLOBAL_SETTINGS.apiKeys,
-            ...(savedSettings.apiKeys || {}),
-          }
-        };
-        this.$patch(mergedSettings);
-      } else {
-        // No saved settings, ensure state is default
-        this.$patch(DEFAULT_GLOBAL_SETTINGS);
+      try {
+        // Use backendStorageService to get settings from the API
+        const savedSettings = await backendStorageService.getGlobalSettings();
+        
+        if (savedSettings) {
+          // Merge backend settings with defaults
+          const mergedSettings = {
+            ...DEFAULT_GLOBAL_SETTINGS, 
+            ...savedSettings,           
+            apiKeys: { 
+              ...DEFAULT_GLOBAL_SETTINGS.apiKeys,
+              ...(savedSettings.apiKeys || {}), // savedSettings.apiKeys は boolean 辞書のはず
+            },
+            // Ensure openrouterModels is an array
+            openrouterModels: savedSettings.openrouterModels || [],
+          };
+          this.$patch(mergedSettings);
+        } else {
+          // No settings from backend (or error occurred), use defaults
+          console.warn('No settings loaded from backend, using default settings.');
+          this.$patch(DEFAULT_GLOBAL_SETTINGS);
+        }
+      } catch (error) {
+          console.error('Failed to load settings from backend:', error);
+          // Fallback to default settings in case of error
+          this.$patch(DEFAULT_GLOBAL_SETTINGS);
       }
     },
 
-    async saveSettings(settings: GlobalSettings) {
-      // 1. 保存処理
-      await storageService.saveGlobalSettings(settings);
-      // 2. 状態の更新
-      this.$patch(settings);
+    // changedApiKeys には実際のキー文字列または空文字列（削除用）が入る
+    async saveSettings(adjustedSettings: Partial<GlobalSettings> & { changedApiKeys?: { [key: string]: string } }) {
+      try {
+        // バックエンドに送信するペイロードを作成
+        // changedApiKeys を apiKeys として含める
+        const payloadToSend = {
+          ...this.$state, // 現在のストアの状態をベースに
+          ...adjustedSettings, // 他の変更された設定をマージ
+          changedApiKeys: adjustedSettings.changedApiKeys || {}, // 変更されたAPIキーを設定
+        };
+        // バックエンドAPIは SettingsCreate 型 (apiKeys: Dict[str, str]) を期待している
+        const savedSettingsResponse = await backendStorageService.saveGlobalSettings(payloadToSend); // API呼び出し
+
+        // APIから返却された最新の状態 (apiKeys: boolean) でストアを更新
+        this.$patch({
+          ...savedSettingsResponse,
+           // highlight-start
+          // boolean の辞書でストアを更新
+          apiKeys: savedSettingsResponse.apiKeys || DEFAULT_GLOBAL_SETTINGS.apiKeys 
+           // highlight-end
+        });
+        console.log('Settings saved to backend and store updated.');
+      } catch (error) {
+        console.error('Failed to save settings to backend:', error);
+        // Decide how to handle save errors (e.g., show notification to user)
+        // Re-throw or handle locally
+        throw error; // Re-throwing allows the component to catch it (e.g., stop loading indicator)
+      }
     },
 
     getModelById(modelId: string): Model | null {
@@ -62,7 +92,8 @@ export const useSettingsStore = defineStore('settings', {
         return this.openrouterModels.find(m => m.id === modelId) || null;
       }
       
-      const vendorModels = MODELS[this.defaultVendor] || {};
+      // Need to handle the case where vendor might not be in MODELS if loaded from backend
+      const vendorModels = MODELS[this.defaultVendor as keyof typeof MODELS] || {}; 
       return Object.values(vendorModels).find(m => m.id === modelId) || null;
     },
 
@@ -71,7 +102,8 @@ export const useSettingsStore = defineStore('settings', {
       if (!model?.supportsReasoning) {
         return undefined;
       }
-      return this.defaultReasoningEffort || model.defaultReasoningEffort || 'medium';
+      // Use the current state's default value
+      return this.defaultReasoningEffort || model.defaultReasoningEffort || 'medium'; 
     },
 
     // Check if a given modelId is valid for the specified vendor

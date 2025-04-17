@@ -23,40 +23,55 @@
           </ul>
         </div>
         
-        <div class="settings-content">
-          <APIKeysSettings
-            v-if="currentSection === 'api-keys'"
-            v-model="tempSettings.apiKeys"
-            @update:model-value="updateAPIKeys"
-          />
+        <div class="settings-panel">
+          <!-- 固定ヘッダー部分 -->
+          <div class="settings-header">
+            <h3>{{ sectionInfo.title }}</h3>
+            <p class="description">{{ sectionInfo.description }}</p>
+          </div>
           
-          <VendorModelSelector
-            v-if="currentSection === 'vendor-model'"
-            v-model:vendor="tempSettings.defaultVendor"
-            v-model:model="tempSettings.defaultModel"
-            @update:vendor="updateVendorModel"
-          />
-          
-          <ModelParametersSettings
-            v-if="currentSection === 'parameters'"
-            v-model:temperature="tempSettings.defaultTemperature"
-            v-model:maxTokens="tempSettings.defaultMaxTokens"
-            v-model:defaultReasoningEffort="tempSettings.defaultReasoningEffort"
-            :selectedVendor="tempSettings.defaultVendor"
-            :selectedModel="tempSettings.defaultModel"
-          />
-          
-          <TitleGenerationSettings
-            v-if="currentSection === 'title-generation'"
-            v-model="titleGenerationSettings"
-            @update:modelValue="updateTitleGenerationSettings"
-          />
-          
-          <OpenRouterModelsSettings
-            v-if="currentSection === 'openrouter'"
-            v-model="tempSettings.openrouterModels"
-            @update:model-value="updateOpenRouterModels"
-          />
+          <!-- スクロール可能なコンテンツ部分 -->
+          <div class="settings-content">
+            <APIKeysSettings
+              v-if="currentSection === 'api-keys'"
+              :modelValue="tempSettings.apiKeys" 
+              @update:changedKeys="updateChangedKeys"
+              @reset="resetApiKeys"
+              class="content-no-header"
+            />
+            
+            <VendorModelSelector
+              v-if="currentSection === 'vendor-model'"
+              v-model:vendor="tempSettings.defaultVendor"
+              v-model:model="tempSettings.defaultModel"
+              @update:vendor="updateVendorModel"
+              class="content-no-header"
+            />
+            
+            <ModelParametersSettings
+              v-if="currentSection === 'parameters'"
+              v-model:temperature="tempSettings.defaultTemperature"
+              v-model:maxTokens="tempSettings.defaultMaxTokens"
+              v-model:defaultReasoningEffort="tempSettings.defaultReasoningEffort"
+              :selectedVendor="tempSettings.defaultVendor"
+              :selectedModel="tempSettings.defaultModel"
+              class="content-no-header"
+            />
+            
+            <TitleGenerationSettings
+              v-if="currentSection === 'title-generation'"
+              v-model="titleGenerationSettings"
+              @update:modelValue="updateTitleGenerationSettings"
+              class="content-no-header"
+            />
+            
+            <OpenRouterModelsSettings
+              v-if="currentSection === 'openrouter'"
+              v-model="tempSettings.openrouterModels"
+              @update:model-value="updateOpenRouterModels"
+              class="content-no-header"
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -118,13 +133,61 @@ const dialogVisible = computed({
 const currentSection = ref('api-keys');
 const isSaving = ref(false);
 
+// 変更されたAPIキーを保持する状態
+const changedApiKeys = ref<{ [key: string]: string }>({});
+
+// 子コンポーネントからの変更キーを更新
+const updateChangedKeys = (keys: { [key: string]: string }) => {
+  changedApiKeys.value = keys;
+};
+
+// APIキーの変更をリセット
+const resetApiKeys = () => {
+  changedApiKeys.value = {};
+};
+
+// 各セクションの情報を定義
 const sections = [
-  { id: 'api-keys', label: 'API Keys' },
-  { id: 'vendor-model', label: 'Default Model' },
-  { id: 'parameters', label: 'Parameters' },
-  { id: 'title-generation', label: 'Title Generation' },
-  { id: 'openrouter', label: 'OpenRouter Models' },
+  { 
+    id: 'api-keys', 
+    label: 'API Keys',
+    title: 'API Keys Configuration',
+    description: 'Configure API keys for each vendor. These keys are stored locally and never sent to our servers.'
+  },
+  { 
+    id: 'vendor-model', 
+    label: 'Default Model',
+    title: 'Default Vendor & Model',
+    description: 'Select the default vendor and model to use for new conversations.'
+  },
+  { 
+    id: 'parameters', 
+    label: 'Parameters',
+    title: 'Model Parameters',
+    description: 'Configure default parameters for language model requests.'
+  },
+  { 
+    id: 'title-generation', 
+    label: 'Title Generation',
+    title: 'Title Generation Model',
+    description: 'Configure the model used for generating chat titles.'
+  },
+  { 
+    id: 'openrouter', 
+    label: 'OpenRouter Models',
+    title: 'OpenRouter Models',
+    description: 'Configure custom models available through OpenRouter.'
+  },
 ];
+
+// 現在選択されているセクションの情報
+const sectionInfo = computed(() => {
+  const currentSectionInfo = sections.find(section => section.id === currentSection.value);
+  return {
+    title: currentSectionInfo?.title || '',
+    description: currentSectionInfo?.description || ''
+  };
+});
 
 const confirm = useConfirm();
 
@@ -181,14 +244,16 @@ watch(dialogVisible, (newValue) => {
       titleGenerationVendor: settingsStore.titleGenerationVendor,
       titleGenerationModel: settingsStore.titleGenerationModel
     };
+    // 変更キーをリセット
+    changedApiKeys.value = {}; 
   }
 });
 
-// 設定が変更されたかどうかを追跡
+// 未保存の変更があるかチェック (APIキーの変更も考慮)
 const hasUnsavedChanges = computed(() => {
-  return (
-    JSON.stringify({
-      apiKeys: settingsStore.apiKeys,
+    // Check other settings change
+    const otherSettingsChanged = JSON.stringify({
+      // apiKeys を除外して比較
       defaultTemperature: settingsStore.defaultTemperature,
       defaultMaxTokens: settingsStore.defaultMaxTokens,
       defaultVendor: settingsStore.defaultVendor,
@@ -198,14 +263,23 @@ const hasUnsavedChanges = computed(() => {
       openrouterModels: settingsStore.openrouterModels,
       titleGenerationVendor: settingsStore.titleGenerationVendor,
       titleGenerationModel: settingsStore.titleGenerationModel
-    }) !== JSON.stringify(tempSettings.value)
-  );
-});
+    }) !== JSON.stringify({
+      defaultTemperature: tempSettings.value.defaultTemperature,
+      defaultMaxTokens: tempSettings.value.defaultMaxTokens,
+      defaultVendor: tempSettings.value.defaultVendor,
+      defaultModel: tempSettings.value.defaultModel,
+      defaultReasoningEffort: tempSettings.value.defaultReasoningEffort,
+      defaultWebSearch: tempSettings.value.defaultWebSearch,
+      openrouterModels: tempSettings.value.openrouterModels,
+      titleGenerationVendor: tempSettings.value.titleGenerationVendor,
+      titleGenerationModel: tempSettings.value.titleGenerationModel
+    });
 
-// 各セクションの更新ハンドラー
-const updateAPIKeys = (newApiKeys: { [key: string]: string }) => {
-  tempSettings.value.apiKeys = { ...newApiKeys };
-};
+    // Check if API keys changed using our local state
+    const apiKeysChanged = Object.keys(changedApiKeys.value).length > 0;
+
+    return otherSettingsChanged || apiKeysChanged;
+});
 
 const updateVendorModel = () => {
   // ベンダーが変更された場合、対応するモデルのmaxTokensに合わせて更新
@@ -259,14 +333,22 @@ const onDialogHide = () => {
     titleGenerationModel: settingsStore.titleGenerationModel
   };
   currentSection.value = 'api-keys';
+  // 変更キーをリセット
+  changedApiKeys.value = {};
 };
 
 const onSave = async () => {
   try {
     isSaving.value = true;
 
-    // Call the store's save action
-    await settingsStore.saveSettings(tempSettings.value);
+    // ストアのアクションに渡すデータを作成
+    const settingsToSave = {
+      ...tempSettings.value, // 他の設定項目 (apiKeys: boolean を含むが、これは無視される)
+      changedApiKeys: changedApiKeys.value // 変更された実際のキー情報
+    };
+
+    // ストアの saveSettings アクションを呼び出し
+    await settingsStore.saveSettings(settingsToSave); 
 
     // Close the dialog (emit is removed as store is the source of truth)
     dialogVisible.value = false;
@@ -323,10 +405,37 @@ const onSave = async () => {
   font-weight: 600;
 }
 
+.settings-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.settings-header {
+  padding: 20px 20px 0;
+  background-color: var(--surface-card);
+  border-bottom: 1px solid var(--surface-border);
+}
+
+.settings-header h3 {
+  margin-top: 0;
+  margin-bottom: 8px;
+}
+
 .settings-content {
   flex: 1;
   padding: 20px;
   overflow-y: auto;
+}
+
+.content-no-header {
+  padding-top: 0;
+}
+
+.content-no-header h3,
+.content-no-header .description {
+  display: none;
 }
 
 .dialog-footer {
@@ -357,5 +466,10 @@ const onSave = async () => {
 :deep(.p-button-highlighted:hover) {
   background: var(--primary-700) !important;
   border-color: var(--primary-700) !important;
+}
+
+.description {
+  color: var(--text-color-secondary);
+  margin-bottom: 24px;
 }
 </style> 

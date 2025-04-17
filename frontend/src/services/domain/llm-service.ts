@@ -195,9 +195,10 @@ class LLMServiceImpl implements LLMService {
         method: "POST",
         headers: {
           'Content-Type': 'application/json',
-          'X-API-Key': useSettingsStore().apiKeys[settings.vendor]
+          // 'X-API-Key': useSettingsStore().apiKeys[settings.vendor]
         },
         body: JSON.stringify({
+          vendor: settings.vendor,
           system: systemMessage,
           messages: apiMessages,
           model: settings.model,
@@ -257,9 +258,10 @@ class LLMServiceImpl implements LLMService {
         method: "POST",
         headers: {
           'Content-Type': 'application/json',
-          'X-API-Key': settingsStore.apiKeys[vendor]
+          // 'X-API-Key': settingsStore.apiKeys[vendor]
         },
         body: JSON.stringify({
+          vendor: vendor,
           system: system,
           messages: apiMessages,
           maxTokens: maxTokens,

@@ -1,25 +1,31 @@
 <template>
   <div class="api-keys-settings">
-    <h3>API Keys Configuration</h3>
-    <p class="description">Configure API keys for each vendor. These keys are stored locally and never sent to our servers.</p>
-    
     <div class="api-keys-list">
-      <div v-for="(key, vendor) in localApiKeys" :key="vendor" class="api-key-item">
+      <div v-for="(isSet, vendor) in modelValue" :key="vendor" class="api-key-item">
         <div class="vendor-header">
-          <span class="vendor-name">{{ formatVendorName(vendor) }}</span>
+          <div class="vendor-info">
+            <span class="vendor-name">{{ formatVendorName(vendor) }}</span>
+            <span :class="['key-status', isSet ? 'key-configured' : 'key-not-configured']">
+              <i :class="isSet ? 'pi pi-check-circle' : 'pi pi-times-circle'"></i>
+              {{ isSet ? 'Configured' : 'Not configured' }}
+            </span>
+          </div>
           <div class="key-actions">
             <PrimeButton
-              v-if="key"
-              icon="pi pi-eye"
-              class="p-button-text p-button-sm"
-              @click="toggleKeyVisibility(vendor)"
-              :class="{ 'p-button-info': isKeyVisible[vendor] }"
+              v-if="isSet"
+              icon="pi pi-refresh"
+              class="p-button-text p-button-sm p-button-secondary"
+              @click="onInputFocus(vendor)"
+              tooltip="Update key"
+              tooltipOptions="{ position: 'top' }"
             />
             <PrimeButton
-              v-if="key"
+              v-if="localApiKeysInput[vendor]"
               icon="pi pi-times"
               class="p-button-text p-button-sm p-button-danger"
               @click="clearApiKey(vendor)"
+              tooltip="Remove key"
+              tooltipOptions="{ position: 'top' }"
             />
           </div>
         </div>
@@ -28,11 +34,13 @@
           <span class="p-input-icon-right">
             <i v-if="isValidating[vendor]" class="pi pi-spin pi-spinner" />
             <PrimeInputText
-              v-model="localApiKeys[vendor]"
-              :type="isKeyVisible[vendor] ? 'text' : 'password'"
-              :placeholder="`Enter ${formatVendorName(vendor)} API Key`"
+              v-model="localApiKeysInput[vendor]"
+              :type="getInputType(vendor)"
+              :placeholder="getPlaceholder(vendor)"
               class="w-full"
               @input="onApiKeyInput(vendor)"
+              @focus="onInputFocus(vendor)"
+              :class="{ 'key-field-configured': isSet && localApiKeysInput[vendor] === maskedPlaceholder }"
             />
           </span>
         </div>
@@ -46,34 +54,103 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
-import debounce from 'lodash/debounce';
+import { ref, watch, computed } from 'vue';
 
 const props = defineProps<{
-  modelValue: { [key: string]: string }
+  modelValue: { [key: string]: boolean } // isSet の Map を受け取る
 }>();
 
+// カスタムイベントを定義
 const emit = defineEmits<{
-  (e: 'update:modelValue', value: { [key: string]: string }): void
+  'update:changedKeys': [{ [key: string]: string }]
+  'reset': [] // リセットイベントを追加
 }>();
 
-const localApiKeys = ref<{ [key: string]: string }>({ ...props.modelValue });
+// ローカルでユーザーの入力を保持する状態 (実際のキーまたはプレースホルダー)
+const localApiKeysInput = ref<{ [key: string]: string }>({});
+// 変更されたキーのみを保持する状態 (実際のキーまたは空文字)
+const changedKeys = ref<{ [key: string]: string }>({});
+// マスク用プレースホルダー
+const maskedPlaceholder = '********';
+
 const isKeyVisible = ref<{ [key: string]: boolean }>({});
 const isValidating = ref<{ [key: string]: boolean }>({});
 const validationErrors = ref<{ [key: string]: string }>({});
 
-// API キーの表示/非表示を切り替え
-const toggleKeyVisibility = (vendor: string | number) => {
-  const key = String(vendor);
-  isKeyVisible.value[key] = !isKeyVisible.value[key];
+// 入力フィールドのタイプを決定
+const getInputType = (vendor: string | number) => {
+    const key = String(vendor);
+    // キーが表示可能状態 or プレースホルダーでない場合 は 'text'
+    if (isKeyVisible.value[key] || localApiKeysInput.value[key] !== maskedPlaceholder) {
+        return 'text';
+    }
+    // それ以外（マスク状態）は 'password'
+    return 'password';
 };
 
-// API キーをクリア
+// プレースホルダーを決定
+const getPlaceholder = (vendor: string | number) => {
+    const key = String(vendor);
+    // 設定済み（プレースホルダー表示中）かつキー非表示状態なら空
+    if (localApiKeysInput.value[key] === maskedPlaceholder && !isKeyVisible.value[key]) {
+        return `${formatVendorName(vendor)} API Key is configured`;
+    }
+    // 未設定またはキー表示状態なら具体的なプレースホルダー
+    return `Enter ${formatVendorName(vendor)} API Key`;
+};
+
+// フォーカス時にプレースホルダーを実際の入力値に切り替え
+const onInputFocus = (vendor: string | number) => {
+    const key = String(vendor);
+    if (localApiKeysInput.value[key] === maskedPlaceholder) {
+        localApiKeysInput.value[key] = ''; // 入力のためにクリア
+    }
+};
+
+// 現在有効な変更キーを計算
+const actualChangedKeys = computed(() => {
+  const keys: { [key: string]: string } = {};
+  for (const vendor in changedKeys.value) {
+    if (changedKeys.value[vendor] !== maskedPlaceholder) {
+      keys[vendor] = changedKeys.value[vendor];
+    }
+  }
+  return keys;
+});
+
+// 変更を監視して親コンポーネントに通知
+watch(
+  actualChangedKeys,
+  (newChangedKeys) => {
+    emit('update:changedKeys', newChangedKeys);
+  },
+  { deep: true }
+);
+
+// APIキー入力ハンドラ
+const onApiKeyInput = (vendor: string | number) => {
+  const key = String(vendor);
+  const currentValue = localApiKeysInput.value[key];
+
+  // ユーザーが手動でプレースホルダーと同じ文字列を入力することは想定しない
+  // もし入力値が空になったら変更リストにも空を反映 (クリアボタンと同様)
+  if (currentValue === '') {
+      changedKeys.value[key] = '';
+  } else if (currentValue && currentValue !== maskedPlaceholder) {
+      changedKeys.value[key] = currentValue;
+  } else {
+      // プレースホルダーが表示されている場合（通常フォーカスが外れた時）は変更リストから削除
+      delete changedKeys.value[key];
+  }
+};
+
+// APIキークリア処理
 const clearApiKey = (vendor: string | number) => {
   const key = String(vendor);
-  localApiKeys.value[key] = '';
+  localApiKeysInput.value[key] = ''; // ローカル入力をクリア
+  changedKeys.value[key] = ''; // 変更リストに空文字を設定（削除シグナル）
+  isKeyVisible.value[key] = false; // マスク状態に戻す
   validationErrors.value[key] = '';
-  emit('update:modelValue', { ...localApiKeys.value });
 };
 
 // ベンダー名のフォーマット
@@ -82,50 +159,39 @@ const formatVendorName = (vendor: string | number) => {
   return str.charAt(0).toUpperCase() + str.slice(1);
 };
 
-// API キーの検証
-const validateApiKey = async (vendor: string | number, key: string) => {
-  const vendorKey = String(vendor);
-  if (!key) {
-    validationErrors.value[vendorKey] = '';
-    return;
-  }
-
-  isValidating.value[vendorKey] = true;
-  try {
-    // TODO: 各ベンダーのAPI Key検証ロジックを実装
-    // 例: OpenAIの場合は /v1/models を叩いてみる等
-    await new Promise(resolve => setTimeout(resolve, 500)); // 仮の遅延
-    validationErrors.value[vendorKey] = '';
-  } catch (error) {
-    validationErrors.value[vendorKey] = 'Invalid API key';
-  } finally {
-    isValidating.value[vendorKey] = false;
-  }
-};
-
-// 入力値の変更を遅延処理
-const debouncedValidation = debounce(validateApiKey, 500);
-
-const onApiKeyInput = (vendor: string | number) => {
-  const key = String(vendor);
-  const value = localApiKeys.value[key];
-  emit('update:modelValue', { ...localApiKeys.value });
-  debouncedValidation(key, value);
-};
-
-// props の変更を監視
+// props.modelValue (isSet Map) が変更されたらローカル入力を初期化
 watch(
   () => props.modelValue,
-  (newValue) => {
-    localApiKeys.value = { ...newValue };
+  (isConfiguredMap) => {
+    const initialInputState: { [key: string]: string } = {};
+    for (const vendor in isConfiguredMap) {
+      initialInputState[vendor] = isConfiguredMap[vendor] ? maskedPlaceholder : '';
+    }
+    localApiKeysInput.value = initialInputState;
+    // Props変更時には変更リストをリセット
+    changedKeys.value = {}; 
   },
-  { deep: true }
+  { deep: true, immediate: true }
+);
+
+// リセットを処理するイベントリスナーを追加
+watch(
+  () => props,
+  () => {
+    // 親コンポーネントから'reset'イベントをリッスン
+    const onReset = () => {
+      changedKeys.value = {};
+    };
+    
+    // 親から'reset'イベントが来たときにローカルの変更をリセット
+    onReset();
+  }
 );
 </script>
 
 <style scoped>
 .api-keys-settings {
-  padding: 16px;
+  /* padding: 16px; パディングを親コンポーネントで管理 */
 }
 
 .description {
@@ -144,6 +210,13 @@ watch(
   border-radius: 6px;
   padding: 16px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  border-left: 3px solid var(--surface-border);
+  transition: all 0.2s ease;
+}
+
+.api-key-item:hover {
+  border-left-color: var(--primary-300);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
 }
 
 .vendor-header {
@@ -153,9 +226,16 @@ watch(
   margin-bottom: 8px;
 }
 
+.vendor-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .vendor-name {
   font-weight: 600;
   color: var(--text-color);
+  font-size: 1.1rem;
 }
 
 .key-actions {
@@ -171,6 +251,27 @@ watch(
   color: var(--red-500);
   display: block;
   margin-top: 4px;
+}
+
+.key-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+
+.key-configured {
+  color: var(--green-500);
+}
+
+.key-not-configured {
+  color: var(--text-color-secondary);
+}
+
+.key-field-configured {
+  background-color: var(--surface-hover);
+  border-color: var(--surface-border);
+  color: var(--text-color-secondary);
 }
 
 :deep(.p-inputtext) {
