@@ -60,6 +60,28 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       multimodal: true,
       supportFunctionCalling: true,
     },
+    OPENAI_O3: {
+      id: 'openai-o3',
+      name: 'o3',
+      contextWindow: 200000,
+      maxTokens: 100000,
+      multimodal: true,
+      supportsReasoning: true,
+      defaultReasoningEffort: 'medium',
+      unsupportsTemperature: true,
+      supportFunctionCalling: true,
+    },
+    OPENAI_O4_MINI: {
+      id: 'openai-o4-mini',
+      name: 'o4-mini',
+      contextWindow: 200000,
+      maxTokens: 100000,
+      multimodal: false,
+      supportsReasoning: true,
+      defaultReasoningEffort: 'medium',
+      unsupportsTemperature: true,
+      supportFunctionCalling: true,
+    },
     OPENAI_O1: {
       id: 'openai-o1',
       name: 'o1',
@@ -106,16 +128,7 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       multimodal: true,
       supportsReasoning: false,
       supportFunctionCalling: true,
-    },
-    OPENAI_GPT_4_O_MINI: {
-      id: 'openai-gpt-4o-mini',
-      name: 'GPT-4o Mini',
-      contextWindow: 128000,
-      maxTokens: 16384,
-      multimodal: true,
-      supportsReasoning: false,
-      supportFunctionCalling: true,
-    },
+    }
   },
   google: {
     GEMINI_2_0_FLASH: {
