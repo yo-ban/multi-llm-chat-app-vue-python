@@ -1,7 +1,5 @@
 <template>
   <div class="model-parameters-settings">
-    <h3>Model Parameters</h3>
-    <p class="description">Configure default parameters for model generation.</p>
     
     <div class="parameters-container">
       <div class="parameter-item" :class="{ 'disabled': selectedModel?.unsupportsTemperature }">

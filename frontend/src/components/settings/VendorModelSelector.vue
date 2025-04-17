@@ -1,8 +1,5 @@
 <template>
-  <div class="vendor-model-selector">
-    <h3>Default Vendor & Model</h3>
-    <p class="description">Select the default vendor and model to use for new conversations.</p>
-    
+  <div class="vendor-model-selector">    
     <div class="selector-container">
       <div class="selector-item">
         <label>Default Vendor</label>

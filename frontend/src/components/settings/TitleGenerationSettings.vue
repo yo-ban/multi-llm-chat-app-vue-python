@@ -1,8 +1,5 @@
 <template>
     <div class="title-generation-settings">
-        <h3>Title Generation Model</h3>
-        <p class="description">Configure the model used for generating chat titles.</p>
-
         <div class="settings-container">
             <div class="settings-item">
                 <div class="settings-header">

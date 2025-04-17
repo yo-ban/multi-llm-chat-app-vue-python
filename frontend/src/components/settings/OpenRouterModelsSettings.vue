@@ -1,8 +1,5 @@
 <template>
   <div class="openrouter-models-settings">
-    <h3>OpenRouter Models</h3>
-    <p class="description">Configure custom models available through OpenRouter.</p>
-    
     <div class="models-container">
       <div v-if="localModels.length === 0" class="no-models">
         <p>No custom models configured yet.</p>
