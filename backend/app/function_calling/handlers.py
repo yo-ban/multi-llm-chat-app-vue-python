@@ -1,5 +1,6 @@
 from typing import Any, Dict, List, AsyncGenerator, Union
 import json
+import inspect
 # Remove explicit tool imports
 from app.logger.logging_utils import get_logger, log_error, log_info, log_warning, log_debug
 # Import the dynamic tool discovery function
@@ -35,13 +36,22 @@ async def handle_tool_call(
 
         if tool_func:
             log_info(f"Executing tool: {tool_name}", {"input": tool_input})
-            # Assuming yield format is consistent or handled within the tool itself if needed
-            # Simplified yield for demonstration. You might need a more generic yield here.
+            # Simplified yield for demonstration
             yield {"type": "tool_execution", "tool": tool_name, "input": tool_input}
 
-            # Execute the tool dynamically, passing arguments using **
-            # Ensure the tool function is async
-            result = await tool_func(**tool_input)
+            # Sanitize tool_input to only include valid parameters for the tool function
+            valid_params = {}
+            sig = inspect.signature(tool_func)
+            param_names = set(sig.parameters.keys())
+            
+            for key, value in tool_input.items():
+                if key in param_names:
+                    valid_params[key] = value
+                else:
+                    log_warning(f"Ignoring invalid parameter '{key}' for tool '{tool_name}'")
+            
+            # Execute the tool with only valid parameters
+            result = await tool_func(**valid_params)
 
         else:
             log_warning(f"Unknown tool called: {tool_name}")

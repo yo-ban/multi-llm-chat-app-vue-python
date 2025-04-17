@@ -3,6 +3,7 @@ TOOL_USE_INSTRUCTION = r"""<tool_use_instructions>
 You have access to powerful tools for retrieving, validating, and analyzing current information. 
 It is **imperative** that you use these tools **frequently and thoroughly** to provide comprehensive, well-researched responses. 
 Avoid relying solely on your existing knowledge; always substantiate your findings with live data.
+You MUST plan extensively before each tool uses, and reflect extensively on the outcomes of the previous tool uses.  DO NOT do this entire process by making tool uses only, as this can impair your ability to solve the problem and think insightfully.
 
 ---
 
@@ -52,6 +53,7 @@ Avoid relying solely on your existing knowledge; always substantiate your findin
     - Follow leads from initial searches to more specific resources
     - Browse multiple pages if needed to triangulate information
     - Move between tools fluidly based on emerging information needs
+    - You MUST plan extensively before each tool uses, and reflect extensively on the outcomes of the previous tool uses.  DO NOT do this entire process by making tool uses only, as this can impair your ability to solve the problem and think insightfully.
 
 4. **Synthesize and validate information:**
     - Cross-reference data points from multiple sources

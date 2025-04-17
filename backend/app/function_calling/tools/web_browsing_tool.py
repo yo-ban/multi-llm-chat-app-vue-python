@@ -300,23 +300,23 @@ code block in code block will be escaped with backticks (e.g., \`\`\`).
     safety_settings = [
         SafetySetting(
             category=HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
-            threshold=HarmBlockThreshold.BLOCK_NONE
+            threshold=HarmBlockThreshold.OFF
         ),
         SafetySetting(
             category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-            threshold=HarmBlockThreshold.BLOCK_NONE
+            threshold=HarmBlockThreshold.OFF
         ),
         SafetySetting(
             category=HarmCategory.HARM_CATEGORY_HARASSMENT,
-            threshold=HarmBlockThreshold.BLOCK_NONE
+            threshold=HarmBlockThreshold.OFF
         ),
         SafetySetting(
             category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-            threshold=HarmBlockThreshold.BLOCK_NONE
+            threshold=HarmBlockThreshold.OFF
         ),
         SafetySetting(
             category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-            threshold=HarmBlockThreshold.BLOCK_NONE
+            threshold=HarmBlockThreshold.OFF
         )
     ]
 
@@ -342,24 +342,28 @@ code block in code block will be escaped with backticks (e.g., \`\`\`).
         response_mime_type="text/plain",
     )
 
-    chat = client.aio.chats.create(
-        history=[],
-        model=os.getenv("GEMINI_MODEL_NAME"),
-        config=generation_config
-    )
+    # chat = client.aio.chats.create(
+    #     history=[],
+    #     model=os.getenv("GEMINI_MODEL_NAME"),
+    #     config=generation_config
+    # )
 
     max_retries = 3
     retries = 0
     while retries < max_retries:
         try:
-            response = await chat.send_message_stream(content)
+            response = await client.aio.models.generate_content_stream(
+                model=os.getenv("GEMINI_MODEL_NAME"),
+                contents=[content],
+                config=generation_config
+            )
 
             text = ""
-            async for event in response:
-                text += event.text
+            async for chunk in response:
+                text += chunk.text
 
-            if event.usage_metadata:
-                usage = await parse_usage_gemini(event.usage_metadata)
+            if chunk.usage_metadata:
+                usage = await parse_usage_gemini(chunk.usage_metadata)
                 log_info("Token usage in web extraction", usage)
 
             break
