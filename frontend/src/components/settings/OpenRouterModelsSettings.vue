@@ -300,8 +300,9 @@ const isModelValid = computed(() => {
 .model-item {
   background: var(--surface-card);
   border-radius: 6px;
-  padding: 16px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  padding: 16px;
+  margin-bottom: 4px;
 }
 
 .model-header {
@@ -320,6 +321,7 @@ const isModelValid = computed(() => {
 .model-name {
   font-weight: 600;
   color: var(--text-color);
+  font-size: 1rem;
 }
 
 .model-id {
@@ -357,14 +359,14 @@ const isModelValid = computed(() => {
 .add-model {
   display: flex;
   justify-content: center;
-  margin-top: 16px;
+  margin-top: 8px;
 }
 
 .dialog-content {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 16px 0;
+  padding: 8px 0;
 }
 
 .form-field {
@@ -427,5 +429,6 @@ const isModelValid = computed(() => {
 .error-message {
   color: var(--red-500);
   margin-top: 4px;
+  font-size: 0.875rem;
 }
 </style> 

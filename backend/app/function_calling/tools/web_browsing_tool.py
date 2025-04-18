@@ -342,12 +342,6 @@ code block in code block will be escaped with backticks (e.g., \`\`\`).
         response_mime_type="text/plain",
     )
 
-    # chat = client.aio.chats.create(
-    #     history=[],
-    #     model=os.getenv("GEMINI_MODEL_NAME"),
-    #     config=generation_config
-    # )
-
     max_retries = 3
     retries = 0
     while retries < max_retries:

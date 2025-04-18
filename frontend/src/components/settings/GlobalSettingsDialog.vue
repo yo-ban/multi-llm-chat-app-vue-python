@@ -44,17 +44,8 @@
               v-if="currentSection === 'vendor-model'"
               v-model:vendor="tempSettings.defaultVendor"
               v-model:model="tempSettings.defaultModel"
-              @update:vendor="updateVendorModel"
-              class="content-no-header"
-            />
-            
-            <ModelParametersSettings
-              v-if="currentSection === 'parameters'"
               v-model:temperature="tempSettings.defaultTemperature"
-              v-model:maxTokens="tempSettings.defaultMaxTokens"
-              v-model:defaultReasoningEffort="tempSettings.defaultReasoningEffort"
-              :selectedVendor="tempSettings.defaultVendor"
-              :selectedModel="tempSettings.defaultModel"
+              @update:vendor="updateVendorModel"
               class="content-no-header"
             />
             
@@ -159,12 +150,6 @@ const sections = [
     label: 'Default Model',
     title: 'Default Vendor & Model',
     description: 'Select the default vendor and model to use for new conversations.'
-  },
-  { 
-    id: 'parameters', 
-    label: 'Parameters',
-    title: 'Model Parameters',
-    description: 'Configure default parameters for language model requests.'
   },
   { 
     id: 'title-generation', 

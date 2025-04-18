@@ -1,29 +1,72 @@
 <template>
   <div class="vendor-model-selector">    
     <div class="selector-container">
-      <div class="selector-item">
-        <label>Default Vendor</label>
-        <PrimeDropdown
-          v-model="selectedVendor"
-          :options="vendorOptions"
-          optionLabel="name"
-          optionValue="id"
-          placeholder="Select a vendor"
-          class="w-full"
-        />
+      <div class="parameter-item">
+        <div class="parameter-header">
+          <label>Default Vendor</label>
+        </div>
+        <div class="parameter-control">
+          <PrimeDropdown
+            v-model="selectedVendor"
+            :options="vendorOptions"
+            optionLabel="name"
+            optionValue="id"
+            placeholder="Select a vendor"
+            class="w-full"
+          />
+        </div>
+        <small class="parameter-description">
+          Select the default AI vendor to use for new conversations.
+        </small>
       </div>
       
-      <div class="selector-item">
-        <label>Default Model</label>
-        <PrimeDropdown
-          v-model="selectedModel"
-          :options="availableModels"
-          optionLabel="name"
-          optionValue="id"
-          placeholder="Select a model"
-          class="w-full"
-          :disabled="!selectedVendor"
-        />
+      <div class="parameter-item">
+        <div class="parameter-header">
+          <label>Default Model</label>
+        </div>
+        <div class="parameter-control">
+          <PrimeDropdown
+            v-model="selectedModel"
+            :options="availableModels"
+            optionLabel="name"
+            optionValue="id"
+            placeholder="Select a model"
+            class="w-full"
+            :disabled="!selectedVendor"
+          />
+        </div>
+        <small class="parameter-description">
+          Select the default model to use for new conversations.
+        </small>
+      </div>
+
+      <!-- Default Temperature Setting -->
+      <div class="parameter-item" :class="{ 'disabled': selectedModelInfo?.unsupportsTemperature }">
+        <div class="parameter-header">
+          <label>Default Temperature for All Models</label>
+          <span class="parameter-value">{{ temperature.toFixed(2) }}</span>
+        </div>
+        <div class="slider-container">
+          <PrimeSlider
+            v-model="temperature"
+            :min="0"
+            :max="1"
+            :step="0.1"
+            class="w-full"
+            :disabled="selectedModelInfo?.unsupportsTemperature"
+          />
+          <div class="slider-labels">
+            <span>Precise</span>
+            <span>Balanced</span>
+            <span>Creative</span>
+          </div>
+        </div>
+        <small class="parameter-description" :class="{ 'text-disabled': selectedModelInfo?.unsupportsTemperature }">
+          {{ selectedModelInfo?.unsupportsTemperature
+            ? 'This model does not support temperature adjustments.'
+            : 'Controls randomness in the model\'s responses. Lower values make the output more focused and deterministic, while higher values make it more creative and diverse.'
+          }}
+        </small>
       </div>
     </div>
     
@@ -59,11 +102,13 @@ import { useSettingsStore } from '@/store/settings';
 const props = defineProps<{
   vendor: string;
   model: string;
+  temperature: number;
 }>();
 
 const emit = defineEmits<{
   (e: 'update:vendor', value: string): void;
   (e: 'update:model', value: string): void;
+  (e: 'update:temperature', value: number): void;
 }>();
 
 const settingsStore = useSettingsStore();
@@ -110,6 +155,16 @@ const selectedModelInfo = computed(() => {
   
   const vendorModels = MODELS[selectedVendor.value] || {};
   return Object.values(vendorModels).find(m => m.id === selectedModel.value);
+});
+
+// Temperature computed using props and model support
+const temperature = computed({
+  get: () => props.temperature,
+  set: (value: number) => {
+    if (!selectedModelInfo.value?.unsupportsTemperature) {
+      emit('update:temperature', value);
+    }
+  }
 });
 
 // ベンダー変更時の処理
@@ -184,5 +239,55 @@ watch(selectedVendor, (newVendor, oldVendor) => {
 .info-value {
   font-weight: 600;
   color: var(--text-color);
+}
+
+/* Default Temperature styling */
+.parameter-item {
+  background: var(--surface-card);
+  border-radius: 6px;
+  padding: 8px;
+  margin-bottom: 4px;
+}
+
+.parameter-item.disabled {
+  opacity: 0.7;
+}
+
+.parameter-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.parameter-header label {
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.parameter-value {
+  font-family: monospace;
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+.slider-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+.parameter-description {
+  margin-top: 8px;
+  font-size: 0.875rem;
+  color: var(--text-color-secondary);
+}
+
+.text-disabled {
+  opacity: 0.6;
+}
+
+.parameter-control {
+  margin-bottom: 8px;
 }
 </style> 

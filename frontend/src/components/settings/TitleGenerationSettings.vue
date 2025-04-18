@@ -1,21 +1,34 @@
 <template>
     <div class="title-generation-settings">
         <div class="settings-container">
-            <div class="settings-item">
-                <div class="settings-header">
+            <div class="parameter-item">
+                <div class="parameter-header">
                     <label>Vendor</label>
                 </div>
-                <PrimeDropdown v-model="vendor" :options="Object.keys(MODELS)" class="w-full"
-                    placeholder="Select Vendor" />
+                <div class="parameter-control">
+                    <PrimeDropdown 
+                        v-model="vendor" 
+                        :options="vendorOptions" 
+                        optionLabel="name" 
+                        optionValue="id" 
+                        placeholder="Select Vendor" 
+                        class="w-full"
+                    />
+                </div>
+                <small class="parameter-description">
+                    Select the vendor to use for generating chat titles.
+                </small>
             </div>
 
-            <div class="settings-item">
-                <div class="settings-header">
+            <div class="parameter-item">
+                <div class="parameter-header">
                     <label>Model</label>
                 </div>
-                <PrimeDropdown v-model="model" :options="availableModels" optionLabel="name" optionValue="id"
-                    class="w-full" placeholder="Select Model" />
-                <small class="settings-description">
+                <div class="parameter-control">
+                    <PrimeDropdown v-model="model" :options="availableModels" optionLabel="name" optionValue="id"
+                        class="w-full" placeholder="Select Model" />
+                </div>
+                <small class="parameter-description">
                     Select a cost-effective model for generating chat titles. This model will be used exclusively for
                     title generation.
                 </small>
@@ -71,6 +84,14 @@ const model = computed({
     }
 });
 
+// ベンダーオプションの生成
+const vendorOptions = computed(() => {
+    return Object.keys(MODELS).map(id => ({
+        id,
+        name: id.charAt(0).toUpperCase() + id.slice(1)
+    }));
+});
+
 const availableModels = computed(() => {
     if (vendor.value === 'openrouter') {
         return settingsStore.openrouterModels;
@@ -100,26 +121,32 @@ watch(() => props.modelValue, (newValue) => {
     gap: 24px;
 }
 
-.settings-item {
+.parameter-item {
     background: var(--surface-card);
     border-radius: 6px;
-    padding: 16px;
+    padding: 8px;
+    margin-bottom: 4px;
 }
 
-.settings-header {
-    margin-bottom: 12px;
+.parameter-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
 }
 
-.settings-header label {
+.parameter-header label {
     font-weight: 600;
     color: var(--text-color);
 }
 
-.settings-description {
-    display: block;
+.parameter-description {
     margin-top: 8px;
     color: var(--text-color-secondary);
     font-size: 0.875rem;
-    line-height: 1.4;
+}
+
+.parameter-control {
+    margin-bottom: 8px;
 }
 </style>

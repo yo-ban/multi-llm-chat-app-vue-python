@@ -235,7 +235,7 @@ watch(
 .vendor-name {
   font-weight: 600;
   color: var(--text-color);
-  font-size: 1.1rem;
+  font-size: 1rem;
 }
 
 .key-actions {
@@ -245,12 +245,14 @@ watch(
 
 .key-input {
   margin-top: 8px;
+  margin-bottom: 8px;
 }
 
 .validation-error {
   color: var(--red-500);
   display: block;
   margin-top: 4px;
+  font-size: 0.875rem;
 }
 
 .key-status {

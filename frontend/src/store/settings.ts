@@ -16,8 +16,8 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   defaultReasoningEffort: 'medium',
   defaultWebSearch: false,
   openrouterModels: [],
-  titleGenerationVendor: 'openai',
-  titleGenerationModel: 'openai-gpt-4o-mini',
+  titleGenerationVendor: 'anthropic',
+  titleGenerationModel: MODELS.anthropic.CLAUDE_3_HAIKU.id,
 };
 
 export const useSettingsStore = defineStore('settings', {
