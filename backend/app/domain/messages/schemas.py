@@ -30,8 +30,10 @@ class ChatRequest(BaseModel):
     maxTokens: int = 4096
     system: str = ""
     stream: bool = True
-    reasoningEffort: Optional[str] = None  # 'low', 'medium', 'high'
     isReasoningSupported: bool = False
+    reasoningParameterType: Optional[str] = None  # 'effort', 'budget'
+    reasoningEffort: Optional[str] = None  # 'low', 'medium', 'high'
+    budgetTokens: Optional[int] = None
     websearch: bool = False
     multimodal: bool = False
     imageGeneration: bool = False

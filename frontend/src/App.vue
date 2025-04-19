@@ -77,22 +77,14 @@ const tempSettings = reactive<GlobalSettings>({
   defaultTemperature: settingsStore.defaultTemperature,
   defaultMaxTokens: settingsStore.defaultMaxTokens,
   defaultReasoningEffort: settingsStore.defaultReasoningEffort,
+  // defaultBudgetTokens: settingsStore.defaultBudgetTokens,
   defaultWebSearch: settingsStore.defaultWebSearch,
   openrouterModels: settingsStore.openrouterModels,
   titleGenerationVendor: settingsStore.titleGenerationVendor,
   titleGenerationModel: settingsStore.titleGenerationModel,
 });
 
-// const availableModels = computed(() => {
-//   if (tempSettings.defaultVendor === 'openrouter') {
-//     return tempSettings.openrouterModels;
-//   }
-//   return Object.values(MODELS[tempSettings.defaultVendor] || {});
-// });
 
-// const selectedModel = computed(() => {
-//   return Object.values(MODELS[tempSettings.defaultVendor] || {}).find((m) => m.id === tempSettings.defaultModel) || MODELS.anthropic.CLAUDE_3_5_SONNET;
-// });
 
 const isSidebarHidden = ref(false);
 const isSidebarManuallyHidden = ref(false);
@@ -107,14 +99,6 @@ const startWidth = ref(0);
 let lastResizeTime = 0;
 const resizeThrottle = 16; // 約60FPS相当
 
-// const showApiKey = ref(Object.keys(MODELS).reduce((acc, vendor) => {
-//   acc[vendor] = false;
-//   return acc;
-// }, {} as { [key: string]: boolean }));
-
-// const toggleApiKeyVisibility = (vendor: string) => {
-//   showApiKey.value[vendor] = !showApiKey.value[vendor];
-// };
 
 const showPersonasManagement = computed({
   get: () => personaStore.showPersonasManagement,
@@ -161,6 +145,7 @@ const openSettingsDialog = () => {
   tempSettings.defaultModel = settingsStore.defaultModel;
   tempSettings.openrouterModels = settingsStore.openrouterModels;
   tempSettings.defaultReasoningEffort = settingsStore.defaultReasoningEffort;
+  // tempSettings.defaultBudgetTokens = settingsStore.defaultBudgetTokens;
   tempSettings.defaultWebSearch = settingsStore.defaultWebSearch;
   tempSettings.titleGenerationVendor = settingsStore.titleGenerationVendor;
   tempSettings.titleGenerationModel = settingsStore.titleGenerationModel;

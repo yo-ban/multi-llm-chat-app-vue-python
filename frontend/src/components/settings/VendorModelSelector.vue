@@ -109,6 +109,7 @@ const emit = defineEmits<{
   (e: 'update:vendor', value: string): void;
   (e: 'update:model', value: string): void;
   (e: 'update:temperature', value: number): void;
+  (e: 'model-info', modelInfo: any): void;
 }>();
 
 const settingsStore = useSettingsStore();
@@ -177,6 +178,13 @@ watch(selectedVendor, (newVendor, oldVendor) => {
     }
   }
 });
+
+// Emit model info when it changes
+watch(selectedModelInfo, (newModelInfo) => {
+  if (newModelInfo) {
+    emit('model-info', newModelInfo);
+  }
+}, { immediate: true });
 </script>
 
 <style scoped>

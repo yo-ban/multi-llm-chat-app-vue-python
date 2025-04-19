@@ -179,7 +179,11 @@ const editingModel = ref<Model>({
   contextWindow: 4096,
   maxTokens: 4096,
   multimodal: false,
-  supportFunctionCalling: false
+  supportFunctionCalling: false,
+  supportsReasoning: false,
+  reasoningParameters: undefined,
+  unsupportsTemperature: false,
+  imageGeneration: false,
 });
 
 const modelDialogVisible = ref(false);
@@ -226,7 +230,11 @@ const addModel = () => {
     contextWindow: 4096,
     maxTokens: 4096,
     multimodal: false,
-    supportFunctionCalling: false
+    supportFunctionCalling: false,
+    supportsReasoning: false,
+    reasoningParameters: undefined,
+    unsupportsTemperature: false,
+    imageGeneration: false,
   };
   modelDialogVisible.value = true;
 };

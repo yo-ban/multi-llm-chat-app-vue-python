@@ -45,7 +45,7 @@
               v-model:vendor="tempSettings.defaultVendor"
               v-model:model="tempSettings.defaultModel"
               v-model:temperature="tempSettings.defaultTemperature"
-              @update:vendor="updateVendorModel"
+              @model-info="updateFromModelInfo"
               class="content-no-header"
             />
             
@@ -266,14 +266,11 @@ const hasUnsavedChanges = computed(() => {
     return otherSettingsChanged || apiKeysChanged;
 });
 
-const updateVendorModel = () => {
-  // ベンダーが変更された場合、対応するモデルのmaxTokensに合わせて更新
-  const selectedModel = settingsStore.getModelById(tempSettings.value.defaultModel);
-  if (selectedModel) {
-    tempSettings.value.defaultMaxTokens = Math.min(
-      tempSettings.value.defaultMaxTokens,
-      selectedModel.maxTokens
-    );
+const updateFromModelInfo = (modelInfo: any) => {
+  // Directly update maxTokens from the model info
+  if (modelInfo && modelInfo.maxTokens) {
+    tempSettings.value.defaultMaxTokens = modelInfo.maxTokens;
+    console.log('Updated maxTokens to', modelInfo.maxTokens, 'based on model info');
   }
 };
 
@@ -333,6 +330,7 @@ const onSave = async () => {
     };
 
     // ストアの saveSettings アクションを呼び出し
+    console.log('Saving settings:', settingsToSave);
     await settingsStore.saveSettings(settingsToSave); 
 
     // Close the dialog (emit is removed as store is the source of truth)

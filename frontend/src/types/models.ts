@@ -1,16 +1,17 @@
-import type { ReasoningEffort } from './common';
+import type { ReasoningParameters } from './reasoning';
 
 export interface Model {
-    id: string;
-    name: string;
-    contextWindow: number;
-    maxTokens: number;
-    multimodal: boolean;
-    supportsReasoning?: boolean;  // Whether the model supports reasoning
-    defaultReasoningEffort?: ReasoningEffort;  // Default reasoning effort level
-    unsupportsTemperature?: boolean;  // Whether the model does not support temperature parameter
-    supportFunctionCalling?: boolean;  // Whether the model supports function calling (e.g. for web search)
-    imageGeneration?: boolean;  // Whether the model supports image generation
+  id: string;
+  name: string;
+  contextWindow: number;
+  maxTokens: number;
+  multimodal: boolean;
+  /** モデルが Reasoning 機能（API で reasoning パラメータを受け付けるかなど）をサポートしているかどうかを示します。 */
+  supportsReasoning: boolean;
+  reasoningParameters?: ReasoningParameters;
+  unsupportsTemperature?: boolean;
+  supportFunctionCalling?: boolean;
+  imageGeneration?: boolean;
 }
 
 export interface ModelVendor {

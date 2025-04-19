@@ -159,8 +159,8 @@ export const useConversationStore = defineStore('conversation', {
         if (settingsStore.defaultVendor === 'openrouter') {
           modelId = settingsStore.validateModelSelection(modelId, settingsStore.defaultVendor);
         }
-        
         const model = settingsStore.getModelById(modelId);
+        console.log("model?", model) 
         const newConversation: Conversation = {
           conversationId: newConversationId,
           title: 'New Chat',
@@ -168,11 +168,14 @@ export const useConversationStore = defineStore('conversation', {
           updatedAt: nowDate,
           system: '',
           settings: {
+            vendor: settingsStore.defaultVendor,
             model: modelId,
             maxTokens: settingsStore.defaultMaxTokens,
-            vendor: settingsStore.defaultVendor,
             temperature: model?.unsupportsTemperature ? undefined : settingsStore.defaultTemperature,
             reasoningEffort: settingsStore.getEffectiveReasoningEffort(modelId),
+            budgetTokens: model?.reasoningParameters?.type === 'budget' ? model.reasoningParameters.budgetTokens : undefined,
+            isReasoningSupported: model?.supportsReasoning,
+            reasoningParameterType: model?.reasoningParameters?.type,
             websearch: settingsStore.defaultWebSearch,
             multimodal: model?.multimodal ?? false,
             imageGeneration: model?.imageGeneration ?? false,

@@ -1,5 +1,5 @@
 import type { Model } from '@/types/models';
-
+import type { ReasoningParameters } from '@/types/reasoning';
 
 export const MODELS: { [key: string]: { [key: string]: Model } } = {
   anthropic: {
@@ -10,6 +10,7 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       maxTokens: 8192,
       multimodal: true,
       supportFunctionCalling: true,
+      supportsReasoning: false,
     },
     CLAUDE_3_7_SONNET_THINKING: {
       id: 'claude-3-7-sonnet-20250219-thinking',
@@ -18,21 +19,27 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       maxTokens: 128000,
       multimodal: true,
       supportsReasoning: true,
-      defaultReasoningEffort: 'low',
+      reasoningParameters: {
+        type: 'budget',
+        budgetTokenLimit: 32768,
+        budgetTokens: 4096,
+      },
     },
     CLAUDE_3_5_SONNET: {
       id: 'claude-3-5-sonnet-20241022',
       name: 'Claude 3.5 Sonnet',
       contextWindow: 200000,
       maxTokens: 8192,
-      multimodal: true
+      multimodal: true,
+      supportsReasoning: false,
     },
     CLAUDE_3_HAIKU: {
       id: 'claude-3-haiku-20240307',
       name: 'Claude 3 Haiku',
       contextWindow: 200000,
       maxTokens: 4096,
-      multimodal: true
+      multimodal: true,
+      supportsReasoning: false,
     }
   },
   openai: {
@@ -42,6 +49,7 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       contextWindow: 1047576,
       maxTokens: 32768,
       multimodal: true,
+      supportsReasoning: false,
       supportFunctionCalling: true,
     },
     OPENAI_GPT_4_1_MINI: {
@@ -50,6 +58,7 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       contextWindow: 1047576,
       maxTokens: 32768,
       multimodal: true,
+      supportsReasoning: false,
       supportFunctionCalling: true,
     },
     OPENAI_GPT_4_1_NANO: {
@@ -58,6 +67,7 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       contextWindow: 1047576,
       maxTokens: 32768,
       multimodal: true,
+      supportsReasoning: false,
       supportFunctionCalling: true,
     },
     OPENAI_O3: {
@@ -67,7 +77,10 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       maxTokens: 100000,
       multimodal: true,
       supportsReasoning: true,
-      defaultReasoningEffort: 'medium',
+      reasoningParameters: {
+        type: 'effort',
+        effort: 'medium',
+      },
       unsupportsTemperature: true,
       supportFunctionCalling: true,
     },
@@ -78,7 +91,10 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       maxTokens: 100000,
       multimodal: false,
       supportsReasoning: true,
-      defaultReasoningEffort: 'medium',
+      reasoningParameters: {
+        type: 'effort',
+        effort: 'medium',
+      },
       unsupportsTemperature: true,
       supportFunctionCalling: true,
     },
@@ -89,7 +105,10 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       maxTokens: 100000,
       multimodal: true,
       supportsReasoning: true,
-      defaultReasoningEffort: 'medium',
+      reasoningParameters: {
+        type: 'effort',
+        effort: 'medium',
+      },
       unsupportsTemperature: true,
       supportFunctionCalling: true,
     },
@@ -100,7 +119,10 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       maxTokens: 100000,
       multimodal: false,
       supportsReasoning: true,
-      defaultReasoningEffort: 'medium',
+      reasoningParameters: {
+        type: 'effort',
+        effort: 'medium',
+      },
       unsupportsTemperature: true,
       supportFunctionCalling: true,
     },
@@ -118,6 +140,7 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       contextWindow: 128000,
       maxTokens: 16384,
       multimodal: true,
+      supportsReasoning: false,
       supportFunctionCalling: true,
     },
     OPENAI_GPT_4_O: {
@@ -131,13 +154,19 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
     }
   },
   google: {
-    GEMINI_2_0_FLASH: {
-      id: 'gemini-2.0-flash',
-      name: 'Gemini 2.0 Flash',
+    GEMINI_2_5_FLASH:{
+      id: 'gemini-2.5-flash-preview-04-17',
+      name: 'Gemini 2.5 Flash Preview 04-17',
       contextWindow: 1048576,
-      maxTokens: 8192,
+      maxTokens: 65536,
       multimodal: true,
       supportFunctionCalling: true,
+      supportsReasoning: true,
+      reasoningParameters: {
+        type: 'budget',
+        budgetTokenLimit: 24576,
+        budgetTokens: 4096,
+      },
     },
     GEMINI_2_5_PRO_EXP: {
       id: 'gemini-2.5-pro-exp-03-25',
@@ -157,14 +186,6 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       supportFunctionCalling: true,
       supportsReasoning: true,
     },
-    GEMINI_2_0_FLASH_THINKING_EXP: {
-      id: 'gemini-2.0-flash-thinking-exp-01-21',
-      name: 'Gemini 2.0 Flash Thinking Experimental',
-      contextWindow: 1048576,
-      maxTokens: 65536,
-      multimodal: true,
-      supportsReasoning: true,
-    },
     GEMINI_2_0_FLASH_EXP_IMAGE_GENERATION: {
       id: 'gemini-2.0-flash-exp-image-generation',
       name: 'Gemini 2.0 Flash (Image Generation) Experimental',
@@ -173,6 +194,24 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       multimodal: true,
       imageGeneration: true,
       supportFunctionCalling: true,
+      supportsReasoning: false,
+    },
+    GEMINI_2_0_FLASH: {
+      id: 'gemini-2.0-flash',
+      name: 'Gemini 2.0 Flash',
+      contextWindow: 1048576,
+      maxTokens: 8192,
+      multimodal: true,
+      supportFunctionCalling: true,
+      supportsReasoning: false,
+    },
+    GEMINI_2_0_FLASH_THINKING_EXP: {
+      id: 'gemini-2.0-flash-thinking-exp-01-21',
+      name: 'Gemini 2.0 Flash Thinking Experimental',
+      contextWindow: 1048576,
+      maxTokens: 65536,
+      multimodal: true,
+      supportsReasoning: true,
     },
     GEMINI_2_0_PRO_EXP: {
       id: 'gemini-2.0-pro-exp-02-05',
@@ -180,6 +219,7 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       contextWindow: 2097152,
       maxTokens: 8192,
       multimodal: true,
+      supportsReasoning: false,
     },
   },
   xai: {
@@ -191,7 +231,10 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       multimodal: false,
       supportFunctionCalling: true,
       supportsReasoning: true,
-      defaultReasoningEffort: 'high',
+      reasoningParameters: {
+        type: 'effort',
+        effort: 'high',
+      },
     },
     XAI_GROK_3_BETA: {
       id: 'grok-3-beta',
@@ -199,7 +242,8 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       contextWindow: 131072,
       maxTokens: 131072,
       multimodal: false,
-      supportFunctionCalling: true
+      supportFunctionCalling: true,
+      supportsReasoning: false,
     },
     XAI_GROK_3_MINI_FAST_BETA: {
       id: 'grok-3-mini-fast-beta',
@@ -209,7 +253,10 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       multimodal: false,
       supportFunctionCalling: true,
       supportsReasoning: true,
-      defaultReasoningEffort: 'high',
+      reasoningParameters: {
+        type: 'effort',
+        effort: 'high',
+      },
     },
     XAI_GROK_3_FAST_BETA: {
       id: 'grok-3-fast-beta',
@@ -217,7 +264,8 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       contextWindow: 131072,
       maxTokens: 131072,
       multimodal: false,
-      supportFunctionCalling: true
+      supportFunctionCalling: true,
+      supportsReasoning: false,
     },
   },
   openrouter: {

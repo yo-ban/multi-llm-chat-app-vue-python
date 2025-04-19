@@ -1,5 +1,5 @@
 import type { Model } from './models';
-import type { ReasoningEffort } from './common';
+import type { ReasoningEffortType } from './reasoning';
 import type { APISettings } from './api';
 
 export interface GlobalSettings {
@@ -8,11 +8,14 @@ export interface GlobalSettings {
   defaultMaxTokens: number;
   defaultVendor: string;
   defaultModel: string;
-  defaultReasoningEffort?: ReasoningEffort;
-  defaultWebSearch: boolean;  // Default web search setting
+  /** 'effort' を使用するモデルに対する、ユーザーの優先デフォルト Reasoning 努力レベル。 */
+  defaultReasoningEffort?: ReasoningEffortType;
+  /** 'budget' を使用するモデルに対する、ユーザーの優先デフォルト開始予算トークン数。 */
+  // defaultBudgetTokens?: number;
+  defaultWebSearch: boolean;
   openrouterModels: Model[];
-  titleGenerationVendor: string;  // Vendor for generating chat titles
-  titleGenerationModel: string;   // Model for generating chat titles
+  titleGenerationVendor: string;
+  titleGenerationModel: string;
 }
 
 export interface GlobalSettingsCreate {
@@ -21,7 +24,10 @@ export interface GlobalSettingsCreate {
   defaultMaxTokens?: number;
   defaultVendor?: string;
   defaultModel?: string;
-  defaultReasoningEffort?: ReasoningEffort;
+  /** 'effort' を使用するモデルに対する、ユーザーの優先デフォルト Reasoning 努力レベル。 */
+  defaultReasoningEffort?: ReasoningEffortType;
+  /** 'budget' を使用するモデルに対する、ユーザーの優先デフォルト開始予算トークン数。 */
+  // defaultBudgetTokens?: number;
   defaultWebSearch?: boolean;
   openrouterModels?: Model[];
   titleGenerationVendor?: string;

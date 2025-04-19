@@ -15,7 +15,7 @@ from google.genai.types import (
     HarmBlockThreshold,
     Content,
     Part,
-    ThinkingConfig
+    ThinkingConfig,
 )
 
 from app.message_utils.response_generator import (
@@ -59,7 +59,10 @@ class ChatHandler:
         system: str,
         websearch: bool = False,
         reasoning_effort: Optional[str] = None,
-        is_reasoning_supported: bool = False
+        is_reasoning_supported: bool = False,
+        reasoning_parameter_type: Optional[str] = None,
+        budget_tokens: Optional[int] = None,
+        image_generation: bool = False
     ) -> Any:
         """Handle OpenAI API requests with optional function calling.
         
@@ -75,12 +78,12 @@ class ChatHandler:
             "max_completion_tokens": max_tokens,
             "stream": stream,
         }
-        
-        if temperature is not None and not is_reasoning_supported:
+
+        if is_reasoning_supported:
+            if reasoning_parameter_type == "effort" and reasoning_effort:
+                completion_args["reasoning_effort"] = reasoning_effort
+        else:
             completion_args["temperature"] = temperature
-            
-        if is_reasoning_supported and reasoning_effort:
-            completion_args["reasoning_effort"] = reasoning_effort
 
         if websearch:
             completion_args["tools"] = get_tool_definitions()
@@ -139,7 +142,10 @@ class ChatHandler:
         system: str,
         websearch: bool = False,
         reasoning_effort: Optional[str] = None,
-        is_reasoning_supported: bool = False
+        is_reasoning_supported: bool = False,
+        reasoning_parameter_type: Optional[str] = None,
+        budget_tokens: Optional[int] = None,
+        image_generation: bool = False
     ) -> Any:
         """Handle Anthropic API requests"""
         anthropic = AsyncAnthropic(api_key=self.api_key)
@@ -160,21 +166,15 @@ class ChatHandler:
         }
 
         if is_reasoning_supported:
-            if reasoning_effort == "low":
-                budget_tokens = 6000
-            elif reasoning_effort == "medium":
-                budget_tokens = 10000
-            elif reasoning_effort == "high":
-                budget_tokens = 14000
-                
+            if reasoning_parameter_type == "budget" and budget_tokens:
+
+                params["thinking"] = {
+                    "type": "enabled",
+                    "budget_tokens": budget_tokens
+                }
+
             model = model.replace("-thinking", "")
-
             params["model"] = model
-
-            params["thinking"] = {
-                "type": "enabled",
-                "budget_tokens": budget_tokens
-            }
 
         response = None
 
@@ -220,6 +220,8 @@ class ChatHandler:
         websearch: bool = False,
         reasoning_effort: Optional[str] = None,
         is_reasoning_supported: bool = False,
+        reasoning_parameter_type: Optional[str] = None,
+        budget_tokens: Optional[int] = None,
         image_generation: bool = False
     ) -> Any:
         """Handle Gemini API requests using the new client"""
@@ -249,9 +251,7 @@ class ChatHandler:
         ]
 
         completion_args = {
-            "response_modalities": ["TEXT"],
             "safety_settings": safety_settings,
-            "system_instruction": system,
             "temperature": temperature,
             "top_p": 0.95,
             "top_k": 40,
@@ -259,18 +259,23 @@ class ChatHandler:
             "response_mime_type": "text/plain"
         }
 
-        # if is_reasoning_supported:
-        #     completion_args["thinking_config"] = ThinkingConfig(
-        #         include_thoughts=True
-        #     )
+        if is_reasoning_supported:
+            if reasoning_parameter_type == "budget" and budget_tokens is not None:
+                completion_args["thinking_config"] = ThinkingConfig(
+                    thinking_budget=budget_tokens,
+                    # include_thoughts=True
+                )
 
         if image_generation:
             completion_args["response_modalities"] = [
                 "IMAGE",
                 "TEXT"
             ]
-            # remove system instruction
-            completion_args.pop("system_instruction")
+        else:
+            completion_args["system_instruction"] = system
+            completion_args["response_modalities"] = [
+                "TEXT"
+            ]
 
         if websearch:
             tool_config = ToolConfig(
@@ -370,7 +375,10 @@ class ChatHandler:
         system: str,
         websearch: bool = False,
         reasoning_effort: Optional[str] = None,
-        is_reasoning_supported: bool = False
+        is_reasoning_supported: bool = False,
+        reasoning_parameter_type: Optional[str] = None,
+        budget_tokens: Optional[int] = None,
+        image_generation: bool = False
     ) -> Any:
         """Handle XAI API requests with optional function calling.
         
@@ -388,13 +396,14 @@ class ChatHandler:
             "messages": xai_messages,
             "max_completion_tokens": max_tokens,
             "stream": stream,
+            "temperature": temperature
         }
-        
-        if temperature is not None and not is_reasoning_supported:
-            completion_args["temperature"] = temperature
-            
-        if is_reasoning_supported and reasoning_effort:
-            completion_args["reasoning_effort"] = reasoning_effort
+
+        if is_reasoning_supported:
+            if reasoning_parameter_type == "effort" and reasoning_effort:
+                completion_args["reasoning_effort"] = reasoning_effort
+            # elif reasoning_parameter_type == "budget" and budget_tokens:
+            #     completion_args["budget_tokens"] = budget_tokens
 
         if websearch:
             completion_args["tools"] = get_tool_definitions()
@@ -453,7 +462,10 @@ class ChatHandler:
         system: str,
         websearch: bool = False,
         reasoning_effort: Optional[str] = None,
-        is_reasoning_supported: bool = False
+        is_reasoning_supported: bool = False,
+        reasoning_parameter_type: Optional[str] = None,
+        budget_tokens: Optional[int] = None,
+        image_generation: bool = False
     ) -> Any:
         """Handle OpenRouter API requests"""
         openrouter = AsyncOpenAI(
@@ -548,69 +560,10 @@ class ChatHandler:
                 websearch=chat_request.websearch,
                 reasoning_effort=chat_request.reasoningEffort,
                 is_reasoning_supported=chat_request.isReasoningSupported,
+                reasoning_parameter_type=chat_request.reasoningParameterType,
+                budget_tokens=chat_request.budgetTokens,
+                image_generation=chat_request.imageGeneration
             )
 
-            # if vendor == 'openai':
-            #     return await self.handle_openai(
-            #         model=chat_request.model,
-            #         messages=messages,
-            #         max_tokens=chat_request.maxTokens,
-            #         temperature=chat_request.temperature,
-            #         stream=chat_request.stream,
-            #         system=system,
-            #         websearch=chat_request.websearch,
-            #         reasoning_effort=chat_request.reasoningEffort,
-            #         is_reasoning_supported=chat_request.isReasoningSupported,
-            #     )
-            # elif vendor == 'google':
-            #     return await self.handle_gemini(
-            #         model=chat_request.model,
-            #         messages=messages,
-            #         max_tokens=chat_request.maxTokens,
-            #         temperature=chat_request.temperature,
-            #         stream=chat_request.stream,
-            #         system=system,
-            #         websearch=chat_request.websearch,
-            #         image_generation=chat_request.imageGeneration,
-            #         is_reasoning_supported=chat_request.isReasoningSupported,
-            #     )
-            # elif vendor == 'openrouter':
-            #     return await self.handle_openrouter(
-            #         model=chat_request.model,
-            #         messages=messages,
-            #         max_tokens=chat_request.maxTokens,
-            #         temperature=chat_request.temperature,
-            #         stream=chat_request.stream,
-            #         system=system,
-            #         websearch=chat_request.websearch,
-            #         reasoning_effort=chat_request.reasoningEffort,
-            #         is_reasoning_supported=chat_request.isReasoningSupported
-            #     )
-            # elif vendor == 'xai':
-            #     return await self.handle_xai(
-            #         model=chat_request.model,
-            #         messages=messages,
-            #         max_tokens=chat_request.maxTokens,
-            #         temperature=chat_request.temperature,
-            #         stream=chat_request.stream,
-            #         system=system,
-            #         websearch=chat_request.websearch,
-            #         reasoning_effort=chat_request.reasoningEffort,
-            #         is_reasoning_supported=chat_request.isReasoningSupported
-            #     )
-            # elif vendor == 'anthropic':
-            #     return await self.handle_anthropic(
-            #         model=chat_request.model,
-            #         messages=messages,
-            #         max_tokens=chat_request.maxTokens,
-            #         temperature=chat_request.temperature,
-            #         stream=chat_request.stream,
-            #         system=system,
-            #         websearch=chat_request.websearch,
-            #         reasoning_effort=chat_request.reasoningEffort,
-            #         is_reasoning_supported=chat_request.isReasoningSupported
-            #     )
-            # else:
-            #     raise HTTPException(status_code=400, detail=f"Unsupported vendor: {vendor}")
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))

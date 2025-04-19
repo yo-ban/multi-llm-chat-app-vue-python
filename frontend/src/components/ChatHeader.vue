@@ -135,7 +135,8 @@
               </div>
             </div>
           </div>
-          <div class="settings-item" v-if="selectedModel.supportsReasoning && selectedModel.defaultReasoningEffort">
+          <!-- Reasoning Effort の表示条件変更 -->
+          <div class="settings-item" v-if="selectedModel.supportsReasoning && selectedModel.reasoningParameters?.type === 'effort'">
             <label for="reasoning-effort" class="settings-label">Reasoning Effort:</label>
             <div class="settings-control">
               <PrimeDropdown
@@ -153,27 +154,44 @@
               </small>
             </div>
           </div>
-          <!-- <div class="settings-item">
-            <label for="web-search" class="settings-label">Web Search:</label>
+          <!-- Budget Tokens の設定UI -->
+          <div class="settings-item" v-if="selectedModel.supportsReasoning && selectedModel.reasoningParameters?.type === 'budget'">
+            <label for="budget-tokens" class="settings-label">Budget Tokens:</label>
             <div class="settings-control">
-              <PrimeToggleButton
-                id="web-search"
-                v-model="localSettings.websearch"
-                onLabel="Enabled"
-                offLabel="Disabled"
-                class="settings-toggle"
-              />
-              <div class="parameter-description">
-                Enable web search functionality using function calling
+              <div class="slider-container">
+                <PrimeSlider
+                  id="budget-tokens"
+                  v-model="localSettings.budgetTokens"
+                  :min="0"
+                  :max="selectedModel.reasoningParameters?.budgetTokenLimit"
+                  :step="128"
+                  class="settings-slider"
+                  :class="{ 'p-invalid': isBudgetInvalid }"
+                />
+                <PrimeInputNumber
+                  v-model="localSettings.budgetTokens"
+                  :min="0"
+                  :max="selectedModel.reasoningParameters?.budgetTokenLimit"
+                  :step="128"
+                  class="slider-input"
+                  :class="{ 'p-invalid': isBudgetInvalid }"
+                />
               </div>
+              <small class="parameter-description">
+                Controls the token budget for reasoning.
+              </small>
+              <!-- バリデーションエラーメッセージ -->
+              <small v-if="isBudgetInvalid" class="validation-error p-error">
+                Budget tokens ({{ localSettings.budgetTokens?.toLocaleString() }}) cannot exceed the model's max output tokens ({{ localSettings.maxTokens?.toLocaleString() }}).
+              </small>
             </div>
-          </div> -->
+          </div>
         </div>
       </div>
       <template #footer>
         <div class="settings-footer">
           <PrimeButton label="Cancel" icon="pi pi-times" @click="closeModelSettingsDialog" class="p-button-text" />
-          <PrimeButton label="Save" icon="pi pi-check" @click="saveModelSettings" class="p-button-primary" />
+          <PrimeButton label="Save" icon="pi pi-check" @click="saveModelSettings" class="p-button-primary" :disabled="isBudgetInvalid" />
         </div>
       </template>
     </PrimeDialog>
@@ -235,7 +253,7 @@
       <template #footer>
         <div class="system-message-dialog-footer">
           <PrimeButton label="Cancel" icon="pi pi-times" @click="closeSystemMessageDialog" class="p-button-text" />
-          <PrimeButton label="Save" icon="pi pi-check" @click="saveSystemMessage" class="p-button-primary" />
+          <PrimeButton label="Save" icon="pi pi-check" @click="saveSystemMessage" class="p-button-primary"/>
         </div>
       </template>
     </PrimeDialog>
@@ -258,7 +276,7 @@ const props = defineProps({
     required: true,
   },
   settings: {
-    type: Object,
+    type: Object as () => APISettings,
     required: true,
   },
   historyLength: {
@@ -322,20 +340,12 @@ const chatStore = useChatStore();
 const settingsStore = useSettingsStore();
 const toast = useToast();
 
-const localSettings = ref<APISettings>({
-  vendor: props.settings.vendor,
-  model: props.settings.model,
-  temperature: props.settings.temperature,
-  maxTokens: props.settings.maxTokens,
-  reasoningEffort: props.settings.reasoningEffort,
-  websearch: props.settings.websearch,
-  multimodal: props.settings.multimodal,
-  imageGeneration: props.settings.imageGeneration
-});
+const localSettings = ref<APISettings>(JSON.parse(JSON.stringify(props.settings)));
 
 const availableModels = computed(() => {
+  if (!localSettings.value?.vendor) return [];
   if (localSettings.value.vendor === 'openrouter') {
-    return settingsStore.openrouterModels;
+      return settingsStore.openrouterModels;
   }
   return Object.values(MODELS[localSettings.value.vendor] || {});
 });
@@ -368,6 +378,23 @@ const selectedModel = computed(() => {
   // OpenRouter以外の場合は従来のロジックを使用
   return Object.values(MODELS[localSettings.value.vendor] || {})
     .find((m) => m.id === localSettings.value.model) || MODELS.anthropic.CLAUDE_3_5_SONNET;
+});
+
+/**
+ * budgetTokens が maxTokens を超えているかどうかのバリデーション
+ */
+const isBudgetInvalid = computed(() => {
+  const model = selectedModel.value; // computed 内で一度だけ取得
+  const settings = localSettings.value;
+
+  if (
+    model?.reasoningParameters?.type === 'budget' &&
+    typeof settings?.budgetTokens === 'number' &&
+    typeof settings?.maxTokens === 'number'
+  ) {
+    return settings.budgetTokens > settings.maxTokens;
+  }
+  return false;
 });
 
 const displayedModel = ref(selectedModel.value);
@@ -449,6 +476,7 @@ watch(
   }
 );
 
+// Props の変更を監視 (localSettings を同期する役割)
 watch(
   () => props.settings,
   (newSettings) => {
@@ -460,7 +488,9 @@ watch(
         model: newSettings.model,
         temperature: selectedModel.value?.unsupportsTemperature ? undefined : (newSettings.temperature ?? settingsStore.defaultTemperature),
         maxTokens: newSettings.maxTokens,
+        reasoningParameterType: newSettings.reasoningParameterType,
         reasoningEffort: newSettings.reasoningEffort,
+        budgetTokens: newSettings.budgetTokens,
         websearch: newSettings.websearch,
         multimodal: newSettings.multimodal,
         imageGeneration: newSettings.imageGeneration
@@ -478,7 +508,7 @@ watch(
 watch(
   () => localSettings.value.model,
   (newModelId, oldModelId) => {
-    if (newModelId === oldModelId) return;
+    if (newModelId === oldModelId || !localSettings.value) return; // localSettings が初期化されていることを確認
 
     let model;
     if (localSettings.value.vendor === 'openrouter') {
@@ -491,29 +521,43 @@ watch(
       console.log('Model changed (watcher):', {
         vendor: localSettings.value.vendor,
         modelId: newModelId,
-        maxTokens: model.maxTokens, // Log the max tokens but don't set it here anymore
-        supportsReasoning: model.supportsReasoning,
+        maxTokens: model.maxTokens,
         supportFunctionCalling: model.supportFunctionCalling,
         unsupportsTemperature: model.unsupportsTemperature,
         multimodal: model.multimodal,
         imageGeneration: model.imageGeneration,
-        defaultReasoningEffort: model.defaultReasoningEffort,
+        supportsReasoning: model.supportsReasoning,
+        reasoningParameterType: model.reasoningParameters?.type,
+        reasoningParameters: model.reasoningParameters,
       });
 
-      // Update OTHER model-dependent settings
+      // Update model-dependent settings
       localSettings.value.isReasoningSupported = model.supportsReasoning || false;
+      localSettings.value.reasoningParameterType = model.reasoningParameters?.type || undefined;
       localSettings.value.multimodal = model.multimodal || false;
       localSettings.value.imageGeneration = model.imageGeneration || false;
 
-      if (model.supportsReasoning && model.defaultReasoningEffort) {
-        // Prioritize model's default, then global default, then 'medium'
-        localSettings.value.reasoningEffort = model.defaultReasoningEffort || settingsStore.defaultReasoningEffort || 'medium';
-        console.log(`Model supports reasoning. Set reasoningEffort to: ${localSettings.value.reasoningEffort}`);
+      // Handle reasoning parameters based on model type
+      if (model.supportsReasoning && model.reasoningParameters) {
+        if (model.reasoningParameters.type === 'effort') {
+          // If switching to an 'effort' type model
+          localSettings.value.reasoningEffort = model.reasoningParameters.effort || settingsStore.defaultReasoningEffort || 'medium';
+          // Clear budgetTokens as it's not used by this model type
+          localSettings.value.budgetTokens = undefined;
+        } else if (model.reasoningParameters.type === 'budget') {
+          // If switching to a 'budget' type model
+          localSettings.value.budgetTokens = model.reasoningParameters.budgetTokens || Math.min(4096, model.maxTokens);
+          // Clear reasoningEffort as it's not used by this model type
+          localSettings.value.reasoningEffort = undefined;
+        }
       } else {
-        // Explicitly set to undefined if not supported
+        // Model doesn't support reasoning, clear both parameters
         localSettings.value.reasoningEffort = undefined;
-        console.log('Model does not support reasoningEffort parameter. Set reasoningEffort to undefined.');
+        localSettings.value.budgetTokens = undefined;
       }
+
+      // Ensure maxTokens doesn't exceed the model's limit
+      localSettings.value.maxTokens = Math.min(localSettings.value.maxTokens || model.maxTokens, model.maxTokens);
 
       if (!model.supportFunctionCalling) {
         localSettings.value.websearch = false;
@@ -526,8 +570,6 @@ watch(
       }
       
       displayedModel.value = model; 
-
-      // REMOVED EMIT
     }
   }
 );
@@ -586,10 +628,16 @@ function toggleMenu(event: Event) {
 }
 
 function openModelSettingsDialog() {
+  // Ensure we're using the current conversation settings when opening the dialog
+  localSettings.value = JSON.parse(JSON.stringify(props.settings));
+  displayedModel.value = selectedModel.value;
+  
+  // Now open the dialog
   isModelDialogOpen.value = true;
   modelSettingsDialogVisible.value = true;
 }
 
+// ダイアログを閉じる際のロジック
 function closeModelSettingsDialog() {
   isModelDialogOpen.value = false;
   modelSettingsDialogVisible.value = false;
@@ -598,7 +646,9 @@ function closeModelSettingsDialog() {
     model: props.settings.model,
     temperature: props.settings.temperature,
     maxTokens: props.settings.maxTokens,
+    reasoningParameterType: props.settings.reasoningParameterType,
     reasoningEffort: props.settings.reasoningEffort,
+    budgetTokens: props.settings.budgetTokens,
     websearch: props.settings.websearch,
     multimodal: props.settings.multimodal,
     imageGeneration: props.settings.imageGeneration
@@ -645,6 +695,7 @@ function saveSystemMessage() {
   systemMessageDialogVisible.value = false;
 }
 
+
 // ヘッダーのドロップダウンでの変更時に即座に保存
 function onVendorChange() {
   // APIキーが設定されているかチェック
@@ -665,6 +716,7 @@ function onVendorChange() {
   });
 }
 
+// ヘッダーの Model ドロップダウン変更ハンドラ
 function onModelChange() {
   nextTick(() => {
     localSettings.value.maxTokens = selectedModel.value.maxTokens;
@@ -694,8 +746,38 @@ function onDialogVendorChange() {
 
 function onDialogModelChange() {
   nextTick(() => {
-    localSettings.value.maxTokens = selectedModel.value.maxTokens;
-    console.log(`Dialog Model changed. Max tokens set to: ${localSettings.value.maxTokens} for model ${selectedModel.value.id}`);
+    // Get the selected model
+    let model;
+    if (localSettings.value.vendor === 'openrouter') {
+      model = settingsStore.openrouterModels.find(m => m.id === localSettings.value.model);
+    } else {
+      model = Object.values(MODELS[localSettings.value.vendor] || {}).find((m) => m.id === localSettings.value.model);
+    }
+
+    if (model) {
+      // Update reasoning parameters based on model type
+      if (model.supportsReasoning && model.reasoningParameters) {
+        if (model.reasoningParameters.type === 'effort') {
+          // If switching to an 'effort' type model
+          localSettings.value.reasoningEffort = model.reasoningParameters.effort || settingsStore.defaultReasoningEffort || 'medium';
+          // Clear budgetTokens as it's not used by this model type
+          localSettings.value.budgetTokens = undefined;
+        } else if (model.reasoningParameters.type === 'budget') {
+          // If switching to a 'budget' type model
+          localSettings.value.budgetTokens = model.reasoningParameters.budgetTokens || Math.min(4096, model.maxTokens);
+          // Clear reasoningEffort as it's not used by this model type
+          localSettings.value.reasoningEffort = undefined;
+        }
+      } else {
+        // Model doesn't support reasoning, clear both parameters
+        localSettings.value.reasoningEffort = undefined;
+        localSettings.value.budgetTokens = undefined;
+      }
+
+      // Update max tokens
+      localSettings.value.maxTokens = model.maxTokens;
+      console.log(`Dialog Model changed. Max tokens set to: ${localSettings.value.maxTokens} for model ${model.id}`);
+    }
     // DO NOT EMIT settings update here
   });
 }
@@ -951,5 +1033,20 @@ function onDialogModelChange() {
 
 .header-toggle-switch :deep(.p-inputswitch.p-inputswitch-checked:not(.p-disabled):hover) {
   background: rgba(76, 175, 80, 0.7);
+}
+
+.validation-error {
+  color: var(--red-500); /* PrimeVue のエラーカラー */
+  font-size: 0.875rem;
+  margin-top: 4px;
+}
+
+:deep(.p-slider.p-invalid .p-slider-range),
+:deep(.p-slider.p-invalid .p-slider-handle) {
+  background: var(--red-500) !important;
+}
+
+:deep(.p-inputnumber.p-invalid .p-inputtext) {
+  border-color: var(--red-500) !important;
 }
 </style>

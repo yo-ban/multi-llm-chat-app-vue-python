@@ -14,6 +14,7 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   defaultVendor: 'anthropic',
   defaultModel: MODELS.anthropic.CLAUDE_3_5_SONNET.id,
   defaultReasoningEffort: 'medium',
+  // defaultBudgetTokens: 4096,
   defaultWebSearch: false,
   openrouterModels: [],
   titleGenerationVendor: 'anthropic',
@@ -89,21 +90,25 @@ export const useSettingsStore = defineStore('settings', {
 
     getModelById(modelId: string): Model | null {
       if (this.defaultVendor === 'openrouter') {
-        return this.openrouterModels.find(m => m.id === modelId) || null;
+        const model = this.openrouterModels.find(m => m.id === modelId);
+        return model ? { ...model } : null;
       }
       
       // Need to handle the case where vendor might not be in MODELS if loaded from backend
       const vendorModels = MODELS[this.defaultVendor as keyof typeof MODELS] || {}; 
-      return Object.values(vendorModels).find(m => m.id === modelId) || null;
+      const model = Object.values(vendorModels).find(m => m.id === modelId);
+      return model ? { ...model } : null;
     },
 
     getEffectiveReasoningEffort(modelId: string): 'low' | 'medium' | 'high' | undefined {
       const model = this.getModelById(modelId);
-      if (!model?.supportsReasoning) {
+      if (!model?.supportsReasoning || !model.reasoningParameters) {
         return undefined;
+      } else if (model.reasoningParameters.type === 'budget') {
+        return undefined;
+      } else {
+        return model.reasoningParameters.effort;
       }
-      // Use the current state's default value
-      return this.defaultReasoningEffort || model.defaultReasoningEffort || 'medium'; 
     },
 
     // Check if a given modelId is valid for the specified vendor
