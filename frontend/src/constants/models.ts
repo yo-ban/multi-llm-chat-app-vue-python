@@ -89,7 +89,7 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       name: 'o4-mini',
       contextWindow: 200000,
       maxTokens: 100000,
-      multimodal: false,
+      multimodal: true,
       supportsReasoning: true,
       reasoningParameters: {
         type: 'effort',

@@ -184,7 +184,7 @@ const tempSettings = ref<GlobalSettings>({
   defaultVendor: settingsStore.defaultVendor,
   defaultModel: settingsStore.defaultModel,
   defaultReasoningEffort: settingsStore.defaultReasoningEffort,
-  defaultWebSearch: settingsStore.defaultWebSearch,
+  // defaultWebSearch: settingsStore.defaultWebSearch,
   openrouterModels: [...settingsStore.openrouterModels],
   titleGenerationVendor: settingsStore.titleGenerationVendor,
   titleGenerationModel: settingsStore.titleGenerationModel
@@ -224,7 +224,7 @@ watch(dialogVisible, (newValue) => {
       defaultVendor: settingsStore.defaultVendor,
       defaultModel: settingsStore.defaultModel,
       defaultReasoningEffort: settingsStore.defaultReasoningEffort,
-      defaultWebSearch: settingsStore.defaultWebSearch,
+      // defaultWebSearch: settingsStore.defaultWebSearch,
       openrouterModels: [...settingsStore.openrouterModels],
       titleGenerationVendor: settingsStore.titleGenerationVendor,
       titleGenerationModel: settingsStore.titleGenerationModel
@@ -244,7 +244,7 @@ const hasUnsavedChanges = computed(() => {
       defaultVendor: settingsStore.defaultVendor,
       defaultModel: settingsStore.defaultModel,
       defaultReasoningEffort: settingsStore.defaultReasoningEffort,
-      defaultWebSearch: settingsStore.defaultWebSearch,
+      // defaultWebSearch: settingsStore.defaultWebSearch,
       openrouterModels: settingsStore.openrouterModels,
       titleGenerationVendor: settingsStore.titleGenerationVendor,
       titleGenerationModel: settingsStore.titleGenerationModel
@@ -254,7 +254,7 @@ const hasUnsavedChanges = computed(() => {
       defaultVendor: tempSettings.value.defaultVendor,
       defaultModel: tempSettings.value.defaultModel,
       defaultReasoningEffort: tempSettings.value.defaultReasoningEffort,
-      defaultWebSearch: tempSettings.value.defaultWebSearch,
+      // defaultWebSearch: tempSettings.value.defaultWebSearch,
       openrouterModels: tempSettings.value.openrouterModels,
       titleGenerationVendor: tempSettings.value.titleGenerationVendor,
       titleGenerationModel: tempSettings.value.titleGenerationModel
@@ -309,7 +309,7 @@ const onDialogHide = () => {
     defaultVendor: settingsStore.defaultVendor,
     defaultModel: settingsStore.defaultModel,
     defaultReasoningEffort: settingsStore.defaultReasoningEffort,
-    defaultWebSearch: settingsStore.defaultWebSearch,
+    // defaultWebSearch: settingsStore.defaultWebSearch,
     openrouterModels: [...settingsStore.openrouterModels],
     titleGenerationVendor: settingsStore.titleGenerationVendor,
     titleGenerationModel: settingsStore.titleGenerationModel

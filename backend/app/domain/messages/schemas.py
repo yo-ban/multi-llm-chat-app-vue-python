@@ -34,7 +34,7 @@ class ChatRequest(BaseModel):
     reasoningParameterType: Optional[str] = None  # 'effort', 'budget'
     reasoningEffort: Optional[str] = None  # 'low', 'medium', 'high'
     budgetTokens: Optional[int] = None
-    websearch: bool = False
+    toolUse: bool = False
     multimodal: bool = False
     imageGeneration: bool = False
     vendor: Optional[str] = None

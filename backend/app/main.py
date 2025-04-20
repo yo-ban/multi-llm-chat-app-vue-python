@@ -2,6 +2,8 @@ from fastapi import FastAPI, Request, HTTPException, File, UploadFile, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 from sqlalchemy.orm import Session
+from contextlib import asynccontextmanager # lifespanのために追加
+import os # 設定ファイルパスのために追加
 
 # 新しい構造からのインポート
 from app.infrastructure.database import get_db
@@ -16,13 +18,43 @@ from app.handlers.chat_handler import ChatHandler
 from app.handlers.file_handler import FileHandler
 from app.logger.logging_utils import get_logger, log_request_info, log_error, log_info
 
+# --- MCPClientManagerのインポート ---
+from app.mcp_integration.manager import MCPClientManager
+
 # 定数 (仮ユーザーID)
 TEMP_USER_ID = 1
 
 # Set up logging
 logger = get_logger()
 
-app = FastAPI()
+# --- MCPClientManagerのシングルトンインスタンスを作成 ---
+mcp_client_manager = MCPClientManager()
+
+# --- FastAPI lifespan ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """FastAPIアプリケーションのライフサイクル管理"""
+    # アプリケーション起動時
+    logger.info("FastAPI起動: MCPクライアントマネージャーを初期化・接続開始")
+    # 設定ファイルのパスを環境変数などから取得 (なければデフォルト)
+    config_path = os.getenv("MCP_CONFIG_PATH", "./app/mcp_servers.json")
+    # 設定ファイルが存在しない場合のデフォルト作成処理 (main実行時に移動)
+    if not os.path.exists(config_path):
+        logger.warning(f"{config_path} が見つかりません。空の設定で初期化します。")
+        # 実際のFastAPI環境では設定ファイルがない場合はエラーにするか、
+        # デプロイ時に用意するなどの運用が必要
+        await mcp_client_manager.initialize_from_config(config_data={"mcpServers": {}})
+    else:
+        await mcp_client_manager.initialize_from_config(config_path=config_path)
+    logger.info("MCPクライアントマネージャーの初期化処理完了。接続はバックグラウンドで進行。")
+    yield
+    # アプリケーション終了時
+    logger.info("FastAPI終了: MCP接続をクリーンアップ")
+    await mcp_client_manager.close_all_connections()
+    logger.info("MCPクリーンアップ完了。")
+
+# --- FastAPI アプリケーションインスタンス (lifespanを設定) ---
+app = FastAPI(lifespan=lifespan)
 
 # CORS middleware configuration
 app.add_middleware(
@@ -33,8 +65,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Settings Endpoints --- (Using temporary fixed user ID)
+# --- MCPClientManager 依存性注入 ---
+async def get_mcp_manager():
+    """依存性注入用の関数"""
+    if not mcp_client_manager._is_initialized:
+        # アプリケーション起動時に初期化されているはずだが、念のためチェック
+        logger.error("MCPClientManagerが初期化されていません。")
+        # 本番環境ではここでエラーを発生させるべき
+        raise RuntimeError("MCPClientManager is not initialized.")
+    return mcp_client_manager
 
+# --- Settings Endpoints --- (Using temporary fixed user ID)
 @app.get("/api/settings", response_model=SettingsResponse)
 def read_settings(db: Session = Depends(get_db)):
     """指定されたユーザーIDの設定を取得する"""
@@ -64,7 +105,8 @@ def update_settings_endpoint(
 async def messages(
     request: Request,                 # リクエスト情報取得用
     chat_request: ChatRequest,        # リクエストボディ
-    db: Session = Depends(get_db)      # DBセッションを依存関係として注入
+    db: Session = Depends(get_db),      # DBセッションを依存関係として注入    
+    mcp_manager: MCPClientManager = Depends(get_mcp_manager) # MCPClientManagerを依存性注入で取得
 ) -> StreamingResponse:
     """
     チャットメッセージのエンドポイントを処理する。
@@ -119,7 +161,11 @@ async def messages(
         chat_handler = ChatHandler(api_key)
         
         # 6. チャットリクエストを処理
-        return await chat_handler.handle_chat_request(chat_request, vendor)
+        return await chat_handler.handle_chat_request(
+            chat_request, 
+            vendor, 
+            mcp_manager
+        )
         
     except HTTPException as http_exc:
         # FastAPIからのHTTPExceptionはそのまま再raiseする

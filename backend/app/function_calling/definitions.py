@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Optional, Callable, get_type_hints, Union
+from typing import List, Dict, Any, Optional, Callable, get_type_hints, Union, overload, Literal, TypedDict
 from google.genai import types
 import inspect
 import importlib
@@ -14,6 +14,17 @@ from app.function_calling.tools.request_clarification_tool import request_clarif
 
 # Path to the tools directory
 TOOLS_DIR = os.path.dirname(__file__) + '/tools'
+
+class CanonicalToolParameter(TypedDict):
+    type: str
+    description: Optional[str]
+    items: Optional[Dict[str, str]] # type を持つ辞書
+
+class CanonicalToolDefinition(TypedDict):
+    name: str
+    description: Optional[str]
+    parameters: Dict[str, CanonicalToolParameter]
+    required: List[str]
 
 @lru_cache(maxsize=1) # Cache the result since directory scanning can be slow
 def get_available_tools() -> List[Callable]:
@@ -153,7 +164,7 @@ def generate_tool_definition(func: Callable) -> Dict[str, Any]:
             required.append(param_name)
 
     # Create the canonical tool definition
-    tool_def = {
+    tool_def: CanonicalToolDefinition = {
         "name": name,
         "description": description,
         "parameters": parameters,
@@ -251,61 +262,103 @@ def convert_tool_definition_for_vendor(tool_def: Dict[str, Any], vendor: str) ->
         )
 
     else:
-        # Unknown vendor, return the canonical definition
-        return tool_def
+        # OpenAPI形式をデフォルトとする
+        return {
+            "type": "function",
+            "function": {
+                "name": tool_def["name"],
+                "description": tool_def["description"],
+                "parameters": {
+                    "type": "object",
+                    "properties": tool_def["parameters"],
+                    "required": tool_def["required"],
+                    "additionalProperties": False
+                },
+                "strict": False
+            }
+        }
 
-def get_tool_definitions(without_human_fallback: bool = False, vendor: Optional[str] = None) -> Union[List[Dict[str, Any]], types.Tool]:
+@overload
+def get_tool_definitions(without_human_fallback: bool = False, vendor: Optional[str] = None, mcp_tools: None = None) -> List[Dict[str, Any]]: ...
+
+@overload
+def get_tool_definitions(without_human_fallback: bool = False, vendor: Literal["gemini"] = "gemini", mcp_tools: Optional[List[CanonicalToolDefinition]] = None) -> types.Tool: ...
+
+@overload
+def get_tool_definitions(without_human_fallback: bool = False, vendor: str = ..., mcp_tools: Optional[List[CanonicalToolDefinition]] = None) -> List[Dict[str, Any]]: ...
+
+
+def get_tool_definitions(
+        without_human_fallback: bool = False, 
+        vendor: Optional[str] = None,
+        mcp_tools: Optional[List[CanonicalToolDefinition]] = None
+) -> Union[List[Dict[str, Any]], types.Tool]:
     """
     Get all function definitions for function calling.
-    Centralizes all tool definitions in one place for better maintainability.
+    Merges internal tools with provided MCP tools.
 
     Args:
         without_human_fallback: Whether to exclude the request_clarification tool
         vendor: The vendor name (openai, anthropic, gemini) to format the definitions for
+        mcp_tools: Optional list of canonical tool definitions from MCP servers
 
     Returns:
         Union[List[Dict[str, Any]], types.Tool]: Tool definitions in the requested format
     """
-    tool_functions = get_available_tools()
+    # 1. Get internal tool functions
+    internal_tool_functions = get_available_tools()
 
-    # Filter out the request_clarification tool if requested
+    # 2. Filter internal tools if needed
     if without_human_fallback:
-        tool_functions = [f for f in tool_functions if f.__name__ != "request_clarification"]
+        internal_tool_functions = [f for f in internal_tool_functions if f.__name__ != "request_clarification"]
 
-    # Generate canonical tool definitions
-    canonical_defs = [generate_tool_definition(func) for func in tool_functions]
+    # 3. Generate canonical definitions for internal tools
+    canonical_defs: List[CanonicalToolDefinition] = [generate_tool_definition(func) for func in internal_tool_functions]
 
-    if vendor == "gemini":
+    # 4. Merge with provided MCP tools (if any)
+    if mcp_tools:
+        # Make sure MCP tools don't have the request_clarification name if filtering
+        filtered_mcp_tools = mcp_tools
+        if without_human_fallback:
+            filtered_mcp_tools = [t for t in mcp_tools if not t['name'].endswith('/request_clarification')] # server_name/tool_name を想定
+        canonical_defs.extend(filtered_mcp_tools)
+
+    # 5. Convert definitions to the target vendor format
+    target_vendor = vendor or "openai" # Default to OpenAI if vendor is None
+
+    if target_vendor == "gemini":
         # For Gemini, convert to FunctionDeclaration objects and return as Tool
         function_declarations = [convert_tool_definition_for_vendor(tool_def, "gemini") for tool_def in canonical_defs]
         return types.Tool(function_declarations=function_declarations)
-    elif vendor:
-        # For other vendors, convert to their specific format
-        return [convert_tool_definition_for_vendor(tool_def, vendor) for tool_def in canonical_defs]
     else:
-        # Default to OpenAI format for backward compatibility
-        return [convert_tool_definition_for_vendor(tool_def, "openai") for tool_def in canonical_defs]
+        # For other vendors, convert to their specific format
+        # Ensure all definitions are dictionaries for list return type
+        vendor_defs = [convert_tool_definition_for_vendor(tool_def, target_vendor) for tool_def in canonical_defs]
+        # Ensure all items are dicts (Gemini returns types.FunctionDeclaration)
+        return [d for d in vendor_defs if isinstance(d, dict)]
 
-def get_gemini_tool_definitions(without_human_fallback: bool = False) -> types.Tool:
+def get_gemini_tool_definitions(without_human_fallback: bool = False, mcp_tools: Optional[List[CanonicalToolDefinition]] = None) -> types.Tool:
     """
     Get all function definitions for Gemini API function calling.
 
     Args:
         without_human_fallback: Whether to exclude the need_ask_human tool
+        mcp_tools: Optional list of canonical tool definitions from MCP servers
 
     Returns:
         types.Tool: A list of tool definitions in Gemini API format
     """
-    return get_tool_definitions(without_human_fallback, vendor="gemini")
+    return get_tool_definitions(without_human_fallback, vendor="gemini", mcp_tools=mcp_tools)
 
-def get_anthropic_tool_definitions(without_human_fallback: bool = False) -> List[Dict[str, Any]]:
+def get_anthropic_tool_definitions(without_human_fallback: bool = False, mcp_tools: Optional[List[CanonicalToolDefinition]] = None) -> List[Dict[str, Any]]:
     """
     Get all function definitions for Anthropic Claude API function calling.
 
     Args:
         without_human_fallback: Whether to exclude the need_ask_human tool
+        mcp_tools: Optional list of canonical tool definitions from MCP servers
 
     Returns:
         List[Dict[str, Any]]: A list of tool definitions in Anthropic Claude API format
     """
-    return get_tool_definitions(without_human_fallback, vendor="anthropic") 
+    return get_tool_definitions(without_human_fallback, vendor="anthropic", mcp_tools=mcp_tools) 

@@ -15,7 +15,7 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   defaultModel: MODELS.anthropic.CLAUDE_3_5_SONNET.id,
   defaultReasoningEffort: 'medium',
   // defaultBudgetTokens: 4096,
-  defaultWebSearch: false,
+  // defaultWebSearch: false,
   openrouterModels: [],
   titleGenerationVendor: 'anthropic',
   titleGenerationModel: MODELS.anthropic.CLAUDE_3_HAIKU.id,

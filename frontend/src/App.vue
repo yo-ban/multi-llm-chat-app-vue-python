@@ -78,7 +78,7 @@ const tempSettings = reactive<GlobalSettings>({
   defaultMaxTokens: settingsStore.defaultMaxTokens,
   defaultReasoningEffort: settingsStore.defaultReasoningEffort,
   // defaultBudgetTokens: settingsStore.defaultBudgetTokens,
-  defaultWebSearch: settingsStore.defaultWebSearch,
+  // defaultWebSearch: settingsStore.defaultWebSearch,
   openrouterModels: settingsStore.openrouterModels,
   titleGenerationVendor: settingsStore.titleGenerationVendor,
   titleGenerationModel: settingsStore.titleGenerationModel,
@@ -146,7 +146,7 @@ const openSettingsDialog = () => {
   tempSettings.openrouterModels = settingsStore.openrouterModels;
   tempSettings.defaultReasoningEffort = settingsStore.defaultReasoningEffort;
   // tempSettings.defaultBudgetTokens = settingsStore.defaultBudgetTokens;
-  tempSettings.defaultWebSearch = settingsStore.defaultWebSearch;
+  // tempSettings.defaultWebSearch = settingsStore.defaultWebSearch;
   tempSettings.titleGenerationVendor = settingsStore.titleGenerationVendor;
   tempSettings.titleGenerationModel = settingsStore.titleGenerationModel;
   isSettingsDialogVisible.value = true;

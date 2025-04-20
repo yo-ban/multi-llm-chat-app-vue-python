@@ -205,7 +205,7 @@ class LLMServiceImpl implements LLMService {
           maxTokens: settings.maxTokens,
           temperature: settings.temperature,
           stream: true,
-          websearch: settings.websearch,
+          toolUse: settings.toolUse,
           isReasoningSupported: settings.isReasoningSupported,
           reasoningParameterType: settings.reasoningParameterType,
           reasoningEffort: settings.reasoningParameterType === 'effort' ? settings.reasoningEffort : undefined,

@@ -7,6 +7,8 @@ from app.function_calling.handlers import handle_tool_call
 from app.function_calling.definitions import get_tool_definitions, get_gemini_tool_definitions, get_anthropic_tool_definitions
 from app.message_utils.usage_parser import parse_usage, parse_usage_gemini, parse_usage_anthropic
 from app.logger.logging_utils import get_logger, log_error, log_info, log_warning, log_debug
+from app.misc_utils.image_utils import upload_image_to_gemini
+
 from google.genai.client import Client
 from google.genai.types import (
     GenerateContentConfig,
@@ -16,7 +18,8 @@ from google.genai.types import (
     FunctionCallingConfig,
     GenerateContentResponsePromptFeedback
 )
-
+from app.mcp_integration.manager import MCPClientManager
+from app.function_calling.definitions import CanonicalToolDefinition
 # Get logger instance
 logger = get_logger()
 
@@ -26,7 +29,9 @@ async def gemini_stream_generator(
     model: str,
     history: list[Content],
     completion_args: dict,
-    images: list
+    images: list,
+    mcp_manager: MCPClientManager,
+    mcp_tools: list[CanonicalToolDefinition]
 ) -> AsyncGenerator[str, None]:
     """
     Generate streaming response for Gemini API.
@@ -115,7 +120,7 @@ async def gemini_stream_generator(
                                     
                                     # Handle the tool call
                                     tool_result = None
-                                    async for status in handle_tool_call(function_call.name, function_call.args):
+                                    async for status in handle_tool_call(function_call.name, function_call.args, mcp_manager):
                                         if status["type"] == "tool_execution_complete":
                                             tool_result = status["result"]
                                         else:
@@ -129,13 +134,27 @@ async def gemini_stream_generator(
                                     )
                                     function_call_parts.append(function_call_part)
 
-                                    # Create function response part with the tool result
-                                    function_response_part = Part.from_function_response(
-                                        name=function_call.name,
-                                        response={"output": tool_result}
-                                    )
-                                    function_response_parts.append(function_response_part)
-                                
+                                    for result in json.loads(tool_result):
+                                        if result["type"] == "text":
+                                            function_response_parts.append(
+                                                Part.from_function_response(
+                                                    name=function_call.name,
+                                                    response={"content": result}
+                                                )
+                                            )
+                                        elif result["type"] == "image":
+                                            uploaded_image = await upload_image_to_gemini(
+                                                result["source"]["data"],
+                                                result["source"]["media_type"]
+                                            )
+                                            function_response_parts.append(
+                                                Part.from_uri(
+                                                    file_uri=uploaded_image.uri, 
+                                                    mime_type=result["source"]["media_type"])
+                                                )
+                                            images.append(uploaded_image)
+
+
                                     yield f"data: {json.dumps({'type': 'tool_call_end', 'tool': function_call.name})}\n\n"
 
                                 # Create function call content
@@ -161,7 +180,7 @@ async def gemini_stream_generator(
                                 running_args["tool_config"] = tool_config
 
                                 if tool_calls_count > 0:
-                                    running_args["tools"] = [get_gemini_tool_definitions()]
+                                    running_args["tools"] = [get_gemini_tool_definitions(mcp_tools=mcp_tools)]
 
                                 tool_calls_count += 1
 
@@ -217,7 +236,9 @@ async def openai_stream_generator(
     response: Any,
     openai_client: AsyncOpenAI,
     openai_messages: List[Dict[str, Any]],
-    completion_args: dict
+    completion_args: dict,
+    mcp_manager: MCPClientManager,
+    mcp_tools: list[CanonicalToolDefinition]
 ) -> AsyncGenerator[str, None]:
     """
     Generator for streaming OpenAI API responses.
@@ -285,7 +306,7 @@ async def openai_stream_generator(
                                     
                                     # Execute the tool
                                     tool_result = None
-                                    async for status in handle_tool_call(tool_name, tool_input):
+                                    async for status in handle_tool_call(tool_name, tool_input, mcp_manager):
                                         if status["type"] == "tool_execution_complete":
                                             tool_result = status["result"]
                                         else:
@@ -308,23 +329,47 @@ async def openai_stream_generator(
                                                 }
                                             ]
                                         }
+
+                                        tool_result_text = ""
+                                        tool_result_image = ""
+                                        for result in json.loads(tool_result):
+                                            if result["type"] == "text":
+                                                tool_result_text = result["text"]
+                                            elif result["type"] == "image":
+                                                tool_result_image = f"data:{result['source']['media_type']};base64,{result['source']['data']}"
+                                        
+                                        if not tool_result_text:
+                                            tool_result_text = "This tool did not return any text."
                                         
                                         # Create a message with the tool result
                                         tool_result_message = {
                                             "role": "tool",
                                             "tool_call_id": complete_tool_call.id,
                                             "name": tool_name,
-                                            "content": tool_result
+                                            "content": tool_result_text
                                         }
                                         
                                         # Add messages to the running messages list
                                         running_args["messages"].append(tool_use_message)
                                         running_args["messages"].append(tool_result_message)
 
-                                                                                
+                                        if tool_result_image:
+                                            running_args["messages"].append({
+                                                "role": "user",
+                                                "name": tool_name,
+                                                "content": [
+                                                    {
+                                                        "type": "image_url",
+                                                        "image_url": {
+                                                            "url": tool_result_image
+                                                        }
+                                                    }
+                                                ]
+                                            })
+
                                         # Make sure tools are included in the next request
                                         if tool_calls_count > 0 and "tools" in running_args:
-                                            running_args["tools"] = get_tool_definitions()
+                                            running_args["tools"] = get_tool_definitions(mcp_tools=mcp_tools)
                                             running_args["tool_choice"] = "auto"
                                         
                                         tool_calls_count += 1
@@ -386,7 +431,9 @@ async def anthropic_stream_generator(
     response, 
     anthropic_client: AsyncAnthropic, 
     messages: List[Dict[str, Any]],
-    params: dict
+    params: dict,
+    mcp_manager: MCPClientManager,
+    mcp_tools: list[CanonicalToolDefinition]
 ) -> AsyncGenerator[str, None]:
     """
     Generate streaming response for Anthropic API.
@@ -462,7 +509,7 @@ async def anthropic_stream_generator(
                                 })
                                 # Process the tool call
                                 tool_result = None
-                                async for status in handle_tool_call(current_tool_name, tool_input):
+                                async for status in handle_tool_call(current_tool_name, tool_input, mcp_manager):
                                     if status["type"] == "tool_execution_complete":
                                         tool_result = status["result"]
                                     else:
@@ -497,6 +544,8 @@ async def anthropic_stream_generator(
                                         "content": tool_use_content
                                     }
 
+                                    
+
                                     # Create a user message with the tool result
                                     tool_result_message = {
                                         "role": "user",
@@ -504,7 +553,7 @@ async def anthropic_stream_generator(
                                             {
                                                 "type": "tool_result",
                                                 "tool_use_id": current_tool_id,
-                                                "content": tool_result
+                                                "content": json.loads(tool_result)
                                             }
                                         ]
                                     }
@@ -515,7 +564,7 @@ async def anthropic_stream_generator(
                                     
                                     # Make sure tools are included in the next request
                                     if tool_calls_count > 0 and "tools" in running_params:
-                                        running_params["tools"] = get_anthropic_tool_definitions()
+                                        running_params["tools"] = get_anthropic_tool_definitions(mcp_tools=mcp_tools)
                                         
                                     log_info("Submitting tool result for continuation", {
                                         "tool": current_tool_name,
@@ -594,9 +643,11 @@ async def anthropic_stream_generator(
 
 async def anthropic_non_stream_generator(
     response, 
-    anthropic_client=None, 
-    params=None, 
-    messages=None
+    anthropic_client: AsyncAnthropic, 
+    messages: List[Dict[str, Any]],
+    params: dict,
+    mcp_manager: MCPClientManager,
+    mcp_tools: list[CanonicalToolDefinition]
 ) -> AsyncGenerator[str, None]:
     """
     Generate non-streaming response for Anthropic API.
@@ -631,7 +682,7 @@ async def anthropic_non_stream_generator(
                     
                     # Execute the tool
                     tool_result = None
-                    async for status in handle_tool_call(block.name, tool_input):
+                    async for status in handle_tool_call(block.name, tool_input, mcp_manager):
                         yield f'data: {json.dumps(status)}\n\n'
                         if status["type"] == "tool_execution_complete":
                             tool_result = status["result"]
@@ -720,7 +771,9 @@ async def gemini_non_stream_generator(
     model: str,
     history: list[Content],
     completion_args: dict,
-    images: list
+    images: list,
+    mcp_manager: MCPClientManager,
+    mcp_tools: list[CanonicalToolDefinition]
 ) -> AsyncGenerator[str, None]:
     """
     Generate non-streaming response for Gemini API.
@@ -749,7 +802,7 @@ async def gemini_non_stream_generator(
                 
                 # Handle the tool call
                 tool_result = None
-                async for status in handle_tool_call(function_call.name, function_call.args):
+                async for status in handle_tool_call(function_call.name, function_call.args, mcp_manager):
                     if status["type"] == "tool_execution_complete":
                         tool_result = status["result"]
                     else:
@@ -814,7 +867,9 @@ async def gemini_non_stream_generator(
 async def openai_non_stream_generator(
     openai_client: AsyncOpenAI,
     completion_args: dict,
-    openai_messages: list
+    openai_messages: list,
+    mcp_manager: MCPClientManager,
+    mcp_tools: list[CanonicalToolDefinition]
 ) -> AsyncGenerator[str, None]:
     """
     Common processing for non-streaming OpenAI API calls.
@@ -847,7 +902,7 @@ async def openai_non_stream_generator(
                     
                     # Execute the tool
                     tool_result = None
-                    async for status in handle_tool_call(tool_call.function.name, tool_input):
+                    async for status in handle_tool_call(tool_call.function.name, tool_input, mcp_manager):
                         yield f"data: {json.dumps(status)}\n\n"
                         if status["type"] == "tool_execution_complete":
                             tool_result = status["result"]
@@ -882,7 +937,7 @@ async def openai_non_stream_generator(
                         running_args["messages"].append(tool_result_message)    
                         
                         # Make sure tools are included in the next request
-                        running_args["tools"] = get_tool_definitions()
+                        running_args["tools"] = get_tool_definitions(mcp_tools=mcp_tools)
                         running_args["tool_choice"] = "auto"
                         
                         # Continue the conversation with the tool result

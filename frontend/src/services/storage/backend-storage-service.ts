@@ -63,7 +63,7 @@ class BackendStorageServiceImpl implements BackendStorageService {
         defaultVendor: settings.defaultVendor,
         defaultModel: settings.defaultModel,
         defaultReasoningEffort: settings.defaultReasoningEffort,
-        defaultWebSearch: settings.defaultWebSearch,
+        // defaultWebSearch: settings.defaultWebSearch,
         openrouterModels: settings.openrouterModels,
         titleGenerationVendor: settings.titleGenerationVendor,
         titleGenerationModel: settings.titleGenerationModel,

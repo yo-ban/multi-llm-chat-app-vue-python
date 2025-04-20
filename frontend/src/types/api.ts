@@ -13,7 +13,7 @@ export interface APISettings {
   isReasoningSupported?: boolean;
   /** オプション：バックエンドがどのパラメータセット（'effort' or 'budget'）を適用するか判断するのに役立ちます。 */
   reasoningParameterType?: ReasoningParameterType;
-  websearch?: boolean;
+  toolUse?: boolean;
   multimodal?: boolean;
   imageGeneration?: boolean;
 }

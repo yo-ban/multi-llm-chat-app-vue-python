@@ -176,7 +176,7 @@ export const useConversationStore = defineStore('conversation', {
             budgetTokens: model?.reasoningParameters?.type === 'budget' ? model.reasoningParameters.budgetTokens : undefined,
             isReasoningSupported: model?.supportsReasoning,
             reasoningParameterType: model?.reasoningParameters?.type,
-            websearch: settingsStore.defaultWebSearch,
+            toolUse: false, //settingsStore.toolUse,
             multimodal: model?.multimodal ?? false,
             imageGeneration: model?.imageGeneration ?? false,
           },

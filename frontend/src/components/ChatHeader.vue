@@ -6,7 +6,7 @@
         Model: {{ displayedModel.name }} ({{ displayedModel.id }})
         <span v-if="displayedModel.supportsReasoning" class="model-feature">• Reasoning</span>
         <span v-if="displayedModel.imageGeneration" class="model-feature">• Image Generation</span>
-        <span v-if="localSettings.websearch" class="model-feature">• Web Search</span>
+        <span v-if="localSettings.toolUse" class="model-feature">• Tool Use</span>
       </div>
     </div>
     <div class="header-actions">
@@ -31,14 +31,14 @@
       </div>
       <VTooltip placement="top" popper-class="tooltip-content">
         <template #popper>
-          {{ isWebSearchAvailable ? 'Web Search' : 'Web Search (Not available for this model)' }}
+          {{ isToolUseAvailable ? 'Tool Use' : 'Tool Use (Not available for this model)' }}
         </template>
         <div class="header-toggle">
           <PrimeInputSwitch
-            v-model="localSettings.websearch"
-            @change="onWebSearchChange"
+            v-model="localSettings.toolUse"
+            @change="onToolUseChange"
             class="header-toggle-switch"
-            :disabled="!isWebSearchAvailable"
+            :disabled="!isToolUseAvailable"
           />
         </div>
       </VTooltip>
@@ -491,7 +491,7 @@ watch(
         reasoningParameterType: newSettings.reasoningParameterType,
         reasoningEffort: newSettings.reasoningEffort,
         budgetTokens: newSettings.budgetTokens,
-        websearch: newSettings.websearch,
+        toolUse: newSettings.toolUse,
         multimodal: newSettings.multimodal,
         imageGeneration: newSettings.imageGeneration
       };
@@ -560,7 +560,7 @@ watch(
       localSettings.value.maxTokens = Math.min(localSettings.value.maxTokens || model.maxTokens, model.maxTokens);
 
       if (!model.supportFunctionCalling) {
-        localSettings.value.websearch = false;
+        localSettings.value.toolUse = false;
       }
 
       if (model.unsupportsTemperature) {
@@ -649,7 +649,7 @@ function closeModelSettingsDialog() {
     reasoningParameterType: props.settings.reasoningParameterType,
     reasoningEffort: props.settings.reasoningEffort,
     budgetTokens: props.settings.budgetTokens,
-    websearch: props.settings.websearch,
+    toolUse: props.settings.toolUse,
     multimodal: props.settings.multimodal,
     imageGeneration: props.settings.imageGeneration
   };
@@ -726,12 +726,12 @@ function onModelChange() {
   });
 }
 
-function onWebSearchChange() {
+function onToolUseChange() {
   emit('update:settings', { ...localSettings.value });
 }
 
 // Add computed property to check if web search is available
-const isWebSearchAvailable = computed(() => {
+const isToolUseAvailable = computed(() => {
   return selectedModel.value.supportFunctionCalling || false;
 });
 

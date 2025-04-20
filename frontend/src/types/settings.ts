@@ -12,7 +12,7 @@ export interface GlobalSettings {
   defaultReasoningEffort?: ReasoningEffortType;
   /** 'budget' を使用するモデルに対する、ユーザーの優先デフォルト開始予算トークン数。 */
   // defaultBudgetTokens?: number;
-  defaultWebSearch: boolean;
+  // defaultWebSearch: boolean;
   openrouterModels: Model[];
   titleGenerationVendor: string;
   titleGenerationModel: string;
@@ -28,7 +28,7 @@ export interface GlobalSettingsCreate {
   defaultReasoningEffort?: ReasoningEffortType;
   /** 'budget' を使用するモデルに対する、ユーザーの優先デフォルト開始予算トークン数。 */
   // defaultBudgetTokens?: number;
-  defaultWebSearch?: boolean;
+  // defaultWebSearch?: boolean;
   openrouterModels?: Model[];
   titleGenerationVendor?: string;
   titleGenerationModel?: string;

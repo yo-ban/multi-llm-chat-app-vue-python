@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 from openai import AsyncOpenAI
 from anthropic import AsyncAnthropic
 from fastapi import HTTPException
@@ -32,9 +32,16 @@ from app.message_utils.messages_preparer import (
     prepare_anthropic_messages, 
 )
 
+from app.mcp_integration.manager import MCPClientManager
+
 from app.misc_utils.image_utils import upload_image_to_gemini
 from app.domain.messages.schemas import ChatRequest
-from app.function_calling.definitions import get_tool_definitions, get_gemini_tool_definitions, get_anthropic_tool_definitions
+from app.function_calling.definitions import (
+    get_tool_definitions, 
+    get_gemini_tool_definitions, 
+    get_anthropic_tool_definitions, 
+    CanonicalToolDefinition
+)
 from app.function_calling.constants import TOOL_USE_INSTRUCTION
 from app.logger.logging_utils import log_info, log_error, log_warning
 
@@ -57,7 +64,9 @@ class ChatHandler:
         temperature: float,
         stream: bool,
         system: str,
-        websearch: bool = False,
+        mcp_manager: MCPClientManager, # MCP Managerを追加
+        mcp_tools: Optional[List[CanonicalToolDefinition]] = None, # MCPツール定義を追加
+        toolUse: bool = False,        
         reasoning_effort: Optional[str] = None,
         is_reasoning_supported: bool = False,
         reasoning_parameter_type: Optional[str] = None,
@@ -85,9 +94,11 @@ class ChatHandler:
         else:
             completion_args["temperature"] = temperature
 
-        if websearch:
-            completion_args["tools"] = get_tool_definitions()
+        if toolUse:
+            completion_args["tools"] = get_tool_definitions(mcp_tools=mcp_tools)
             completion_args["tool_choice"] = "required"
+
+            log_info(f"OpenAI tools: {completion_args['tools']}")
 
         # If streaming is requested, try using stream mode.
         if stream:
@@ -99,7 +110,9 @@ class ChatHandler:
                         response,
                         openai_client=openai,
                         openai_messages=openai_messages,
-                        completion_args=completion_args
+                        completion_args=completion_args,
+                        mcp_manager=mcp_manager,
+                        mcp_tools=mcp_tools
                     ),
                     media_type="text/event-stream"
                 )
@@ -114,23 +127,31 @@ class ChatHandler:
                         openai_non_stream_generator(
                             openai_client=openai, 
                             completion_args=completion_args, 
-                            openai_messages=openai_messages
+                            openai_messages=openai_messages,
+                            mcp_manager=mcp_manager,
+                            mcp_tools=mcp_tools
                         ),
                         media_type="text/event-stream"
                     )
                 else:
+                    log_error(f"OpenAI API error (stream): {e}", {"model": model, "stream": True})
                     raise e
         else:
             completion_args["stream"] = False
-            # For explicit non-stream requests, delegate to the common function.
-            return StreamingResponse(
-                openai_non_stream_generator(
-                    openai_client=openai, 
-                    completion_args=completion_args, 
-                    openai_messages=openai_messages
-                ),
-                media_type="text/event-stream"
-            )
+            try:
+                return StreamingResponse(
+                    openai_non_stream_generator(
+                        openai_client=openai,
+                        completion_args=completion_args,
+                        openai_messages=openai_messages,
+                        mcp_manager=mcp_manager,
+                        mcp_tools=mcp_tools
+                    ),
+                    media_type="text/event-stream"
+                )
+            except Exception as e:
+                log_error(f"OpenAI API error (non-stream): {e}", {"model": model, "stream": False})
+                raise e
 
     async def handle_anthropic(
         self,
@@ -140,7 +161,9 @@ class ChatHandler:
         temperature: float,
         stream: bool,
         system: str,
-        websearch: bool = False,
+        mcp_manager: MCPClientManager, # MCP Managerを追加
+        mcp_tools: Optional[List[CanonicalToolDefinition]] = None, # MCPツール定義を追加
+        toolUse: bool = False,
         reasoning_effort: Optional[str] = None,
         is_reasoning_supported: bool = False,
         reasoning_parameter_type: Optional[str] = None,
@@ -178,8 +201,8 @@ class ChatHandler:
 
         response = None
 
-        if websearch:
-            params["tools"] = get_anthropic_tool_definitions()
+        if toolUse:
+            params["tools"] = get_anthropic_tool_definitions(mcp_tools=mcp_tools)
             if "claude-3-7" in model:
                 params["betas"] = ["token-efficient-tools-2025-02-19"]
                 response = await anthropic.beta.messages.create(**params)
@@ -189,25 +212,37 @@ class ChatHandler:
             response = await anthropic.messages.create(**params)
 
         if stream:
-            return StreamingResponse(
-                anthropic_stream_generator(
-                    response=response,
-                    anthropic_client=anthropic,
-                    messages=anthropic_messages,
-                    params=params
-                ),
-                media_type="text/event-stream"
-            )
+            try:
+                return StreamingResponse(
+                    anthropic_stream_generator(
+                        response=response,
+                        anthropic_client=anthropic,
+                        messages=anthropic_messages,
+                        params=params,
+                        mcp_manager=mcp_manager,
+                        mcp_tools=mcp_tools
+                    ),
+                    media_type="text/event-stream"
+                )
+            except Exception as e:
+                log_error(f"Anthropic API error (stream): {e}", {"model": model, "stream": True})
+                raise e
         else:
-            return StreamingResponse(
-                anthropic_non_stream_generator(
-                    response=response,
-                    anthropic_client=anthropic,
-                    params=params,
-                    messages=anthropic_messages
-                ),
-                media_type="text/event-stream"
-            )
+            try:
+                return StreamingResponse(
+                    anthropic_non_stream_generator(
+                        response=response,
+                        anthropic_client=anthropic,
+                        params=params,
+                        messages=anthropic_messages,
+                        mcp_manager=mcp_manager,
+                        mcp_tools=mcp_tools
+                    ),
+                    media_type="text/event-stream"
+                )
+            except Exception as e:
+                log_error(f"Anthropic API error (non-stream): {e}", {"model": model, "stream": False})
+                raise e
 
     async def handle_gemini(
         self,
@@ -217,7 +252,9 @@ class ChatHandler:
         temperature: float,
         stream: bool,
         system: str,
-        websearch: bool = False,
+        mcp_manager: MCPClientManager, # MCP Managerを追加
+        mcp_tools: Optional[List[CanonicalToolDefinition]] = None, # MCPツール定義を追加
+        toolUse: bool = False,
         reasoning_effort: Optional[str] = None,
         is_reasoning_supported: bool = False,
         reasoning_parameter_type: Optional[str] = None,
@@ -277,7 +314,7 @@ class ChatHandler:
                 "TEXT"
             ]
 
-        if websearch:
+        if toolUse:
             tool_config = ToolConfig(
                 function_calling_config=FunctionCallingConfig(mode='ANY')
             )
@@ -285,7 +322,7 @@ class ChatHandler:
                 disable=True,
                 ignore_call_history=True
             )
-            completion_args["tools"] = [get_gemini_tool_definitions()]
+            completion_args["tools"] = [get_gemini_tool_definitions(mcp_tools=mcp_tools)]
             completion_args["tool_config"] = tool_config
             completion_args["automatic_function_calling"] = automatic_function_calling
 
@@ -330,40 +367,53 @@ class ChatHandler:
         
 
         if stream:
-            response = await client.aio.models.generate_content_stream(
-                model=model,
-                contents=history,
-                config=generation_config
-            )
-
-            return StreamingResponse(
-                gemini_stream_generator(
-                    response,
-                    gemini_client=client, 
+            try:
+                response = await client.aio.models.generate_content_stream(
                     model=model,
-                    history=history,
-                    completion_args=completion_args,
-                    images=images
-                ),
-                media_type="text/event-stream"
-            )
+                    contents=history,
+                    config=generation_config
+                )
+
+                return StreamingResponse(
+                    gemini_stream_generator(
+                        response,
+                        gemini_client=client, 
+                        model=model,
+                        history=history,
+                        completion_args=completion_args,
+                        images=images,
+                        mcp_manager=mcp_manager,
+                        mcp_tools=mcp_tools
+                    ),
+                    media_type="text/event-stream"
+                )
+            except Exception as e:
+                log_error(f"Gemini API error (stream): {e}", {"model": model, "stream": True})
+                raise e
         else:
-            response = await client.aio.models.generate_content(
-                model=model,
-                contents=history,
-                config=generation_config
-            )
-
-            return StreamingResponse(
-                gemini_non_stream_generator(
-                    response,
-                    gemini_client=client,
+            try:
+                response = await client.aio.models.generate_content(
                     model=model,
-                    history=history,
-                    completion_args=completion_args
-                ),
-                media_type="text/event-stream"
-            )
+                    contents=history,
+                    config=generation_config
+                )
+
+                return StreamingResponse(
+                    gemini_non_stream_generator(
+                        response,
+                        gemini_client=client,
+                        model=model,
+                        history=history,
+                        completion_args=completion_args,
+                        images=images,
+                        mcp_manager=mcp_manager,
+                        mcp_tools=mcp_tools
+                    ),
+                    media_type="text/event-stream"
+                )
+            except Exception as e:
+                log_error(f"Gemini API error (non-stream): {e}", {"model": model, "stream": False})
+                raise e
         
     async def handle_xai(
         self,
@@ -373,7 +423,9 @@ class ChatHandler:
         temperature: float,
         stream: bool,
         system: str,
-        websearch: bool = False,
+        mcp_manager: MCPClientManager, # MCP Managerを追加
+        mcp_tools: Optional[List[CanonicalToolDefinition]] = None, # MCPツール定義を追加
+        toolUse: bool = False,
         reasoning_effort: Optional[str] = None,
         is_reasoning_supported: bool = False,
         reasoning_parameter_type: Optional[str] = None,
@@ -405,8 +457,8 @@ class ChatHandler:
             # elif reasoning_parameter_type == "budget" and budget_tokens:
             #     completion_args["budget_tokens"] = budget_tokens
 
-        if websearch:
-            completion_args["tools"] = get_tool_definitions()
+        if toolUse:
+            completion_args["tools"] = get_tool_definitions(mcp_tools=mcp_tools)
             completion_args["tool_choice"] = "required"
 
         # If streaming is requested, try using stream mode.
@@ -419,7 +471,9 @@ class ChatHandler:
                         response,
                         openai_client=xai,
                         openai_messages=xai_messages,
-                        completion_args=completion_args
+                        completion_args=completion_args,
+                        mcp_manager=mcp_manager,
+                        mcp_tools=mcp_tools
                     ),
                     media_type="text/event-stream"
                 )
@@ -434,23 +488,32 @@ class ChatHandler:
                         openai_non_stream_generator(
                             openai_client=xai, 
                             completion_args=completion_args, 
-                            openai_messages=xai_messages
+                            openai_messages=xai_messages,
+                            mcp_manager=mcp_manager,
+                            mcp_tools=mcp_tools
                         ),
                         media_type="text/event-stream"
                     )
                 else:
+                    log_error(f"XAI API error (stream): {e}", {"model": model, "stream": True})
                     raise e
         else:
             completion_args["stream"] = False
-            # For explicit non-stream requests, delegate to the common function.
-            return StreamingResponse(
-                openai_non_stream_generator(
-                    openai_client=xai, 
-                    completion_args=completion_args, 
-                    openai_messages=xai_messages
-                ),
-                media_type="text/event-stream"
-            )
+            try:
+                # For explicit non-stream requests, delegate to the common function.
+                return StreamingResponse(
+                    openai_non_stream_generator(
+                        openai_client=xai, 
+                        completion_args=completion_args, 
+                        openai_messages=xai_messages,
+                        mcp_manager=mcp_manager,
+                        mcp_tools=mcp_tools
+                    ),
+                    media_type="text/event-stream"
+                )
+            except Exception as e:
+                log_error(f"XAI API error (non-stream): {e}", {"model": model, "stream": False})
+                raise e
 
     async def handle_openrouter(
         self,
@@ -460,7 +523,9 @@ class ChatHandler:
         temperature: float,
         stream: bool,
         system: str,
-        websearch: bool = False,
+        mcp_manager: MCPClientManager, # MCP Managerを追加
+        mcp_tools: Optional[List[CanonicalToolDefinition]] = None, # MCPツール定義を追加
+        toolUse: bool = False,
         reasoning_effort: Optional[str] = None,
         is_reasoning_supported: bool = False,
         reasoning_parameter_type: Optional[str] = None,
@@ -500,47 +565,72 @@ class ChatHandler:
         if is_reasoning_supported and reasoning_effort:
             completion_args["reasoning_effort"] = reasoning_effort
 
-        if websearch:
-            completion_args["tools"] = get_tool_definitions()
+        if toolUse:
+            completion_args["tools"] = get_tool_definitions(mcp_tools=mcp_tools)
             completion_args["tool_choice"] = "required"
 
         response = await openrouter.chat.completions.create(**completion_args)
 
         if stream:
             completion_args["stream_options"] = {"include_usage": True}
-            return StreamingResponse(
-                openai_stream_generator(
-                    response,
-                    openai_client=openrouter,
-                    openai_messages=openrouter_messages,
-                    completion_args=completion_args
-                ),
-                media_type="text/event-stream"
-            )
+            try:
+                return StreamingResponse(
+                    openai_stream_generator(
+                        response,
+                        openai_client=openrouter,
+                        openai_messages=openrouter_messages,
+                        completion_args=completion_args,
+                        mcp_manager=mcp_manager,
+                        mcp_tools=mcp_tools
+                    ),
+                    media_type="text/event-stream"
+                )
+            except Exception as e:
+                log_error(f"OpenRouter API error (stream): {e}", {"model": model, "stream": True})
+                raise e
         else:
-            async def generate_non_stream_response():
-                yield f'data: {json.dumps({"text": response.choices[0].message.content})}\n\n'
-                yield 'data: {"text": "[DONE]"}\n\n'
+            try:
+                return StreamingResponse(
+                    openai_non_stream_generator(
+                        openai_client=openrouter,
+                        completion_args=completion_args,
+                        openai_messages=openrouter_messages,
+                        mcp_manager=mcp_manager,
+                        mcp_tools=mcp_tools
+                    ),
+                    media_type="text/event-stream"
+                ) 
+            except Exception as e:
+                log_error(f"OpenRouter API error (non-stream): {e}", {"model": model, "stream": False})
+                raise e
 
-            return StreamingResponse(
-                generate_non_stream_response(),
-                media_type="text/event-stream"
-            ) 
-
-    async def handle_chat_request(self, chat_request: ChatRequest, vendor: str) -> Any:
+    async def handle_chat_request(
+            self, 
+            chat_request: ChatRequest, 
+            vendor: str,
+            mcp_manager: MCPClientManager
+    ) -> Any:
         """
-        Main entry point for handling chat requests
-        
+        Main entry point for handling chat requests.
+        Retrieves MCP tools if toolUse is enabled.
+
         Args:
             chat_request: ChatRequest object containing all request parameters
-            
+            vendor: The vendor name (e.g., 'openai', 'anthropic')
+            api_key: The decrypted API key for the specified vendor
+            mcp_manager: The MCPClientManager instance
+
         Returns:
             Appropriate response based on the model and streaming settings
         """
         try:
             messages = await prepare_api_messages(chat_request.messages, multimodal=chat_request.multimodal)
 
-            if chat_request.websearch:
+            mcp_tools: Optional[List[CanonicalToolDefinition]] = None
+            if chat_request.toolUse: # toolUse フラグをMCPツール利用のトリガーとする
+                log_info("ToolUse enabled, fetching MCP tools...")
+                mcp_tools = await mcp_manager.get_available_tools()
+                log_info(f"Fetched {len(mcp_tools)} MCP tools.")
                 system = f"{chat_request.system}\n\n{TOOL_USE_INSTRUCTION}"
             else:
                 system = chat_request.system
@@ -557,13 +647,21 @@ class ChatHandler:
                 temperature=chat_request.temperature,
                 stream=chat_request.stream,
                 system=system,
-                websearch=chat_request.websearch,
+                toolUse=chat_request.toolUse,
                 reasoning_effort=chat_request.reasoningEffort,
                 is_reasoning_supported=chat_request.isReasoningSupported,
                 reasoning_parameter_type=chat_request.reasoningParameterType,
                 budget_tokens=chat_request.budgetTokens,
-                image_generation=chat_request.imageGeneration
+                image_generation=chat_request.imageGeneration,
+                mcp_manager=mcp_manager, # MCP Manager を渡す
+                mcp_tools=mcp_tools   # MCP ツール定義を渡す
             )
 
         except Exception as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            # handle_chat_requestレベルでのエラー捕捉
+            log_error(f"Error in handle_chat_request: {e}", {"vendor": vendor, "model": chat_request.model})
+            # isinstanceでHTTPExceptionをチェックし、それ以外は500エラーにする
+            if isinstance(e, HTTPException):
+                raise e
+            else:
+                raise HTTPException(status_code=500, detail=f"An internal server error occurred: {str(e)}")
