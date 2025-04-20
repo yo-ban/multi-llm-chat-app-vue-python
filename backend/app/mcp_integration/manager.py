@@ -43,12 +43,11 @@ class McpServersConfig(RootModel[Dict[str, ServerConfig]]):
     def __getitem__(self, item):
         return self.root[item]
 
-# --- 内部で使用するサーバー定義 (enabledフラグなし) ---
-# configの型を修正
+# --- 内部で使用するサーバー定義  ---
 class InternalServerDefinition(BaseModel):
     name: str
     type: str # "stdio" or "http"
-    config: StdioServerConfig | HttpServerConfig
+    config: ServerConfig
 
 # カノニカル形式のツールパラメータの型定義
 class CanonicalToolItemsSchema(TypedDict):
@@ -431,30 +430,57 @@ class MCPClientManager:
         if 'mcp-' not in full_tool_name:
             raise ValueError(f"ツール名 '{full_tool_name}' は 'mcp-server_name-tool_name' 形式である必要があります。")
 
-        tool_name = full_tool_name.replace("mcp-", "")
+        # 'mcp-' プレフィックスを除去
+        name_suffix = full_tool_name[4:]
 
-        # ツール名からサーバー名とツール名を取得
-        for key in self._server_definitions.keys():
-            if key in tool_name:
-                server_name = key
-                tool_name = tool_name.replace(f"{key}-", "").strip()
-                break
+        server_name: Optional[str] = None
+        original_tool_name: Optional[str] = None
+
+        # 登録されているサーバー名で前方一致検索
+        # 例: mcp-my-server-1-get-tool-data -> my-server-1 が server_name, get-tool-data が tool_name
+        # 例: mcp-files-list-files -> files が server_name, list-files が tool_name
+        found_server_key = None
+        for server_key in self._server_definitions.keys():
+            prefix_to_check = f"{server_key}-"
+            if name_suffix.startswith(prefix_to_check):
+                # 最も長く一致するサーバー名を見つける (例: 'server' と 'server-ext' があれば後者を優先)
+                if found_server_key is None or len(server_key) > len(found_server_key):
+                    found_server_key = server_key
+
+        if found_server_key:
+            server_name = self._server_definitions[found_server_key].name # 辞書に登録されている正式な名前
+            original_tool_name = name_suffix[len(found_server_key) + 1:] # サーバー名 + ハイフンの後がツール名
+
+        if not server_name or not original_tool_name:
+            raise ValueError(f"ツール名 '{full_tool_name}' に対応するアクティブなMCPサーバーが見つかりません。利用可能なサーバー: {list(self._server_definitions.keys())}")
 
         session = self._sessions.get(server_name)
         if not session:
-            logger.error(f"MCPサーバー '{server_name}' が現在接続されていません。ツールを実行できません。")
+            logger.error(f"MCPサーバー '{server_name}' が現在接続されていません。ツール '{original_tool_name}' を実行できません。")
             raise ConnectionError(f"MCP Server '{server_name}' is not connected.")
 
-        logger.info(f"MCPツール '{full_tool_name}' を引数 {arguments} で実行します...")
+        logger.info(f"MCPツール '{server_name}/{original_tool_name}' (Canonical: {full_tool_name}) を引数 {arguments} で実行します...")
         try:
-            call_result = await session.call_tool(tool_name, arguments)
+            call_result = await session.call_tool(original_tool_name, arguments)
+
+            if call_result is None:
+                logger.error(f"ツール '{full_tool_name}' の実行結果が None でした。")
+                raise RuntimeError(f"Tool execution failed for '{full_tool_name}': Received None result.")
+
             logger.info(f"ツール '{full_tool_name}' の実行が完了しました。")
 
             if call_result.isError:
                 error_content = call_result.content if call_result.content else "Unknown tool error"
-                logger.error(f"ツール '{full_tool_name}' の実行中にエラーが発生しました: {error_content}")
-                raise RuntimeError(f"Tool execution error in '{full_tool_name}': {error_content}")
-            return call_result.content
+                error_text = " ".join([c.text for c in error_content if isinstance(c, types.TextContent)]) if error_content else "N/A"
+                logger.error(f"ツール '{full_tool_name}' の実行中にサーバー側でエラーが発生しました: {error_text}")
+                raise RuntimeError(f"Tool execution error in '{full_tool_name}': {error_text}")
+            return call_result.content if call_result.content else []
+        except asyncio.TimeoutError:
+            logger.error(f"ツール '{full_tool_name}' の実行がタイムアウトしました。")
+            raise TimeoutError(f"Tool execution timed out for '{full_tool_name}'.")
+        except ConnectionError as ce:
+            logger.error(f"ツール '{full_tool_name}' 実行中に接続エラー: {ce}")
+            raise
         except Exception as e:
             logger.error(f"ツール '{full_tool_name}' の実行中に予期せぬエラー: {e}", exc_info=True)
             raise

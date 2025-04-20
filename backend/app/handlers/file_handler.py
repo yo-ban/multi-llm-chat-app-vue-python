@@ -2,6 +2,9 @@ import chardet
 from io import BytesIO
 from fastapi import UploadFile, HTTPException
 from typing import Dict, Any
+from app.logger.logging_utils import log_info
+
+
 
 class FileHandler:
     """Handler for processing various file types and extracting text content"""
@@ -124,15 +127,16 @@ class FileHandler:
         """
         try:
             file_type = file.content_type
+            log_info(f"Processing file: {file.filename}, type: {file_type}")
             
             if file_type == 'application/pdf':
                 return await self.handle_pdf(file)
             elif file_type == 'text/html':
                 return await self.handle_html(file)
-            elif file.filename.endswith(('.md', '.markdown')) or file_type == 'text/plain':
-                return await self.handle_markdown(file)
             elif file.filename.endswith('.ipynb'):
                 return await self.handle_jupyter(file)
+            elif file.filename.endswith(('.md', '.markdown')) or "text/" in file_type:
+                return await self.handle_markdown(file)
             else:
                 return await self.handle_generic(file)
                 

@@ -98,8 +98,6 @@ class ChatHandler:
             completion_args["tools"] = get_tool_definitions(mcp_tools=mcp_tools)
             completion_args["tool_choice"] = "required"
 
-            log_info(f"OpenAI tools: {completion_args['tools']}")
-
         # If streaming is requested, try using stream mode.
         if stream:
             completion_args["stream_options"] = { "include_usage": True }
