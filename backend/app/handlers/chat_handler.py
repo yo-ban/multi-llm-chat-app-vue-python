@@ -32,7 +32,7 @@ from app.message_utils.messages_preparer import (
     prepare_anthropic_messages, 
 )
 
-from app.mcp_integration.manager import MCPClientManager
+from poly_mcp_client import PolyMCPClient
 
 from app.misc_utils.image_utils import upload_image_to_gemini
 from app.domain.messages.schemas import ChatRequest
@@ -64,7 +64,7 @@ class ChatHandler:
         temperature: float,
         stream: bool,
         system: str,
-        mcp_manager: MCPClientManager, # MCP Managerを追加
+        mcp_manager: PolyMCPClient, # MCP Managerを追加
         mcp_tools: Optional[List[CanonicalToolDefinition]] = None, # MCPツール定義を追加
         toolUse: bool = False,        
         reasoning_effort: Optional[str] = None,
@@ -159,7 +159,7 @@ class ChatHandler:
         temperature: float,
         stream: bool,
         system: str,
-        mcp_manager: MCPClientManager, # MCP Managerを追加
+        mcp_manager: PolyMCPClient, # MCP Managerを追加
         mcp_tools: Optional[List[CanonicalToolDefinition]] = None, # MCPツール定義を追加
         toolUse: bool = False,
         reasoning_effort: Optional[str] = None,
@@ -250,7 +250,7 @@ class ChatHandler:
         temperature: float,
         stream: bool,
         system: str,
-        mcp_manager: MCPClientManager, # MCP Managerを追加
+        mcp_manager: PolyMCPClient, # MCP Managerを追加
         mcp_tools: Optional[List[CanonicalToolDefinition]] = None, # MCPツール定義を追加
         toolUse: bool = False,
         reasoning_effort: Optional[str] = None,
@@ -421,7 +421,7 @@ class ChatHandler:
         temperature: float,
         stream: bool,
         system: str,
-        mcp_manager: MCPClientManager, # MCP Managerを追加
+        mcp_manager: PolyMCPClient, # MCP Managerを追加
         mcp_tools: Optional[List[CanonicalToolDefinition]] = None, # MCPツール定義を追加
         toolUse: bool = False,
         reasoning_effort: Optional[str] = None,
@@ -521,7 +521,7 @@ class ChatHandler:
         temperature: float,
         stream: bool,
         system: str,
-        mcp_manager: MCPClientManager, # MCP Managerを追加
+        mcp_manager: PolyMCPClient, # MCP Managerを追加
         mcp_tools: Optional[List[CanonicalToolDefinition]] = None, # MCPツール定義を追加
         toolUse: bool = False,
         reasoning_effort: Optional[str] = None,
@@ -606,7 +606,7 @@ class ChatHandler:
             self, 
             chat_request: ChatRequest, 
             vendor: str,
-            mcp_manager: MCPClientManager
+            mcp_manager: PolyMCPClient
     ) -> Any:
         """
         Main entry point for handling chat requests.
@@ -616,7 +616,7 @@ class ChatHandler:
             chat_request: ChatRequest object containing all request parameters
             vendor: The vendor name (e.g., 'openai', 'anthropic')
             api_key: The decrypted API key for the specified vendor
-            mcp_manager: The MCPClientManager instance
+            mcp_manager: The PolyMCPClient instance
 
         Returns:
             Appropriate response based on the model and streaming settings
@@ -627,7 +627,7 @@ class ChatHandler:
             mcp_tools: Optional[List[CanonicalToolDefinition]] = None
             if chat_request.toolUse: # toolUse フラグをMCPツール利用のトリガーとする
                 log_info("ToolUse enabled, fetching MCP tools...")
-                mcp_tools = await mcp_manager.get_available_tools()
+                mcp_tools = await mcp_manager.get_available_tools(vendor="canonical")
                 log_info(f"Fetched {len(mcp_tools)} MCP tools.")
                 system = f"{chat_request.system}\n\n{TOOL_USE_INSTRUCTION}"
             else:

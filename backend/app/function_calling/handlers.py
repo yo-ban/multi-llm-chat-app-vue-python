@@ -5,7 +5,8 @@ import inspect
 from app.logger.logging_utils import get_logger, log_error, log_info, log_warning, log_debug
 # Import the dynamic tool discovery function
 from app.function_calling.definitions import get_available_tools
-from app.mcp_integration.manager import MCPClientManager
+
+from poly_mcp_client import PolyMCPClient
 
 # Get logger instance
 logger = get_logger()
@@ -17,7 +18,7 @@ tool_functions_map = {func.__name__: func for func in get_available_tools()}
 async def handle_tool_call(
     tool_name: str,
     tool_input: Dict[str, Any],
-    mcp_manager: MCPClientManager
+    mcp_manager: PolyMCPClient
 ) -> AsyncGenerator[Dict[str, Any], None]:
     """
     Handle a tool call by executing either a local function or an MCP server tool.
@@ -25,7 +26,7 @@ async def handle_tool_call(
     Args:
         tool_name: The name of the tool to execute (e.g., "web_search" or "server_name/readFile")
         tool_input: The input parameters for the tool
-        mcp_manager: The MCPClientManager instance for executing external tools
+        mcp_manager: The PolyMCPClient instance for executing external tools
 
     Yields:
         Tool execution status updates for frontend
@@ -44,7 +45,7 @@ async def handle_tool_call(
             yield {"type": "tool_execution", "tool": tool_name, "input": tool_input}
 
             try:
-                # MCPClientManager を使ってツールを実行
+                # PolyMCPClient を使ってツールを実行
                 results = await mcp_manager.execute_mcp_tool(tool_name, tool_input)
 
                 # Anthropic format

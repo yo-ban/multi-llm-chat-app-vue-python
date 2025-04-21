@@ -18,8 +18,9 @@ from google.genai.types import (
     FunctionCallingConfig,
     GenerateContentResponsePromptFeedback
 )
-from app.mcp_integration.manager import MCPClientManager
-from app.function_calling.definitions import CanonicalToolDefinition
+
+from poly_mcp_client import PolyMCPClient
+from poly_mcp_client.models import CanonicalToolDefinition
 # Get logger instance
 logger = get_logger()
 
@@ -30,7 +31,7 @@ async def gemini_stream_generator(
     history: list[Content],
     completion_args: dict,
     images: list,
-    mcp_manager: MCPClientManager,
+    mcp_manager: PolyMCPClient,
     mcp_tools: list[CanonicalToolDefinition]
 ) -> AsyncGenerator[str, None]:
     """
@@ -237,7 +238,7 @@ async def openai_stream_generator(
     openai_client: AsyncOpenAI,
     openai_messages: List[Dict[str, Any]],
     completion_args: dict,
-    mcp_manager: MCPClientManager,
+    mcp_manager: PolyMCPClient,
     mcp_tools: list[CanonicalToolDefinition]
 ) -> AsyncGenerator[str, None]:
     """
@@ -433,7 +434,7 @@ async def anthropic_stream_generator(
     anthropic_client: AsyncAnthropic, 
     messages: List[Dict[str, Any]],
     params: dict,
-    mcp_manager: MCPClientManager,
+    mcp_manager: PolyMCPClient,
     mcp_tools: list[CanonicalToolDefinition]
 ) -> AsyncGenerator[str, None]:
     """
@@ -645,7 +646,7 @@ async def anthropic_non_stream_generator(
     anthropic_client: AsyncAnthropic, 
     messages: List[Dict[str, Any]],
     params: dict,
-    mcp_manager: MCPClientManager,
+    mcp_manager: PolyMCPClient,
     mcp_tools: list[CanonicalToolDefinition]
 ) -> AsyncGenerator[str, None]:
     """
@@ -771,7 +772,7 @@ async def gemini_non_stream_generator(
     history: list[Content],
     completion_args: dict,
     images: list,
-    mcp_manager: MCPClientManager,
+    mcp_manager: PolyMCPClient,
     mcp_tools: list[CanonicalToolDefinition]
 ) -> AsyncGenerator[str, None]:
     """
@@ -867,7 +868,7 @@ async def openai_non_stream_generator(
     openai_client: AsyncOpenAI,
     completion_args: dict,
     openai_messages: list,
-    mcp_manager: MCPClientManager,
+    mcp_manager: PolyMCPClient,
     mcp_tools: list[CanonicalToolDefinition]
 ) -> AsyncGenerator[str, None]:
     """

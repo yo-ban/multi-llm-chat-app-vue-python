@@ -18,8 +18,8 @@ from app.handlers.chat_handler import ChatHandler
 from app.handlers.file_handler import FileHandler
 from app.logger.logging_utils import get_logger, log_request_info, log_error, log_info
 
-# --- MCPClientManagerのインポート ---
-from app.mcp_integration.manager import MCPClientManager
+# --- PolyMCPClientのインポート ---
+from poly_mcp_client import PolyMCPClient
 
 # 定数 (仮ユーザーID)
 TEMP_USER_ID = 1
@@ -27,8 +27,8 @@ TEMP_USER_ID = 1
 # Set up logging
 logger = get_logger()
 
-# --- MCPClientManagerのシングルトンインスタンスを作成 ---
-mcp_client_manager = MCPClientManager()
+# --- PolyMCPClientのシングルトンインスタンスを作成 ---
+mcp_client_manager = PolyMCPClient()
 
 # --- FastAPI lifespan ---
 @asynccontextmanager
@@ -43,14 +43,16 @@ async def lifespan(app: FastAPI):
         logger.warning(f"{config_path} が見つかりません。空の設定で初期化します。")
         # 実際のFastAPI環境では設定ファイルがない場合はエラーにするか、
         # デプロイ時に用意するなどの運用が必要
-        await mcp_client_manager.initialize_from_config(config_data={"mcpServers": {}})
+        await mcp_client_manager.initialize(config_data={"mcpServers": {}})
     else:
-        await mcp_client_manager.initialize_from_config(config_path=config_path)
+        await mcp_client_manager.initialize(config_path=config_path)
+    
+    await mcp_client_manager.wait_for_initial_connections(timeout=360.0)
     logger.info("MCPクライアントマネージャーの初期化処理完了。接続はバックグラウンドで進行。")
     yield
     # アプリケーション終了時
     logger.info("FastAPI終了: MCP接続をクリーンアップ")
-    await mcp_client_manager.close_all_connections()
+    await mcp_client_manager.shutdown()
     logger.info("MCPクリーンアップ完了。")
 
 # --- FastAPI アプリケーションインスタンス (lifespanを設定) ---
@@ -65,14 +67,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- MCPClientManager 依存性注入 ---
+# --- PolyMCPClient 依存性注入 ---
 async def get_mcp_manager():
     """依存性注入用の関数"""
     if not mcp_client_manager._is_initialized:
         # アプリケーション起動時に初期化されているはずだが、念のためチェック
-        logger.error("MCPClientManagerが初期化されていません。")
+        logger.error("PolyMCPClientが初期化されていません。")
         # 本番環境ではここでエラーを発生させるべき
-        raise RuntimeError("MCPClientManager is not initialized.")
+        raise RuntimeError("PolyMCPClient is not initialized.")
     return mcp_client_manager
 
 # --- Settings Endpoints --- (Using temporary fixed user ID)
@@ -106,7 +108,7 @@ async def messages(
     request: Request,                 # リクエスト情報取得用
     chat_request: ChatRequest,        # リクエストボディ
     db: Session = Depends(get_db),      # DBセッションを依存関係として注入    
-    mcp_manager: MCPClientManager = Depends(get_mcp_manager) # MCPClientManagerを依存性注入で取得
+    mcp_manager: PolyMCPClient = Depends(get_mcp_manager) # PolyMCPClientを依存性注入で取得
 ) -> StreamingResponse:
     """
     チャットメッセージのエンドポイントを処理する。
