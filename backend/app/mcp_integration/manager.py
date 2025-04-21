@@ -16,6 +16,8 @@ import mcp.types as types
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("MCPClientManager")
 
+MCP_PREFIX = "mcp-"
+
 # --- 設定データモデル---
 class StdioServerConfig(BaseModel):
     """Stdioサーバー固有の設定"""
@@ -66,7 +68,7 @@ class CanonicalToolDefinition(TypedDict):
 
 # --- MCPClientManager クラス ---
 class MCPClientManager:
-    def __init__(self):
+    def __init__(self, prefix: str = MCP_PREFIX):
         self._sessions: Dict[str, ClientSession] = {}
         # サーバーのケイパビリティを保存する辞書
         self._server_capabilities: Dict[str, Optional[types.ServerCapabilities]] = {}
@@ -74,6 +76,7 @@ class MCPClientManager:
         self._connection_tasks: Dict[str, asyncio.Task] = {}
         self._is_initialized = False
         self._lock = asyncio.Lock()
+        self._prefix = prefix
 
     async def initialize_from_config(self, config_path: Optional[str] = None, config_data: Optional[Dict[str, Any]] = None):
         """

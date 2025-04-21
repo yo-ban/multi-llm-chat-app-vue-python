@@ -101,6 +101,18 @@ async def gemini_stream_generator(
                         if event.candidates[0].content.parts:
                             part = event.candidates[0].content.parts[0]
 
+                            if part.inline_data:
+                                async for inline_chunk in _yield_inline_image(part.inline_data):
+                                    yield inline_chunk
+
+                            if part.thought:
+                                yield f"data: {json.dumps({'text': part.thought})}\n\n"
+
+                            # Handle regular text content
+                            if part.text:
+                                text += event.text
+                                yield f"data: {json.dumps({'text': event.text})}\n\n"
+
                             if part.function_call:
                                 has_function_call = True
 
@@ -192,18 +204,6 @@ async def gemini_stream_generator(
                                 )
                                 
                                 break  # Break inner loop to start new response processing
-                            
-                            if part.inline_data:
-                                async for inline_chunk in _yield_inline_image(part.inline_data):
-                                    yield inline_chunk
-
-                            if part.thought:
-                                yield f"data: {json.dumps({'text': part.thought})}\n\n"
-
-                            # Handle regular text content
-                            if part.text:
-                                text += event.text
-                                yield f"data: {json.dumps({'text': event.text})}\n\n"
 
                             if event.candidates:
                                 if event.candidates[0].finish_reason:
@@ -270,6 +270,11 @@ async def openai_stream_generator(
                 if chunk.choices:
                     delta = chunk.choices[0].delta
 
+                    # Handle regular text content
+                    if hasattr(delta, 'content') and delta.content is not None:
+                        yield f"data: {json.dumps({'text': delta.content})}\n\n"
+                        text_generated = True
+
                     # Handle tool calls
                     if hasattr(delta, 'tool_calls') and delta.tool_calls:
                         has_tool_call = True
@@ -334,7 +339,7 @@ async def openai_stream_generator(
                                         tool_result_image = ""
                                         for result in json.loads(tool_result):
                                             if result["type"] == "text":
-                                                tool_result_text = result["text"]
+                                                tool_result_text = result
                                             elif result["type"] == "image":
                                                 tool_result_image = f"data:{result['source']['media_type']};base64,{result['source']['data']}"
                                         
@@ -346,7 +351,7 @@ async def openai_stream_generator(
                                             "role": "tool",
                                             "tool_call_id": complete_tool_call.id,
                                             "name": tool_name,
-                                            "content": tool_result_text
+                                            "content": [tool_result_text]
                                         }
                                         
                                         # Add messages to the running messages list
@@ -388,10 +393,6 @@ async def openai_stream_generator(
                                     log_error(f"Failed to parse tool input JSON: {complete_tool_call.function.arguments}")
                                     yield f"data: {json.dumps({'type': 'tool_call_end', 'tool': tool_name, 'input': {}})}\n\n"
                     
-                    # Handle regular text content
-                    elif hasattr(delta, 'content') and delta.content is not None:
-                        yield f"data: {json.dumps({'text': delta.content})}\n\n"
-                        text_generated = True
 
                 # Check finish reason
                 if chunk.choices and chunk.choices[0].finish_reason:
@@ -543,8 +544,6 @@ async def anthropic_stream_generator(
                                         "role": "assistant",
                                         "content": tool_use_content
                                     }
-
-                                    
 
                                     # Create a user message with the tool result
                                     tool_result_message = {
