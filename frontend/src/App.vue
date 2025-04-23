@@ -76,7 +76,7 @@ const tempSettings = reactive<GlobalSettings>({
   defaultModel: settingsStore.defaultModel,
   defaultTemperature: settingsStore.defaultTemperature,
   defaultMaxTokens: settingsStore.defaultMaxTokens,
-  defaultReasoningEffort: settingsStore.defaultReasoningEffort,
+  // defaultReasoningEffort: settingsStore.defaultReasoningEffort,
   // defaultBudgetTokens: settingsStore.defaultBudgetTokens,
   // defaultWebSearch: settingsStore.defaultWebSearch,
   openrouterModels: settingsStore.openrouterModels,
@@ -144,7 +144,7 @@ const openSettingsDialog = () => {
   tempSettings.defaultMaxTokens = settingsStore.defaultMaxTokens;
   tempSettings.defaultModel = settingsStore.defaultModel;
   tempSettings.openrouterModels = settingsStore.openrouterModels;
-  tempSettings.defaultReasoningEffort = settingsStore.defaultReasoningEffort;
+  // tempSettings.defaultReasoningEffort = settingsStore.defaultReasoningEffort;
   // tempSettings.defaultBudgetTokens = settingsStore.defaultBudgetTokens;
   // tempSettings.defaultWebSearch = settingsStore.defaultWebSearch;
   tempSettings.titleGenerationVendor = settingsStore.titleGenerationVendor;

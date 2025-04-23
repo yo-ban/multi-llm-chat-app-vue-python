@@ -1,103 +1,14 @@
 import { defineStore } from 'pinia';
 import { v4 as uuidv4 } from 'uuid';
-import localforage from 'localforage'; // Import default localforage for migration
 import type { APISettings } from '@/types/api';
-import { storageService, MIGRATION_V1_TO_V2_COMPLETE_KEY } from '@/services/storage/indexeddb-service';
+import { storageService } from '@/services/storage/indexeddb-service';
 import { conversationService } from '@/services/domain/conversation-service';
 import type { Message } from '@/types/messages';
 import { useSettingsStore } from '@/store/settings';
 import type { Conversation, ConversationState, ConversationFolder } from '@/types/conversation';
-import type { GlobalSettings } from '@/types/settings'; // Import for migration
-import type { UserDefinedPersona } from '@/types/personas'; // Import for migration
 
-// Define old keys used in the default store (for migration)
-const OLD_CONVERSATION_LIST_KEY = 'conversationList';
-const OLD_CONVERSATION_FOLDERS_KEY = 'conversationFolders';
-const OLD_USER_PERSONAS_KEY = 'userDefinedPersonas';
-// Global settings key didn't change fundamentally, but might be in default store
-const OLD_GLOBAL_SETTINGS_KEY = 'globalSettings'; 
-// Current conversation ID key also might be in default store
-const OLD_CURRENT_CONVERSATION_ID_KEY = 'currentConversationId';
-
-
-/**
- * One-time migration function from old storage format to new.
- * Reads from the default localforage store and writes to new dedicated stores.
- */
-async function runMigrationV1ToV2() {
-  console.log('Checking if migration v1 to v2 is needed...');
-  const migrationComplete = await storageService.getMigrationStatus(MIGRATION_V1_TO_V2_COMPLETE_KEY);
-
-  if (migrationComplete) {
-    console.log('Migration v1 to v2 already complete.');
-    return;
-  }
-
-  console.log('Starting storage migration v1 to v2...');
-
-  try {
-    // Use the default localforage instance to read old data
-    const oldLocalForage = localforage; 
-
-    // 1. Migrate Global Settings
-    const oldSettings = await oldLocalForage.getItem<GlobalSettings>(OLD_GLOBAL_SETTINGS_KEY);
-    if (oldSettings) {
-      console.log('Migrating global settings...');
-      await storageService.saveGlobalSettings(oldSettings);
-      // Optionally remove old key: await oldLocalForage.removeItem(OLD_GLOBAL_SETTINGS_KEY);
-    }
-
-    // 2. Migrate Personas
-    const oldPersonas = await oldLocalForage.getItem<UserDefinedPersona[]>(OLD_USER_PERSONAS_KEY);
-    if (Array.isArray(oldPersonas)) {
-      console.log(`Migrating ${oldPersonas.length} personas...`);
-      await Promise.all(oldPersonas.map(persona => storageService.savePersona(persona)));
-      // Optionally remove old key: await oldLocalForage.removeItem(OLD_USER_PERSONAS_KEY);
-    }
-
-    // 3. Migrate Folders
-    const oldFolders = await oldLocalForage.getItem<ConversationFolder[]>(OLD_CONVERSATION_FOLDERS_KEY);
-    if (Array.isArray(oldFolders)) {
-      console.log(`Migrating ${oldFolders.length} folders...`);
-      await Promise.all(oldFolders.map(folder => storageService.saveFolder(folder)));
-      // Optionally remove old key: await oldLocalForage.removeItem(OLD_CONVERSATION_FOLDERS_KEY);
-    }
-
-    // 4. Migrate Conversations (Meta and Messages)
-    const oldConversationList = await oldLocalForage.getItem<Conversation[]>(OLD_CONVERSATION_LIST_KEY);
-    if (Array.isArray(oldConversationList)) {
-      console.log(`Migrating ${oldConversationList.length} conversations (meta + messages)...`);
-      await Promise.all(oldConversationList.map(async (conv) => {
-        // Save metadata
-        await storageService.saveConversationMeta(conv);
-        // Try to load messages from old store (using convId as key)
-        const oldMessages = await oldLocalForage.getItem<Message[]>(conv.conversationId);
-        if (Array.isArray(oldMessages)) {
-          await storageService.saveConversationMessages(conv.conversationId, oldMessages);
-          // Optionally remove old message entry: await oldLocalForage.removeItem(conv.conversationId);
-        }
-      }));
-      // Optionally remove old list key: await oldLocalForage.removeItem(OLD_CONVERSATION_LIST_KEY);
-    }
-    
-    // 5. Migrate Current Conversation ID
-    const oldCurrentId = await oldLocalForage.getItem<string>(OLD_CURRENT_CONVERSATION_ID_KEY);
-    if (oldCurrentId) {
-        console.log('Migrating current conversation ID...');
-        await storageService.saveCurrentConversationId(oldCurrentId);
-        // Optionally remove old key: await oldLocalForage.removeItem(OLD_CURRENT_CONVERSATION_ID_KEY);
-    }
-
-    // Mark migration as complete
-    await storageService.setMigrationStatus(MIGRATION_V1_TO_V2_COMPLETE_KEY, true);
-    console.log('Storage migration v1 to v2 completed successfully!');
-
-  } catch (error) {
-    console.error('Error during storage migration v1 to v2:', error);
-    // Don't mark as complete if error occurs
-  }
-}
-
+// Remove old version migration logic. 
+// FYI: Commit 9871698
 
 export const useConversationStore = defineStore('conversation', {
   state: (): ConversationState => ({
@@ -107,8 +18,6 @@ export const useConversationStore = defineStore('conversation', {
   }),
   actions: {
     async initializeConversationStore() {
-      // Run migration logic first
-      await runMigrationV1ToV2(); 
 
       // Load data using new storage service methods
       this.conversationList = await storageService.getAllConversationMetas();

@@ -1,4 +1,4 @@
-import type { GlobalSettings, GlobalSettingsCreate } from '@/types/settings';
+import type { GlobalSettings } from '@/types/settings';
 
 // Base URL for the backend API (adjust if necessary)
 const API_BASE_URL = '/api'; 
@@ -55,22 +55,6 @@ class BackendStorageServiceImpl implements BackendStorageService {
     try {
       console.log('Saving settings to backend:', JSON.stringify(settings));
 
-      // バックエンドに送信するデータを作成 (SettingsCreate 形式)
-      const payload: GlobalSettingsCreate = {
-        // settings から apiKeys (boolean辞書) を除外し、changedApiKeys を apiKeys (string辞書) として設定
-        defaultTemperature: settings.defaultTemperature,
-        defaultMaxTokens: settings.defaultMaxTokens,
-        defaultVendor: settings.defaultVendor,
-        defaultModel: settings.defaultModel,
-        defaultReasoningEffort: settings.defaultReasoningEffort,
-        // defaultWebSearch: settings.defaultWebSearch,
-        openrouterModels: settings.openrouterModels,
-        titleGenerationVendor: settings.titleGenerationVendor,
-        titleGenerationModel: settings.titleGenerationModel,
-        apiKeys: settings.changedApiKeys // 変更されたキー(string)を渡す
-      };
-
-
       const response = await fetch(`${API_BASE_URL}/settings`, {
         method: 'PUT',
         headers: {
@@ -78,7 +62,16 @@ class BackendStorageServiceImpl implements BackendStorageService {
           // Add authentication headers here if/when implemented
           // 'Authorization': `Bearer ${getToken()}`
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          apiKeys: settings.changedApiKeys, // 変更されたキー(string)を渡す
+          defaultTemperature: settings.defaultTemperature,
+          defaultMaxTokens: settings.defaultMaxTokens,
+          defaultVendor: settings.defaultVendor,
+          defaultModel: settings.defaultModel,
+          openrouterModels: settings.openrouterModels,
+          titleGenerationVendor: settings.titleGenerationVendor,
+          titleGenerationModel: settings.titleGenerationModel,
+        }),
       });
 
       if (!response.ok) {

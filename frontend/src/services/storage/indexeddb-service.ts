@@ -1,12 +1,10 @@
 import localforage from 'localforage';
 import type { Message } from '@/types/messages';
 import type { Conversation, ConversationFolder } from '@/types/conversation';
-import type { GlobalSettings } from '@/types/settings';
 import type { UserDefinedPersona } from '@/types/personas';
 // import { MODELS } from '@/constants/models';
 
 // --- Create dedicated localforage instances for each store ---
-const settingsStore = localforage.createInstance({ name: 'chatAppDB', storeName: 'settings' });
 const personasStore = localforage.createInstance({ name: 'chatAppDB', storeName: 'personas' });
 const foldersStore = localforage.createInstance({ name: 'chatAppDB', storeName: 'folders' });
 const conversationsMetaStore = localforage.createInstance({ name: 'chatAppDB', storeName: 'conversationsMeta' });
@@ -14,8 +12,6 @@ const conversationMessagesStore = localforage.createInstance({ name: 'chatAppDB'
 const appStateStore = localforage.createInstance({ name: 'chatAppDB', storeName: 'appState' }); // For currentConversationId
 
 const CURRENT_CONVERSATION_ID_KEY = 'currentConversationId';
-const GLOBAL_SETTINGS_KEY = 'globalSettingsData';
-export const MIGRATION_V1_TO_V2_COMPLETE_KEY = 'migrationV1ToV2Complete'; // Export the key
 
 // Helper function to get all items from a store instance
 async function getAllItems<T>(store: LocalForage): Promise<T[]> {
@@ -35,9 +31,6 @@ async function getAllItems<T>(store: LocalForage): Promise<T[]> {
  * Updated StorageService Interface
  */
 export interface StorageService {
-  // Global Settings (using a fixed key)
-  getGlobalSettings(): Promise<GlobalSettings | null>;
-  saveGlobalSettings(settings: GlobalSettings): Promise<void>;
 
   // Personas (CRUD operations)
   getAllPersonas(): Promise<UserDefinedPersona[]>;
@@ -65,10 +58,6 @@ export interface StorageService {
   // Current Conversation ID
   getCurrentConversationId(): Promise<string | null>;
   saveCurrentConversationId(conversationId: string | null): Promise<void>; // Allow saving null
-
-  // Migration Status
-  getMigrationStatus(key: string): Promise<boolean>;
-  setMigrationStatus(key: string, status: boolean): Promise<void>;
 }
 
 /**
@@ -76,27 +65,6 @@ export interface StorageService {
  */
 class IndexedDBStorageService implements StorageService {
 
-  async getGlobalSettings(): Promise<GlobalSettings | null> {
-    try {
-      // Default settings logic should ideally be in the settings store, 
-      // this service should just load what's saved or null.
-      const settings = await settingsStore.getItem<GlobalSettings>(GLOBAL_SETTINGS_KEY);
-      return settings; // Return null if not found
-    } catch (error) {
-      console.error('Error getting global settings:', error);
-      return null;
-    }
-  }
-
-  async saveGlobalSettings(settings: GlobalSettings): Promise<void> {
-    try {
-      // Create a deep clone of the settings object
-      const settingsToSave = JSON.parse(JSON.stringify(settings));
-      await settingsStore.setItem(GLOBAL_SETTINGS_KEY, settingsToSave);
-    } catch (error) {
-      console.error('Error saving global settings:', error);
-    }
-  }
 
   async getAllPersonas(): Promise<UserDefinedPersona[]> {
     return getAllItems<UserDefinedPersona>(personasStore);
@@ -222,25 +190,6 @@ class IndexedDBStorageService implements StorageService {
     }
   }
 
-  // --- Migration Status Methods ---
-  async getMigrationStatus(key: string): Promise<boolean> {
-    try {
-      const status = await appStateStore.getItem<boolean>(key);
-      return status === true; // Return true only if explicitly set to true
-    } catch (error) {
-      console.error(`Error getting migration status for key ${key}:`, error);
-      return false; // Assume not migrated on error
-    }
-  }
-
-  async setMigrationStatus(key: string, status: boolean): Promise<void> {
-    try {
-      await appStateStore.setItem(key, status);
-    } catch (error) {
-      console.error(`Error setting migration status for key ${key}:`, error);
-      // Decide if we need to re-throw or handle this
-    }
-  }
 }
 
 // Singleton instance export

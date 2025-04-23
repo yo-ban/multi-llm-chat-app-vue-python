@@ -541,7 +541,7 @@ watch(
       if (model.supportsReasoning && model.reasoningParameters) {
         if (model.reasoningParameters.type === 'effort') {
           // If switching to an 'effort' type model
-          localSettings.value.reasoningEffort = model.reasoningParameters.effort || settingsStore.defaultReasoningEffort || 'medium';
+          localSettings.value.reasoningEffort = model.reasoningParameters.effort || 'medium';
           // Clear budgetTokens as it's not used by this model type
           localSettings.value.budgetTokens = undefined;
         } else if (model.reasoningParameters.type === 'budget') {
@@ -759,7 +759,7 @@ function onDialogModelChange() {
       if (model.supportsReasoning && model.reasoningParameters) {
         if (model.reasoningParameters.type === 'effort') {
           // If switching to an 'effort' type model
-          localSettings.value.reasoningEffort = model.reasoningParameters.effort || settingsStore.defaultReasoningEffort || 'medium';
+          localSettings.value.reasoningEffort = model.reasoningParameters.effort || 'medium';
           // Clear budgetTokens as it's not used by this model type
           localSettings.value.budgetTokens = undefined;
         } else if (model.reasoningParameters.type === 'budget') {
