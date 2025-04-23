@@ -4,9 +4,10 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from sqlalchemy.orm import Session
 from contextlib import asynccontextmanager # lifespanのために追加
 import os # 設定ファイルパスのために追加
+import json
 
 # 新しい構造からのインポート
-from app.infrastructure.database import get_db
+from app.infrastructure.database import get_db, SessionLocal
 from app.domain.settings.schemas import SettingsCreate, SettingsResponse
 # from app.domain.settings.repository import SettingsRepository # リポジトリはサービス内で使用
 from app.domain.messages.schemas import ChatRequest
@@ -20,6 +21,7 @@ from app.logger.logging_utils import get_logger, log_request_info, log_error, lo
 
 # --- PolyMCPClientのインポート ---
 from poly_mcp_client import PolyMCPClient
+from poly_mcp_client.models import McpServersConfig
 
 # 定数 (仮ユーザーID)
 TEMP_USER_ID = 1
@@ -34,26 +36,56 @@ mcp_client_manager = PolyMCPClient()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPIアプリケーションのライフサイクル管理"""
-    # アプリケーション起動時
     logger.info("FastAPI起動: MCPクライアントマネージャーを初期化・接続開始")
-    # 設定ファイルのパスを環境変数などから取得 (なければデフォルト)
-    config_path = os.getenv("MCP_CONFIG_PATH", "./app/mcp_servers.json")
-    # 設定ファイルが存在しない場合のデフォルト作成処理 (main実行時に移動)
-    if not os.path.exists(config_path):
-        logger.warning(f"{config_path} が見つかりません。空の設定で初期化します。")
-        # 実際のFastAPI環境では設定ファイルがない場合はエラーにするか、
-        # デプロイ時に用意するなどの運用が必要
-        await mcp_client_manager.initialize(config_data={"mcpServers": {}})
+
+    mcp_init_config = None
+    # データベースからアクティブなMCPサーバー設定を取得
+    db: Session = SessionLocal() # lifespan内では Depends(get_db) が使えないため、直接セッションを作成
+    settings_service = SettingsService(db, mcp_client_manager)
+    try:
+        # TEMP_USER_ID のアクティブな設定を取得
+        active_mcp_config = settings_service.get_active_mcp_servers_config(TEMP_USER_ID)
+
+        if active_mcp_config:
+            logger.info(f"データベースから {len(active_mcp_config)} 個のアクティブなMCPサーバー設定を読み込みました。")
+            # PolyMCPClient が期待する形式 {"mcpServers": {...}} に整形
+            # ServerConfig オブジェクトを辞書に変換する必要がある
+            mcp_init_config_data = {
+                name: config.model_dump() for name, config in active_mcp_config.items()
+            }
+            mcp_init_config = {"mcpServers": mcp_init_config_data}
+        else:
+            logger.info("データベースにアクティブなMCPサーバー設定が見つかりませんでした。MCPサーバーは起動しません。")
+            mcp_init_config = {"mcpServers": {}} # 空の設定で初期化
+
+    except Exception as e:
+        logger.error(f"データベースからのMCP設定読み込み中にエラーが発生しました: {e}", exc_info=True)
+        # エラーが発生した場合も、空の設定で初期化を試みる
+        mcp_init_config = {"mcpServers": {}}
+    finally:
+        db.close() # セッションを閉じる
+
+    # PolyMCPClient を初期化
+    if mcp_init_config is not None:
+        try:
+            # config_data を渡して初期化
+            await mcp_client_manager.initialize(config_data=mcp_init_config)
+            # 初期接続を待機 (タイムアウトを設定)
+            connection_results = await mcp_client_manager.wait_for_initial_connections(timeout=60.0)
+            logger.info(f"MCP初期接続試行完了: {connection_results}")
+        except Exception as e:
+            logger.error(f"PolyMCPClient の初期化または接続待機中にエラーが発生しました: {e}", exc_info=True)
+            # 初期化に失敗した場合でも、アプリケーションは起動させる（MCP機能は利用不可）
     else:
-        await mcp_client_manager.initialize(config_path=config_path)
-    
-    await mcp_client_manager.wait_for_initial_connections(timeout=360.0)
-    logger.info("MCPクライアントマネージャーの初期化処理完了。接続はバックグラウンドで進行。")
+        logger.error("MCP初期化設定の準備に失敗しました。MCPクライアントは初期化されません。")
+
+    logger.info("FastAPIの準備完了。")
     yield
     # アプリケーション終了時
     logger.info("FastAPI終了: MCP接続をクリーンアップ")
     await mcp_client_manager.shutdown()
     logger.info("MCPクリーンアップ完了。")
+
 
 # --- FastAPI アプリケーションインスタンス (lifespanを設定) ---
 app = FastAPI(lifespan=lifespan)
@@ -79,27 +111,48 @@ async def get_mcp_manager():
 
 # --- Settings Endpoints --- (Using temporary fixed user ID)
 @app.get("/api/settings", response_model=SettingsResponse)
-def read_settings(db: Session = Depends(get_db)):
+async def read_settings(
+    db: Session = Depends(get_db),
+    mcp_manager: PolyMCPClient = Depends(get_mcp_manager)
+):
     """指定されたユーザーIDの設定を取得する"""
-    settings_service = SettingsService(db)
-    return settings_service.get_settings_for_user(user_id=TEMP_USER_ID)
+
+    settings_service = SettingsService(db, mcp_manager)
+
+    return await settings_service.get_settings_for_user(user_id=TEMP_USER_ID)
 
 @app.put("/api/settings", response_model=SettingsResponse)
-def update_settings_endpoint(
+async def update_settings_endpoint(
     settings_data: SettingsCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    mcp_manager: PolyMCPClient = Depends(get_mcp_manager)
 ):
     """指定されたユーザーIDの設定を更新する"""
-    settings_service = SettingsService(db)
+    settings_service = SettingsService(db, mcp_manager)
+    try:
+        # サービス層が SettingsCreate を受け取り、内部で処理する
+        updated_settings_response = await settings_service.update_settings_for_user(
+            user_id=TEMP_USER_ID,
+            settings_data=settings_data
+        )
+        # サービス層が返した SettingsResponse を返す
+        return updated_settings_response
 
-    # サービス層が Dict[str, str] を受け取り、リポジトリで処理する
-    updated_settings_response = settings_service.update_settings_for_user(
-        user_id=TEMP_USER_ID,
-        settings_data=settings_data
-    )
-
-    # サービス層が返した SettingsResponse (apiKeys: Dict[str, bool]) を返す
-    return updated_settings_response
+    except ValueError as ve:
+        # SettingsCreate のバリデータからのエラーをハンドル
+        log_error(f"設定更新時のバリデーションエラー: {ve}")
+        # PydanticのValidationError起因の場合は詳細メッセージを含める
+        detail = str(ve)
+        if "Invalid MCP server configuration" in detail:
+            # エラーメッセージから詳細部分を抽出（より親切なエラー表示のため）
+            try:
+                detail = detail.split("Invalid MCP server configuration: ", 1)[1]
+            except IndexError:
+                pass # 抽出失敗時は元のメッセージのまま
+        raise HTTPException(status_code=422, detail=f"Invalid settings data: {detail}")
+    except Exception as e:
+        log_error(f"設定更新中に予期せぬエラーが発生: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error during settings update.")
 
 # --- /api/messages エンドポイント --- 
 
@@ -130,8 +183,8 @@ async def messages(
         await log_request_info(request)
 
         # 1. 設定サービスを使ってユーザー設定を取得 (主にキー設定状況の確認用)
-        settings_service = SettingsService(db)
-        user_settings = settings_service.get_settings_for_user(TEMP_USER_ID)
+        settings_service = SettingsService(db, mcp_manager)
+        user_settings = await settings_service.get_settings_for_user(TEMP_USER_ID) 
 
         # 2. リクエストからベンダー情報を取得
         vendor = chat_request.vendor
@@ -160,7 +213,7 @@ async def messages(
             )
             
         # 5. 取得したAPIキーを使ってChatHandlerを初期化
-        chat_handler = ChatHandler(api_key)
+        chat_handler = ChatHandler(api_key, settings_service)
         
         # 6. チャットリクエストを処理
         return await chat_handler.handle_chat_request(

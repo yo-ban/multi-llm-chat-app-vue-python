@@ -1,6 +1,10 @@
 from typing import Any, Dict, List, AsyncGenerator, Union
 import json
 import inspect
+from sqlalchemy.orm import Session # DBアクセス用
+from app.infrastructure.database import SessionLocal # DBセッション取得用
+from app.application.settings.service import SettingsService # 設定サービス用
+
 # Remove explicit tool imports
 from app.logger.logging_utils import get_logger, log_error, log_info, log_warning, log_debug
 # Import the dynamic tool discovery function

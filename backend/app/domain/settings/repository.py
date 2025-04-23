@@ -3,13 +3,16 @@
 
 ユーザー設定関連のデータアクセスロジックを提供
 """
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import json
 from sqlalchemy.orm import Session
+from pydantic import ValidationError
 from app.domain.settings.models import UserSettings
 from app.domain.user.repository import UserRepository
 from app.infrastructure.encryption import encrypt_data, decrypt_data
 
+# MCP設定のバリデーションと型定義のためインポート
+from poly_mcp_client.models import ServerConfig, McpServersConfig
 
 class SettingsRepository:
     """
@@ -51,6 +54,9 @@ class SettingsRepository:
         openrouter_models: list = None,
         title_generation_vendor: str = 'openai',
         title_generation_model: str = 'gpt-4o-mini',
+        mcp_servers_config: Optional[Dict[str, ServerConfig]] = None, # バリデーション済みの型を受け取る
+        disabled_mcp_servers: Optional[List[str]] = None,
+        disabled_mcp_tools: Optional[List[str]] = None,
     ) -> UserSettings:
         """
         ユーザー設定を作成または更新
@@ -67,7 +73,10 @@ class SettingsRepository:
             openrouter_models: OpenRouterモデルのリスト
             title_generation_vendor: タイトル生成ベンダー
             title_generation_model: タイトル生成モデル
-            
+            mcp_servers_config: バリデーション済みのMCPサーバー設定の辞書
+            disabled_mcp_servers: 無効なサーバーリスト
+            disabled_mcp_tools: 無効なツールリスト
+
         戻り値:
             作成または更新された設定オブジェクト
         """
@@ -75,7 +84,13 @@ class SettingsRepository:
             api_keys = {}
         if openrouter_models is None:
             openrouter_models = []
-            
+        if mcp_servers_config is None:
+            mcp_servers_config = {}
+        if disabled_mcp_servers is None:
+            disabled_mcp_servers = []
+        if disabled_mcp_tools is None:
+            disabled_mcp_tools = []
+
         # 既存の設定を取得
         settings = self.get_by_user_id(user_id)
 
@@ -103,6 +118,11 @@ class SettingsRepository:
         # マージされたキーを暗号化
         encrypted_api_keys = encrypt_data(json.dumps(updated_keys))
 
+        # --- MCPサーバー設定の暗号化 ---
+        # ServerConfig オブジェクトを JSON シリアライズ可能な辞書に変換
+        mcp_config_dict = {name: config.model_dump() for name, config in mcp_servers_config.items()}
+        encrypted_mcp_config = encrypt_data(json.dumps(mcp_config_dict))
+
         if settings:
             # 既存の設定を更新
             settings.api_keys_encrypted = encrypted_api_keys
@@ -115,6 +135,9 @@ class SettingsRepository:
             settings.openrouter_models = openrouter_models
             settings.title_generation_vendor = title_generation_vendor
             settings.title_generation_model = title_generation_model
+            settings.mcp_servers_config_encrypted = encrypted_mcp_config
+            settings.disabled_mcp_servers = disabled_mcp_servers
+            settings.disabled_mcp_tools = disabled_mcp_tools
         else:
             # ユーザーが存在することを確認
             user = self.user_repository.get_by_id(user_id)
@@ -133,7 +156,10 @@ class SettingsRepository:
                 default_web_search=default_web_search,
                 openrouter_models=openrouter_models,
                 title_generation_vendor=title_generation_vendor,
-                title_generation_model=title_generation_model
+                title_generation_model=title_generation_model,
+                mcp_servers_config_encrypted=encrypted_mcp_config,
+                disabled_mcp_servers=disabled_mcp_servers,
+                disabled_mcp_tools=disabled_mcp_tools
             )
             self.db.add(settings)
             
@@ -159,3 +185,28 @@ class SettingsRepository:
         except (json.JSONDecodeError, ValueError) as e:
             print(f"Error decrypting or parsing API keys: {e}")
             return {} 
+        
+    def decrypt_mcp_servers_config(self, settings: UserSettings) -> Dict[str, ServerConfig]:
+        """
+        暗号化されたMCPサーバー設定を復号化し、バリデーションする
+
+        引数:
+            settings: UserSettingsオブジェクト
+
+        戻り値:
+            バリデーション済みのMCPサーバー設定の辞書 (サーバー名 -> ServerConfig)
+            復号化またはバリデーションに失敗した場合は空の辞書
+        """
+        if not settings.mcp_servers_config_encrypted:
+            return {}
+
+        try:
+            decrypted_json_str = decrypt_data(settings.mcp_servers_config_encrypted)
+            config_dict = json.loads(decrypted_json_str)
+            # McpServersConfig を使って復号化後のデータをバリデーション
+            validated_config = McpServersConfig.model_validate(config_dict)
+            return validated_config.root
+        except (json.JSONDecodeError, ValueError, TypeError, ValidationError) as e: # TypeError, ValidationError を追加
+            print(f"Error decrypting or validating MCP server config: {e}")
+            # エラーが発生した場合は空の設定を返す
+            return {}

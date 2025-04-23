@@ -18,6 +18,9 @@ from google.genai.types import (
     ThinkingConfig,
 )
 
+from sqlalchemy.orm import Session # DBセッション用
+from app.application.settings.service import SettingsService # 設定サービス用
+
 from app.message_utils.response_generator import (
     gemini_stream_generator,
     gemini_non_stream_generator,
@@ -33,6 +36,7 @@ from app.message_utils.messages_preparer import (
 )
 
 from poly_mcp_client import PolyMCPClient
+from poly_mcp_client.models import CanonicalToolDefinition # 型ヒントのため
 
 from app.misc_utils.image_utils import upload_image_to_gemini
 from app.domain.messages.schemas import ChatRequest
@@ -40,14 +44,18 @@ from app.function_calling.definitions import (
     get_tool_definitions, 
     get_gemini_tool_definitions, 
     get_anthropic_tool_definitions, 
-    CanonicalToolDefinition
 )
 from app.function_calling.constants import TOOL_USE_INSTRUCTION
 from app.logger.logging_utils import log_info, log_error, log_warning
 
+# 定数 (仮ユーザーID)
+TEMP_USER_ID = 1
+
+
 class ChatHandler:
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, settings_service: SettingsService):
         self.api_key = api_key
+        self.settings_service = settings_service
         self.handlers = {
             'openai': self.handle_openai,
             'google': self.handle_gemini,
@@ -94,9 +102,11 @@ class ChatHandler:
         else:
             completion_args["temperature"] = temperature
 
-        if toolUse:
+        if toolUse and mcp_tools:
             completion_args["tools"] = get_tool_definitions(mcp_tools=mcp_tools)
             completion_args["tool_choice"] = "required"
+        elif toolUse:
+            log_warning("Tool use requested, but no MCP tools are available/enabled.")
 
         # If streaming is requested, try using stream mode.
         if stream:
@@ -199,13 +209,16 @@ class ChatHandler:
 
         response = None
 
-        if toolUse:
+        if toolUse and mcp_tools:
             params["tools"] = get_anthropic_tool_definitions(mcp_tools=mcp_tools)
             if "claude-3-7" in model:
                 params["betas"] = ["token-efficient-tools-2025-02-19"]
                 response = await anthropic.beta.messages.create(**params)
             else:
                 response = await anthropic.messages.create(**params)
+        elif toolUse:
+            log_warning("Tool use requested, but no MCP tools are available/enabled.")
+            response = await anthropic.messages.create(**params)
         else:
             response = await anthropic.messages.create(**params)
 
@@ -312,7 +325,7 @@ class ChatHandler:
                 "TEXT"
             ]
 
-        if toolUse:
+        if toolUse and mcp_tools:
             tool_config = ToolConfig(
                 function_calling_config=FunctionCallingConfig(mode='ANY')
             )
@@ -323,6 +336,8 @@ class ChatHandler:
             completion_args["tools"] = [get_gemini_tool_definitions(mcp_tools=mcp_tools)]
             completion_args["tool_config"] = tool_config
             completion_args["automatic_function_calling"] = automatic_function_calling
+        elif toolUse:
+            log_warning("Tool use requested, but no MCP tools are available/enabled.")
 
         generation_config = GenerateContentConfig(**completion_args)
 
@@ -455,9 +470,11 @@ class ChatHandler:
             # elif reasoning_parameter_type == "budget" and budget_tokens:
             #     completion_args["budget_tokens"] = budget_tokens
 
-        if toolUse:
+        if toolUse and mcp_tools:
             completion_args["tools"] = get_tool_definitions(mcp_tools=mcp_tools)
             completion_args["tool_choice"] = "required"
+        elif toolUse:
+            log_warning("Tool use requested, but no MCP tools are available/enabled.")
 
         # If streaming is requested, try using stream mode.
         if stream:
@@ -563,9 +580,11 @@ class ChatHandler:
         if is_reasoning_supported and reasoning_effort:
             completion_args["reasoning_effort"] = reasoning_effort
 
-        if toolUse:
+        if toolUse and mcp_tools:
             completion_args["tools"] = get_tool_definitions(mcp_tools=mcp_tools)
             completion_args["tool_choice"] = "required"
+        elif toolUse:
+            log_warning("Tool use requested, but no MCP tools are available/enabled.")
 
         response = await openrouter.chat.completions.create(**completion_args)
 
@@ -624,13 +643,51 @@ class ChatHandler:
         try:
             messages = await prepare_api_messages(chat_request.messages, multimodal=chat_request.multimodal)
 
-            mcp_tools: Optional[List[CanonicalToolDefinition]] = None
-            if chat_request.toolUse: # toolUse フラグをMCPツール利用のトリガーとする
-                log_info("ToolUse enabled, fetching MCP tools...")
-                mcp_tools = await mcp_manager.get_available_tools(vendor="canonical")
-                log_info(f"Fetched {len(mcp_tools)} MCP tools.")
-                system = f"{chat_request.system}\n\n{TOOL_USE_INSTRUCTION}"
+            all_mcp_tools: Optional[List[CanonicalToolDefinition]] = None
+            filtered_mcp_tools: Optional[List[CanonicalToolDefinition]] = None
+            system = chat_request.system # デフォルトのシステムプロンプト
+
+
+            if chat_request.toolUse:
+                log_info("ToolUse enabled, fetching available MCP tools...")
+                # まず、接続されているサーバーから全てのツールを取得 (ベンダー形式変換前)
+                try:
+                    # get_available_tools は内部で canonical 形式に変換してくれる
+                    all_mcp_tools = await mcp_manager.get_available_tools(vendor="canonical")
+                    log_info(f"Fetched {len(all_mcp_tools)} total MCP tools.")
+
+                    # DBから無効なツールリストを取得
+                    disabled_tools = self.settings_service.get_disabled_mcp_tools(TEMP_USER_ID)
+                    disabled_tools_set = set(disabled_tools) # 高速なルックアップのためセットに変換
+
+                    # 無効なツールを除外してフィルタリング
+                    if all_mcp_tools:
+                        filtered_mcp_tools = [
+                            tool for tool in all_mcp_tools
+                            if tool["name"] not in disabled_tools_set
+                        ]
+                        log_info(f"Enabled MCP tools after filtering: {len(filtered_mcp_tools)}")
+                    else:
+                        filtered_mcp_tools = []
+                        log_info("No MCP tools available from connected servers.")
+
+                    # ツールを使う場合のシステムプロンプトを追加
+                    if filtered_mcp_tools: # 有効なツールがある場合のみ指示を追加
+                        system = f"{chat_request.system}\n\n{TOOL_USE_INSTRUCTION}"
+                    else:
+                        log_warning("Tool use requested, but no MCP tools are available/enabled after filtering.")
+                        # ツールがない場合は TOOL_USE_INSTRUCTION を追加しない
+                        system = chat_request.system
+
+                except Exception as e:
+                    log_error(f"Error fetching or filtering MCP tools: {e}", exc_info=True)
+                    # ツール取得/フィルタリングエラーの場合、ツールなしで続行
+                    filtered_mcp_tools = None
+                    system = chat_request.system # エラー時は通常のシステムプロンプト
+
             else:
+                # toolUse が False の場合はツールを取得しない
+                filtered_mcp_tools = None
                 system = chat_request.system
             
             handler = self.handlers.get(vendor)
@@ -652,7 +709,7 @@ class ChatHandler:
                 budget_tokens=chat_request.budgetTokens,
                 image_generation=chat_request.imageGeneration,
                 mcp_manager=mcp_manager, # MCP Manager を渡す
-                mcp_tools=mcp_tools   # MCP ツール定義を渡す
+                mcp_tools=filtered_mcp_tools   # MCP ツール定義を渡す
             )
 
         except Exception as e:

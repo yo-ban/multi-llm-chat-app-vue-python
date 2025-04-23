@@ -3,9 +3,10 @@
 
 Pydanticを使用した設定関連のデータ検証とシリアライズモデル
 """
-from pydantic import BaseModel, Field
-from typing import Dict, List, Optional, Any
+from pydantic import BaseModel, Field, ValidationError, field_validator
+from typing import Dict, List, Optional, Any, TYPE_CHECKING
 
+from poly_mcp_client.models import ServerConfig, McpServersConfig, CanonicalToolDefinition
 
 class SettingsBase(BaseModel):
     """
@@ -24,11 +25,18 @@ class SettingsBase(BaseModel):
     openrouter_models: List[Dict[str, Any]] = Field(default_factory=list, alias="openrouterModels")
     title_generation_vendor: Optional[str] = Field('openai', alias="titleGenerationVendor")
     title_generation_model: Optional[str] = Field('gpt-4o-mini', alias="titleGenerationModel")
+    # MCPサーバー設定 (レスポンスではバリデーション済みのものを返す)
+    mcp_servers_config: Dict[str, ServerConfig] = Field(default_factory=dict, alias="mcpServersConfig")
+    # 無効なMCPサーバー名のリスト
+    disabled_mcp_servers: List[str] = Field(default_factory=list, alias="disabledMcpServers")
+    # 無効なMCPツール名のリスト
+    disabled_mcp_tools: List[str] = Field(default_factory=list, alias="disabledMcpTools")
 
     class Config:
         populate_by_name = True  # snake_caseとcamelCaseの両方を許可
         from_attributes = True   # SQLAlchemyモデルからの変換を許可
-
+        # ServerConfig のような外部ライブラリの型を許容する
+        arbitrary_types_allowed = True
 
 class SettingsCreate(BaseModel):
     """
@@ -46,6 +54,27 @@ class SettingsCreate(BaseModel):
     openrouter_models: List[Dict[str, Any]] = Field(default_factory=list, alias="openrouterModels")
     title_generation_vendor: Optional[str] = Field('openai', alias="titleGenerationVendor")
     title_generation_model: Optional[str] = Field('gpt-4o-mini', alias="titleGenerationModel")
+    # フロントエンドからは Dict[str, Any] で受け取る可能性があるため、Anyで受け取りバリデーションする
+    mcp_servers_config: Dict[str, Any] = Field(default_factory=dict, alias="mcpServersConfig")
+    disabled_mcp_servers: List[str] = Field(default_factory=list, alias="disabledMcpServers")
+    disabled_mcp_tools: List[str] = Field(default_factory=list, alias="disabledMcpTools")
+
+    # バリデータ: mcp_servers_config を ServerConfig に変換・検証
+    @field_validator('mcp_servers_config', mode='before')
+    def validate_mcp_servers_config(cls, v):
+        if not isinstance(v, dict):
+            raise ValueError("mcpServersConfig must be a dictionary")
+        try:
+            # McpServersConfig は RootModel なので、辞書全体を渡す
+            validated_config = McpServersConfig.model_validate(v)
+            # バリデーション後のモデルの辞書を返す (後の処理で使いやすいように)
+            return validated_config.root
+        except ValidationError as e:
+            # PydanticのValidationErrorをFastAPIが処理できるようにValueErrorに変換
+            raise ValueError(f"Invalid MCP server configuration: {e}")
+        except Exception as e:
+            # 予期せぬエラー
+            raise ValueError(f"An unexpected error occurred during MCP server config validation: {e}")
 
     class Config:
         populate_by_name = True
@@ -54,11 +83,15 @@ class SettingsCreate(BaseModel):
 class SettingsResponse(SettingsBase):
     """
     設定レスポンス用スキーマ
-    
-    クライアントへのレスポンスとして使用されるスキーマ
+    クライアントへのレスポンスとして使用されるスキーマ。
+    利用可能なMCPツール定義も含む。
     """
+    # 利用可能な (接続中のサーバーから取得した) MCP ツール定義のリスト
+    available_mcp_tools: List[CanonicalToolDefinition] = Field(default_factory=list, alias="availableMcpTools")
+
     class Config:
         from_attributes = True  # SQLAlchemyモデルからの変換を許可
         populate_by_name = True  # snake_caseとcamelCaseの両方を許可
+        arbitrary_types_allowed = True # ServerConfig を許容
         json_schema_extra = {"example": {}}
         alias_generator = lambda field_name: ''.join(word.capitalize() if i else word for i, word in enumerate(field_name.split('_'))) 

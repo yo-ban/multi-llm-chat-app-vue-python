@@ -12,19 +12,21 @@ from app.function_calling.tools.web_search_tool import web_search
 from app.function_calling.tools.web_browsing_tool import web_browsing
 from app.function_calling.tools.request_clarification_tool import request_clarification
 
+from poly_mcp_client.models import CanonicalToolDefinition # 型ヒントのため
+
 # Path to the tools directory
 TOOLS_DIR = os.path.dirname(__file__) + '/tools'
 
-class CanonicalToolParameter(TypedDict):
-    type: str
-    description: Optional[str]
-    items: Optional[Dict[str, str]] # type を持つ辞書
+# class CanonicalToolParameter(TypedDict):
+#     type: str
+#     description: Optional[str]
+#     items: Optional[Dict[str, str]] # type を持つ辞書
 
-class CanonicalToolDefinition(TypedDict):
-    name: str
-    description: Optional[str]
-    parameters: Dict[str, CanonicalToolParameter]
-    required: List[str]
+# class CanonicalToolDefinition(TypedDict):
+#     name: str
+#     description: Optional[str]
+#     parameters: Dict[str, CanonicalToolParameter]
+#     required: List[str]
 
 @lru_cache(maxsize=1) # Cache the result since directory scanning can be slow
 def get_available_tools() -> List[Callable]:

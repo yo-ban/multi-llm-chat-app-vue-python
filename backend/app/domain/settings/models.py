@@ -25,5 +25,11 @@ class UserSettings(Base):
     title_generation_vendor = Column(String, default='openai')
     title_generation_model = Column(String, default='gpt-4o-mini')
 
+    # MCPサーバー設定 (サーバー名 -> 設定 の辞書をJSON文字列化して暗号化)
+    mcp_servers_config_encrypted = Column(LargeBinary, nullable=True)
+    # 無効なMCPサーバー名のリスト
+    disabled_mcp_servers = Column(JSON, nullable=True, default=list)
+    # 無効なMCPツール名のリスト (例: ["mcp-server1-toolA", "mcp-server2-toolB"])
+    disabled_mcp_tools = Column(JSON, nullable=True, default=list)
     # リレーションシップ
     user = relationship("User", back_populates="settings") 
