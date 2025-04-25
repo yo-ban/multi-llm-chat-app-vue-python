@@ -84,10 +84,10 @@ def generate_tool_definition(func: Callable) -> Dict[str, Any]:
         stripped_line = line.strip()
         if stripped_line.startswith(section_headers):
             break
-        description_lines.append(line)
+        description_lines.append(line.strip())
 
     # Join description lines, removing leading/trailing whitespace and redundant internal whitespace
-    description = " ".join("\n".join(description_lines).strip().split())
+    description = "\n".join(description_lines).strip()
 
     # Get function signature
     sig = inspect.signature(func)
@@ -270,19 +270,19 @@ def convert_tool_definition_for_vendor(tool_def: Dict[str, Any], vendor: str) ->
         }
 
 @overload
-def get_tool_definitions(without_human_fallback: bool = False, vendor: Optional[str] = None, mcp_tools: None = None) -> List[Dict[str, Any]]: ...
+def get_tool_definitions(without_human_fallback: bool = False, vendor: Optional[str] = None, canonical_tools: None = None) -> List[Dict[str, Any]]: ...
 
 @overload
-def get_tool_definitions(without_human_fallback: bool = False, vendor: Literal["gemini"] = "gemini", mcp_tools: Optional[List[CanonicalToolDefinition]] = None) -> types.Tool: ...
+def get_tool_definitions(without_human_fallback: bool = False, vendor: Literal["gemini"] = "gemini", canonical_tools: Optional[List[CanonicalToolDefinition]] = None) -> types.Tool: ...
 
 @overload
-def get_tool_definitions(without_human_fallback: bool = False, vendor: str = ..., mcp_tools: Optional[List[CanonicalToolDefinition]] = None) -> List[Dict[str, Any]]: ...
+def get_tool_definitions(without_human_fallback: bool = False, vendor: str = ..., canonical_tools: Optional[List[CanonicalToolDefinition]] = None) -> List[Dict[str, Any]]: ...
 
 
 def get_tool_definitions(
         without_human_fallback: bool = False, 
         vendor: Optional[str] = None,
-        mcp_tools: Optional[List[CanonicalToolDefinition]] = None
+        canonical_tools: Optional[List[CanonicalToolDefinition]] = None
 ) -> Union[List[Dict[str, Any]], types.Tool]:
     """
     Get all function definitions for function calling.
@@ -291,30 +291,24 @@ def get_tool_definitions(
     Args:
         without_human_fallback: Whether to exclude the request_clarification tool
         vendor: The vendor name (openai, anthropic, gemini) to format the definitions for
-        mcp_tools: Optional list of canonical tool definitions from MCP servers
+        canonical_tools: Optional list of canonical tool definitions
 
     Returns:
         Union[List[Dict[str, Any]], types.Tool]: Tool definitions in the requested format
     """
     # 1. Get internal tool functions
-    internal_tool_functions = get_available_tools()
+    # internal_tool_functions = get_available_tools()
 
-    # 2. Filter internal tools if needed
+    # 2. Generate canonical definitions for internal tools
+    canonical_defs: List[CanonicalToolDefinition] = []
+
+    # 3. Filter internal tools if needed
     if without_human_fallback:
-        internal_tool_functions = [f for f in internal_tool_functions if f.__name__ != "request_clarification"]
+        canonical_defs = [f for f in canonical_tools if f.__name__ != "request_clarification"]
+    else:
+        canonical_defs = canonical_tools
 
-    # 3. Generate canonical definitions for internal tools
-    canonical_defs: List[CanonicalToolDefinition] = [generate_tool_definition(func) for func in internal_tool_functions]
-
-    # 4. Merge with provided MCP tools (if any)
-    if mcp_tools:
-        # Make sure MCP tools don't have the request_clarification name if filtering
-        filtered_mcp_tools = mcp_tools
-        if without_human_fallback:
-            filtered_mcp_tools = [t for t in mcp_tools if not t['name'].endswith('/request_clarification')] # server_name/tool_name を想定
-        canonical_defs.extend(filtered_mcp_tools)
-
-    # 5. Convert definitions to the target vendor format
+    # 4. Convert definitions to the target vendor format
     target_vendor = vendor or "openai" # Default to OpenAI if vendor is None
 
     if target_vendor == "gemini":
@@ -328,28 +322,28 @@ def get_tool_definitions(
         # Ensure all items are dicts (Gemini returns types.FunctionDeclaration)
         return [d for d in vendor_defs if isinstance(d, dict)]
 
-def get_gemini_tool_definitions(without_human_fallback: bool = False, mcp_tools: Optional[List[CanonicalToolDefinition]] = None) -> types.Tool:
+def get_gemini_tool_definitions(without_human_fallback: bool = False, canonical_tools: Optional[List[CanonicalToolDefinition]] = None) -> types.Tool:
     """
     Get all function definitions for Gemini API function calling.
 
     Args:
         without_human_fallback: Whether to exclude the need_ask_human tool
-        mcp_tools: Optional list of canonical tool definitions from MCP servers
+        canonical_tools: Optional list of canonical tool definitions
 
     Returns:
         types.Tool: A list of tool definitions in Gemini API format
     """
-    return get_tool_definitions(without_human_fallback, vendor="gemini", mcp_tools=mcp_tools)
+    return get_tool_definitions(without_human_fallback, vendor="gemini", canonical_tools=canonical_tools)
 
-def get_anthropic_tool_definitions(without_human_fallback: bool = False, mcp_tools: Optional[List[CanonicalToolDefinition]] = None) -> List[Dict[str, Any]]:
+def get_anthropic_tool_definitions(without_human_fallback: bool = False, canonical_tools: Optional[List[CanonicalToolDefinition]] = None) -> List[Dict[str, Any]]:
     """
     Get all function definitions for Anthropic Claude API function calling.
 
     Args:
         without_human_fallback: Whether to exclude the need_ask_human tool
-        mcp_tools: Optional list of canonical tool definitions from MCP servers
+        canonical_tools: Optional list of canonical tool definitions
 
     Returns:
         List[Dict[str, Any]]: A list of tool definitions in Anthropic Claude API format
     """
-    return get_tool_definitions(without_human_fallback, vendor="anthropic", mcp_tools=mcp_tools) 
+    return get_tool_definitions(without_human_fallback, vendor="anthropic", canonical_tools=canonical_tools) 

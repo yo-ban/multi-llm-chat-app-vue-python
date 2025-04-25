@@ -3,7 +3,7 @@ from openai import AsyncOpenAI
 from anthropic import AsyncAnthropic
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
-import json
+import base64
 from google import genai
 from google.genai.types import (
     ToolConfig,
@@ -44,6 +44,8 @@ from app.function_calling.definitions import (
     get_tool_definitions, 
     get_gemini_tool_definitions, 
     get_anthropic_tool_definitions, 
+    get_available_tools as get_builtin_tool_functions, # built-in 関数取得用
+    generate_tool_definition as generate_builtin_tool_definition # built-in 定義生成用
 )
 from app.function_calling.constants import TOOL_USE_INSTRUCTION
 from app.logger.logging_utils import log_info, log_error, log_warning
@@ -73,12 +75,13 @@ class ChatHandler:
         stream: bool,
         system: str,
         mcp_manager: PolyMCPClient, # MCP Managerを追加
-        mcp_tools: Optional[List[CanonicalToolDefinition]] = None, # MCPツール定義を追加
+        enabled_tools: Optional[List[CanonicalToolDefinition]] = None, # MCPツール定義を追加
         toolUse: bool = False,        
         reasoning_effort: Optional[str] = None,
         is_reasoning_supported: bool = False,
         reasoning_parameter_type: Optional[str] = None,
         budget_tokens: Optional[int] = None,
+        multimodal: bool = False,
         image_generation: bool = False
     ) -> Any:
         """Handle OpenAI API requests with optional function calling.
@@ -102,8 +105,8 @@ class ChatHandler:
         else:
             completion_args["temperature"] = temperature
 
-        if toolUse and mcp_tools:
-            completion_args["tools"] = get_tool_definitions(mcp_tools=mcp_tools)
+        if toolUse and enabled_tools:
+            completion_args["tools"] = get_tool_definitions(canonical_tools=enabled_tools)
             completion_args["tool_choice"] = "required"
         elif toolUse:
             log_warning("Tool use requested, but no MCP tools are available/enabled.")
@@ -119,8 +122,9 @@ class ChatHandler:
                         openai_client=openai,
                         openai_messages=openai_messages,
                         completion_args=completion_args,
+                        multimodal=multimodal,
                         mcp_manager=mcp_manager,
-                        mcp_tools=mcp_tools
+                        enabled_tools=enabled_tools
                     ),
                     media_type="text/event-stream"
                 )
@@ -136,8 +140,9 @@ class ChatHandler:
                             openai_client=openai, 
                             completion_args=completion_args, 
                             openai_messages=openai_messages,
+                            multimodal=multimodal,
                             mcp_manager=mcp_manager,
-                            mcp_tools=mcp_tools
+                            enabled_tools=enabled_tools
                         ),
                         media_type="text/event-stream"
                     )
@@ -152,8 +157,9 @@ class ChatHandler:
                         openai_client=openai,
                         completion_args=completion_args,
                         openai_messages=openai_messages,
+                        multimodal=multimodal,
                         mcp_manager=mcp_manager,
-                        mcp_tools=mcp_tools
+                        enabled_tools=enabled_tools
                     ),
                     media_type="text/event-stream"
                 )
@@ -170,12 +176,13 @@ class ChatHandler:
         stream: bool,
         system: str,
         mcp_manager: PolyMCPClient, # MCP Managerを追加
-        mcp_tools: Optional[List[CanonicalToolDefinition]] = None, # MCPツール定義を追加
+        enabled_tools: Optional[List[CanonicalToolDefinition]] = None, # MCPツール定義を追加
         toolUse: bool = False,
         reasoning_effort: Optional[str] = None,
         is_reasoning_supported: bool = False,
         reasoning_parameter_type: Optional[str] = None,
         budget_tokens: Optional[int] = None,
+        multimodal: bool = False,
         image_generation: bool = False
     ) -> Any:
         """Handle Anthropic API requests"""
@@ -209,8 +216,8 @@ class ChatHandler:
 
         response = None
 
-        if toolUse and mcp_tools:
-            params["tools"] = get_anthropic_tool_definitions(mcp_tools=mcp_tools)
+        if toolUse and enabled_tools:
+            params["tools"] = get_anthropic_tool_definitions(canonical_tools=enabled_tools)
             if "claude-3-7" in model:
                 params["betas"] = ["token-efficient-tools-2025-02-19"]
                 response = await anthropic.beta.messages.create(**params)
@@ -231,7 +238,8 @@ class ChatHandler:
                         messages=anthropic_messages,
                         params=params,
                         mcp_manager=mcp_manager,
-                        mcp_tools=mcp_tools
+                        enabled_tools=enabled_tools,
+                        multimodal=multimodal
                     ),
                     media_type="text/event-stream"
                 )
@@ -247,7 +255,8 @@ class ChatHandler:
                         params=params,
                         messages=anthropic_messages,
                         mcp_manager=mcp_manager,
-                        mcp_tools=mcp_tools
+                        enabled_tools=enabled_tools,
+                        multimodal=multimodal
                     ),
                     media_type="text/event-stream"
                 )
@@ -264,12 +273,13 @@ class ChatHandler:
         stream: bool,
         system: str,
         mcp_manager: PolyMCPClient, # MCP Managerを追加
-        mcp_tools: Optional[List[CanonicalToolDefinition]] = None, # MCPツール定義を追加
+        enabled_tools: Optional[List[CanonicalToolDefinition]] = None, # MCPツール定義を追加
         toolUse: bool = False,
         reasoning_effort: Optional[str] = None,
         is_reasoning_supported: bool = False,
         reasoning_parameter_type: Optional[str] = None,
         budget_tokens: Optional[int] = None,
+        multimodal: bool = False,
         image_generation: bool = False
     ) -> Any:
         """Handle Gemini API requests using the new client"""
@@ -325,7 +335,7 @@ class ChatHandler:
                 "TEXT"
             ]
 
-        if toolUse and mcp_tools:
+        if toolUse and enabled_tools:
             tool_config = ToolConfig(
                 function_calling_config=FunctionCallingConfig(mode='ANY')
             )
@@ -333,7 +343,7 @@ class ChatHandler:
                 disable=True,
                 ignore_call_history=True
             )
-            completion_args["tools"] = [get_gemini_tool_definitions(mcp_tools=mcp_tools)]
+            completion_args["tools"] = [get_gemini_tool_definitions(canonical_tools=enabled_tools)]
             completion_args["tool_config"] = tool_config
             completion_args["automatic_function_calling"] = automatic_function_calling
         elif toolUse:
@@ -349,12 +359,33 @@ class ChatHandler:
             role = "model" if message["role"] == "assistant" else message["role"]
             for content in message["content"]:
                 if content["type"] == "image":
-                    uploaded_image = await upload_image_to_gemini(
-                        content["source"]["data"],
-                        content["source"]["media_type"]
-                    )
-                    parts.append(Part.from_uri(file_uri=uploaded_image.uri, mime_type=content["source"]["media_type"]))
-                    images.append(uploaded_image)
+                    # Base64エンコードされた文字列を取得
+                    base64_data_string = content["source"]["data"]
+                    decoded_data = base64.b64decode(base64_data_string)
+                    mime_type = content["source"]["media_type"]
+                    
+                    # sizeが20MB未満かどうか判定
+                    if len(decoded_data) > 20 * 1024 * 1024:
+                        log_info("Uploading image via Files API")
+                        uploaded_image = await upload_image_to_gemini(
+                            decoded_data,
+                            mime_type
+                        )
+                        parts.append(
+                            Part.from_uri(
+                                file_uri=uploaded_image.uri, 
+                                mime_type=uploaded_image.mime_type
+                            )
+                        )
+                        images.append(uploaded_image)
+                    else:
+                        parts.append(
+                            Part.from_bytes(
+                                data=decoded_data,
+                                mime_type=mime_type
+                            )
+                        )
+
                 if content["type"] == "text":
                     parts.append(Part.from_text(text=content["text"]))
             history.append(Content(parts=parts, role=role))
@@ -366,12 +397,31 @@ class ChatHandler:
             if content["type"] == "text":
                 latest_parts.append(Part.from_text(text=content["text"]))
             if content["type"] == "image":
-                uploaded_image = await upload_image_to_gemini(
-                    content["source"]["data"],
-                    content["source"]["media_type"]
-                )
-                latest_parts.append(Part.from_uri(file_uri=uploaded_image.uri, mime_type=content["source"]["media_type"]))
-                images.append(uploaded_image)
+                # Base64エンコードされた文字列を取得
+                base64_data_string = content["source"]["data"]
+                decoded_data = base64.b64decode(base64_data_string)
+                mime_type = content["source"]["media_type"]
+                
+                # sizeが20MB未満かどうか判定
+                if len(decoded_data) > 20 * 1024 * 1024:
+                    uploaded_image = await upload_image_to_gemini(
+                        decoded_data,
+                        mime_type
+                    )
+                    latest_parts.append(
+                        Part.from_uri(
+                            file_uri=uploaded_image.uri, 
+                            mime_type=uploaded_image.mime_type
+                        )
+                    )
+                    images.append(uploaded_image)
+                else:
+                    latest_parts.append(
+                        Part.from_bytes(
+                            data=decoded_data,
+                            mime_type=mime_type
+                        )
+                    )
 
         latest_content = Content(parts=latest_parts, role="user")
 
@@ -396,7 +446,8 @@ class ChatHandler:
                         completion_args=completion_args,
                         images=images,
                         mcp_manager=mcp_manager,
-                        mcp_tools=mcp_tools
+                        enabled_tools=enabled_tools,
+                        multimodal=multimodal
                     ),
                     media_type="text/event-stream"
                 )
@@ -420,7 +471,8 @@ class ChatHandler:
                         completion_args=completion_args,
                         images=images,
                         mcp_manager=mcp_manager,
-                        mcp_tools=mcp_tools
+                        enabled_tools=enabled_tools,
+                        multimodal=multimodal
                     ),
                     media_type="text/event-stream"
                 )
@@ -437,12 +489,13 @@ class ChatHandler:
         stream: bool,
         system: str,
         mcp_manager: PolyMCPClient, # MCP Managerを追加
-        mcp_tools: Optional[List[CanonicalToolDefinition]] = None, # MCPツール定義を追加
+        enabled_tools: Optional[List[CanonicalToolDefinition]] = None, # MCPツール定義を追加
         toolUse: bool = False,
         reasoning_effort: Optional[str] = None,
         is_reasoning_supported: bool = False,
         reasoning_parameter_type: Optional[str] = None,
         budget_tokens: Optional[int] = None,
+        multimodal: bool = False,
         image_generation: bool = False
     ) -> Any:
         """Handle XAI API requests with optional function calling.
@@ -470,8 +523,8 @@ class ChatHandler:
             # elif reasoning_parameter_type == "budget" and budget_tokens:
             #     completion_args["budget_tokens"] = budget_tokens
 
-        if toolUse and mcp_tools:
-            completion_args["tools"] = get_tool_definitions(mcp_tools=mcp_tools)
+        if toolUse and enabled_tools:
+            completion_args["tools"] = get_tool_definitions(canonical_tools=enabled_tools)
             completion_args["tool_choice"] = "required"
         elif toolUse:
             log_warning("Tool use requested, but no MCP tools are available/enabled.")
@@ -488,7 +541,8 @@ class ChatHandler:
                         openai_messages=xai_messages,
                         completion_args=completion_args,
                         mcp_manager=mcp_manager,
-                        mcp_tools=mcp_tools
+                        enabled_tools=enabled_tools,
+                        multimodal=multimodal
                     ),
                     media_type="text/event-stream"
                 )
@@ -505,7 +559,8 @@ class ChatHandler:
                             completion_args=completion_args, 
                             openai_messages=xai_messages,
                             mcp_manager=mcp_manager,
-                            mcp_tools=mcp_tools
+                            enabled_tools=enabled_tools,
+                            multimodal=multimodal
                         ),
                         media_type="text/event-stream"
                     )
@@ -522,7 +577,8 @@ class ChatHandler:
                         completion_args=completion_args, 
                         openai_messages=xai_messages,
                         mcp_manager=mcp_manager,
-                        mcp_tools=mcp_tools
+                        enabled_tools=enabled_tools,
+                        multimodal=multimodal
                     ),
                     media_type="text/event-stream"
                 )
@@ -539,12 +595,13 @@ class ChatHandler:
         stream: bool,
         system: str,
         mcp_manager: PolyMCPClient, # MCP Managerを追加
-        mcp_tools: Optional[List[CanonicalToolDefinition]] = None, # MCPツール定義を追加
+        enabled_tools: Optional[List[CanonicalToolDefinition]] = None, # MCPツール定義を追加
         toolUse: bool = False,
         reasoning_effort: Optional[str] = None,
         is_reasoning_supported: bool = False,
         reasoning_parameter_type: Optional[str] = None,
         budget_tokens: Optional[int] = None,
+        multimodal: bool = False,
         image_generation: bool = False
     ) -> Any:
         """Handle OpenRouter API requests"""
@@ -580,8 +637,8 @@ class ChatHandler:
         if is_reasoning_supported and reasoning_effort:
             completion_args["reasoning_effort"] = reasoning_effort
 
-        if toolUse and mcp_tools:
-            completion_args["tools"] = get_tool_definitions(mcp_tools=mcp_tools)
+        if toolUse and enabled_tools:
+            completion_args["tools"] = get_tool_definitions(canonical_tools=enabled_tools)
             completion_args["tool_choice"] = "required"
         elif toolUse:
             log_warning("Tool use requested, but no MCP tools are available/enabled.")
@@ -598,7 +655,8 @@ class ChatHandler:
                         openai_messages=openrouter_messages,
                         completion_args=completion_args,
                         mcp_manager=mcp_manager,
-                        mcp_tools=mcp_tools
+                        enabled_tools=enabled_tools,
+                        multimodal=multimodal
                     ),
                     media_type="text/event-stream"
                 )
@@ -613,7 +671,8 @@ class ChatHandler:
                         completion_args=completion_args,
                         openai_messages=openrouter_messages,
                         mcp_manager=mcp_manager,
-                        mcp_tools=mcp_tools
+                        enabled_tools=enabled_tools,
+                        multimodal=multimodal
                     ),
                     media_type="text/event-stream"
                 ) 
@@ -643,51 +702,64 @@ class ChatHandler:
         try:
             messages = await prepare_api_messages(chat_request.messages, multimodal=chat_request.multimodal)
 
-            all_mcp_tools: Optional[List[CanonicalToolDefinition]] = None
-            filtered_mcp_tools: Optional[List[CanonicalToolDefinition]] = None
+            all_canonical_tools: List[CanonicalToolDefinition] = [] # 全てのツール (built-in + MCP)
+            filtered_canonical_tools: Optional[List[CanonicalToolDefinition]] = None # フィルタリング後の有効なツール
             system = chat_request.system # デフォルトのシステムプロンプト
 
 
             if chat_request.toolUse:
-                log_info("ToolUse enabled, fetching available MCP tools...")
-                # まず、接続されているサーバーから全てのツールを取得 (ベンダー形式変換前)
+                log_info("ToolUse enabled, fetching and filtering available tools...")
                 try:
-                    # get_available_tools は内部で canonical 形式に変換してくれる
-                    all_mcp_tools = await mcp_manager.get_available_tools(vendor="canonical")
-                    log_info(f"Fetched {len(all_mcp_tools)} total MCP tools.")
+                    # 1. Built-in ツールを取得
+                    builtin_tool_funcs = get_builtin_tool_functions()
+                    builtin_canonical_tools = [generate_builtin_tool_definition(func) for func in builtin_tool_funcs]
+                    log_info(f"Fetched {len(builtin_canonical_tools)} built-in tools.")
+                    all_canonical_tools.extend(builtin_canonical_tools)
 
-                    # DBから無効なツールリストを取得
+                    # 2. MCP ツールを取得 (Canonical形式)
+                    mcp_canonical_tools = await mcp_manager.get_available_tools(vendor="canonical")
+                    log_info(f"Fetched {len(mcp_canonical_tools)} total MCP tools.")
+                    all_canonical_tools.extend(mcp_canonical_tools)
+
+                    log_info(f"Total available tools (built-in + MCP): {len(all_canonical_tools)}")
+
+                    # 3. DBから無効なツールリストを取得
                     disabled_tools = self.settings_service.get_disabled_mcp_tools(TEMP_USER_ID)
                     disabled_tools_set = set(disabled_tools) # 高速なルックアップのためセットに変換
+                    log_info(f"Disabled tools from settings: {disabled_tools}")
 
-                    # 無効なツールを除外してフィルタリング
-                    if all_mcp_tools:
-                        filtered_mcp_tools = [
-                            tool for tool in all_mcp_tools
+                    # 4. 無効なツールを除外してフィルタリング
+                    if all_canonical_tools:
+                        # CanonicalToolDefinition は TypedDict なので辞書としてアクセス
+                        filtered_canonical_tools = [
+                            tool for tool in all_canonical_tools
                             if tool["name"] not in disabled_tools_set
                         ]
-                        log_info(f"Enabled MCP tools after filtering: {len(filtered_mcp_tools)}")
+                        log_info(f"Enabled tools after filtering: {len(filtered_canonical_tools)}")
+                        # 有効なツールの名前リストもログに出力（デバッグ用）
+                        enabled_tool_names = [t['name'] for t in filtered_canonical_tools]
+                        log_info(f"Enabled tool names: {enabled_tool_names}")
                     else:
-                        filtered_mcp_tools = []
-                        log_info("No MCP tools available from connected servers.")
+                        filtered_canonical_tools = []
+                        log_info("No tools available (built-in or MCP).")
 
-                    # ツールを使う場合のシステムプロンプトを追加
-                    if filtered_mcp_tools: # 有効なツールがある場合のみ指示を追加
+                    # 5. ツールを使う場合のシステムプロンプトを追加
+                    if filtered_canonical_tools: # 有効なツールがある場合のみ指示を追加
                         system = f"{chat_request.system}\n\n{TOOL_USE_INSTRUCTION}"
                     else:
-                        log_warning("Tool use requested, but no MCP tools are available/enabled after filtering.")
+                        log_warning("Tool use requested, but no tools are available/enabled after filtering.")
                         # ツールがない場合は TOOL_USE_INSTRUCTION を追加しない
                         system = chat_request.system
 
                 except Exception as e:
-                    log_error(f"Error fetching or filtering MCP tools: {e}")
+                    log_error(f"Error fetching or filtering tools: {e}")
                     # ツール取得/フィルタリングエラーの場合、ツールなしで続行
-                    filtered_mcp_tools = None
+                    filtered_canonical_tools = None
                     system = chat_request.system # エラー時は通常のシステムプロンプト
 
             else:
                 # toolUse が False の場合はツールを取得しない
-                filtered_mcp_tools = None
+                filtered_canonical_tools = None
                 system = chat_request.system
             
             handler = self.handlers.get(vendor)
@@ -707,9 +779,10 @@ class ChatHandler:
                 is_reasoning_supported=chat_request.isReasoningSupported,
                 reasoning_parameter_type=chat_request.reasoningParameterType,
                 budget_tokens=chat_request.budgetTokens,
+                multimodal=chat_request.multimodal,
                 image_generation=chat_request.imageGeneration,
                 mcp_manager=mcp_manager, # MCP Manager を渡す
-                mcp_tools=filtered_mcp_tools   # MCP ツール定義を渡す
+                enabled_tools=filtered_canonical_tools   # MCP ツール定義を渡す
             )
 
         except Exception as e:

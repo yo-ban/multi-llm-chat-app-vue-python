@@ -32,7 +32,8 @@ async def gemini_stream_generator(
     completion_args: dict,
     images: list,
     mcp_manager: PolyMCPClient,
-    mcp_tools: list[CanonicalToolDefinition]
+    enabled_tools: list[CanonicalToolDefinition],
+    multimodal: bool = False
 ) -> AsyncGenerator[str, None]:
     """
     Generate streaming response for Gemini API.
@@ -155,17 +156,33 @@ async def gemini_stream_generator(
                                                     response={"content": result}
                                                 )
                                             )
-                                        elif result["type"] == "image":
-                                            uploaded_image = await upload_image_to_gemini(
-                                                result["source"]["data"],
-                                                result["source"]["media_type"]
-                                            )
-                                            function_response_parts.append(
-                                                Part.from_uri(
-                                                    file_uri=uploaded_image.uri, 
-                                                    mime_type=result["source"]["media_type"])
+                                        elif result["type"] == "image" and multimodal:
+                                            # Base64エンコードされた文字列を取得
+                                            base64_data_string = result["source"]["data"]
+                                            decoded_data = base64.b64decode(base64_data_string)
+                                            mime_type = result["source"]["media_type"]
+                                            
+                                            # sizeが20MB未満かどうか判定
+                                            if len(decoded_data) > 20 * 1024 * 1024:
+                                                log_info("Uploading image via Files API")
+                                                uploaded_image = await upload_image_to_gemini(
+                                                    decoded_data,
+                                                    mime_type
                                                 )
-                                            images.append(uploaded_image)
+                                                function_response_parts.append(
+                                                    Part.from_uri(
+                                                        file_uri=uploaded_image.uri, 
+                                                        mime_type=mime_type
+                                                    )
+                                                )
+                                                images.append(uploaded_image)
+                                            else:
+                                                function_response_parts.append(
+                                                    Part.from_bytes(
+                                                        data=decoded_data,
+                                                        mime_type=mime_type
+                                                    )
+                                                )
 
 
                                     yield f"data: {json.dumps({'type': 'tool_call_end', 'tool': function_call.name})}\n\n"
@@ -193,7 +210,7 @@ async def gemini_stream_generator(
                                 running_args["tool_config"] = tool_config
 
                                 if tool_calls_count > 0:
-                                    running_args["tools"] = [get_gemini_tool_definitions(mcp_tools=mcp_tools)]
+                                    running_args["tools"] = [get_gemini_tool_definitions(canonical_tools=enabled_tools)]
 
                                 tool_calls_count += 1
 
@@ -239,7 +256,8 @@ async def openai_stream_generator(
     openai_messages: List[Dict[str, Any]],
     completion_args: dict,
     mcp_manager: PolyMCPClient,
-    mcp_tools: list[CanonicalToolDefinition]
+    enabled_tools: list[CanonicalToolDefinition],
+    multimodal: bool = False
 ) -> AsyncGenerator[str, None]:
     """
     Generator for streaming OpenAI API responses.
@@ -308,7 +326,7 @@ async def openai_stream_generator(
                                 
                                 try:
                                     tool_input = json.loads(complete_tool_call.function.arguments)
-                                    yield f"data: {json.dumps({'type': 'tool_call_end', 'tool': tool_name, 'input': tool_input})}\n\n"
+                                    yield f"data: {json.dumps({'type': 'tool_call_start', 'tool': tool_name, 'input': tool_input})}\n\n"
                                     
                                     # Execute the tool
                                     tool_result = None
@@ -359,7 +377,7 @@ async def openai_stream_generator(
                                         running_args["messages"].append(tool_use_message)
                                         running_args["messages"].append(tool_result_message)
 
-                                        if tool_result_image:
+                                        if tool_result_image and multimodal:
                                             running_args["messages"].append({
                                                 "role": "user",
                                                 "name": tool_name,
@@ -375,7 +393,7 @@ async def openai_stream_generator(
 
                                         # Make sure tools are included in the next request
                                         if tool_calls_count > 0 and "tools" in running_args:
-                                            running_args["tools"] = get_tool_definitions(mcp_tools=mcp_tools)
+                                            running_args["tools"] = get_tool_definitions(canonical_tools=enabled_tools)
                                             running_args["tool_choice"] = "auto"
                                         
                                         tool_calls_count += 1
@@ -435,7 +453,8 @@ async def anthropic_stream_generator(
     messages: List[Dict[str, Any]],
     params: dict,
     mcp_manager: PolyMCPClient,
-    mcp_tools: list[CanonicalToolDefinition]
+    enabled_tools: list[CanonicalToolDefinition],
+    multimodal: bool = False
 ) -> AsyncGenerator[str, None]:
     """
     Generate streaming response for Anthropic API.
@@ -564,7 +583,7 @@ async def anthropic_stream_generator(
                                     
                                     # Make sure tools are included in the next request
                                     if tool_calls_count > 0 and "tools" in running_params:
-                                        running_params["tools"] = get_anthropic_tool_definitions(mcp_tools=mcp_tools)
+                                        running_params["tools"] = get_anthropic_tool_definitions(canonical_tools=enabled_tools)
                                         
                                     log_info("Submitting tool result for continuation", {
                                         "tool": current_tool_name,
@@ -647,7 +666,8 @@ async def anthropic_non_stream_generator(
     messages: List[Dict[str, Any]],
     params: dict,
     mcp_manager: PolyMCPClient,
-    mcp_tools: list[CanonicalToolDefinition]
+    enabled_tools: list[CanonicalToolDefinition],
+    multimodal: bool = False
 ) -> AsyncGenerator[str, None]:
     """
     Generate non-streaming response for Anthropic API.
@@ -773,7 +793,8 @@ async def gemini_non_stream_generator(
     completion_args: dict,
     images: list,
     mcp_manager: PolyMCPClient,
-    mcp_tools: list[CanonicalToolDefinition]
+    enabled_tools: list[CanonicalToolDefinition],
+    multimodal: bool = False
 ) -> AsyncGenerator[str, None]:
     """
     Generate non-streaming response for Gemini API.
@@ -869,7 +890,8 @@ async def openai_non_stream_generator(
     completion_args: dict,
     openai_messages: list,
     mcp_manager: PolyMCPClient,
-    mcp_tools: list[CanonicalToolDefinition]
+    enabled_tools: list[CanonicalToolDefinition],
+    multimodal: bool = False
 ) -> AsyncGenerator[str, None]:
     """
     Common processing for non-streaming OpenAI API calls.
@@ -937,7 +959,7 @@ async def openai_non_stream_generator(
                         running_args["messages"].append(tool_result_message)    
                         
                         # Make sure tools are included in the next request
-                        running_args["tools"] = get_tool_definitions(mcp_tools=mcp_tools)
+                        running_args["tools"] = get_tool_definitions(canonical_tools=enabled_tools)
                         running_args["tool_choice"] = "auto"
                         
                         # Continue the conversation with the tool result

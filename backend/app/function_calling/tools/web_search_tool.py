@@ -106,7 +106,13 @@ async def extract_sources_from_metadata(metadata: GroundingMetadata, num_results
 async def web_search(query: str, num_results: int = 5) -> str:
     """
     Perform a targeted web search to retrieve relevant URLs along with concise snippets.
-    
+    - Purpose: Propose specific suggestions or questions to help the user refine and specify their vague or ambiguous request.
+    - Usage Guidelines:
+        - Use this tool when the user's request lacks sufficient detail or is open to multiple interpretations.
+        - Generate concrete suggestions or clarifying questions based on potential interpretations of the user's request.
+        - Aim to guide the user towards providing the necessary specifics for the request to be actionable.
+        - Present suggestions/questions clearly and concisely.
+
     Args:
         query: Specific details you want to search for on the web. One issue per search.
         num_results: Number of results to return (recommended (default): 5)

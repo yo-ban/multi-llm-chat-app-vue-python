@@ -1,6 +1,12 @@
 async def request_clarification(clarification_points: list[str]) -> str:
     """
     Propose specific suggestions or questions to help the user refine and specify their vague or ambiguous request.
+    - Purpose: Perform targeted searches to obtain relevant URLs and concise summaries.
+    - Usage Guidelines:
+        - **Focus on one topic per search query** (split searches when multiple pieces of information are needed)
+        - **Formulate clear, specific queries** based on the exact information needed, rather than copying the user's question verbatim
+        - If initial results are insufficient, **strategically plan multiple searches** with refined queries
+        - Consider date-restricted searches when information might be outdated or when recent data is required
 
     Args:
         clarification_points: A list of specific suggestions or questions to present to the user to help them clarify their request.

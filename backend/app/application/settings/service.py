@@ -15,6 +15,9 @@ from app.domain.settings.constants import KNOWN_VENDORS # Import known vendors
 
 from poly_mcp_client.models import ServerConfig, CanonicalToolDefinition
 
+from app.function_calling.definitions import get_available_tools as get_builtin_tool_functions
+from app.function_calling.definitions import generate_tool_definition as generate_builtin_tool_definition
+
 from app.logger.logging_utils import log_info, log_error, log_warning
 
 class SettingsService:
@@ -78,42 +81,12 @@ class SettingsService:
         # MCPサーバー設定を復号化・バリデーション
         decrypted_mcp_config = self.settings_repo.decrypt_mcp_servers_config(db_settings)
 
-        # 利用可能なMCPツールリストを取得 (辞書のリストとして受け取る)
-        available_tools_raw: List[Dict[str, Any]] = []
-        try:
-            # poly-mcp-client は辞書のリストを返す
-            available_tools_raw = await self.mcp_manager.get_available_tools(vendor="canonical")
-            log_info(f"SettingsService (get): Fetched {len(available_tools_raw)} raw available MCP tools.")
-        except Exception as e:
-            log_error(f"SettingsService (get): Error fetching available MCP tools: {e}", exc_info=True)
-
-
-
-        # --- 辞書のリストを Pydantic モデルのリストに変換 ---
-        available_tools_pydantic: List[PydanticCanonicalToolDefinition] = []
-        validation_errors = 0
-        for tool_dict in available_tools_raw:
-            try:
-                # ここで Pydantic モデルに変換＆バリデーション
-                validated_tool = PydanticCanonicalToolDefinition.model_validate(tool_dict)
-                available_tools_pydantic.append(validated_tool)
-            except ValidationError as e:
-                validation_errors += 1
-                # エラーの詳細をログに出力（ツール名も特定）
-                tool_name = tool_dict.get('name', 'Unknown Tool')
-                log_error(f"SettingsService (get): Validation error converting tool '{tool_name}' to Pydantic model: {e}", exc_info=False) # スタックトレースは不要かも
-                # バリデーションエラーが起きても、エラーのあったツールを除外して続行
-            except Exception as e:
-                validation_errors += 1
-                tool_name = tool_dict.get('name', 'Unknown Tool')
-                log_error(f"SettingsService (get): Unexpected error converting tool '{tool_name}': {e}", exc_info=True)
-
-        if validation_errors > 0:
-            log_warning(f"SettingsService (get): Skipped {validation_errors} tool(s) due to validation/conversion errors.")
+        # --- 利用可能な全ツールリスト (built-in + MCP) を取得 ---
+        all_available_tools_pydantic: List[PydanticCanonicalToolDefinition] = await self._get_all_available_tools_pydantic()
 
         # レスポンスデータを準備
         response_data = self._prepare_response_data(
-            db_settings, decrypted_api_keys, decrypted_mcp_config, available_tools_pydantic
+            db_settings, decrypted_api_keys, decrypted_mcp_config, all_available_tools_pydantic # 修正：全ツールリストを渡す
         )
 
         return SettingsResponse.model_validate(response_data)
@@ -177,47 +150,75 @@ class SettingsService:
             # MCPクライアントの更新に失敗しても、DB設定は保存されている
             log_error(f"SettingsService (update): Error updating MCP client configuration: {e}")
 
+        # --- 更新後、利用可能な全ツールリスト (built-in + MCP) を再取得 ---
+        all_available_tools_pydantic: List[PydanticCanonicalToolDefinition] = await self._get_all_available_tools_pydantic()
+
         # APIキーを復号化
         decrypted_api_keys = self.settings_repo.decrypt_api_keys(db_settings)
 
         # MCPサーバー設定を復号化 (更新直後なのでバリデーションは不要かもしれないが念のため)
         decrypted_mcp_config = self.settings_repo.decrypt_mcp_servers_config(db_settings)
 
-        # MCPクライアント更新後に再度ツールリストを取得
-        available_tools_raw: List[Dict[str, Any]] = []
-        try:
-            available_tools_raw = await self.mcp_manager.get_available_tools(vendor="canonical")
-            log_info(f"SettingsService (update): Fetched {len(available_tools_raw)} raw available MCP tools after update.")
-        except Exception as e:
-            log_error(f"SettingsService (update): Error fetching available MCP tools after update: {e}", exc_info=True)
-
-        # --- 辞書のリストを Pydantic モデルのリストに変換 ---
-        available_tools_pydantic: List[PydanticCanonicalToolDefinition] = []
-        validation_errors = 0
-        for tool_dict in available_tools_raw:
-            try:
-                validated_tool = PydanticCanonicalToolDefinition.model_validate(tool_dict)
-                available_tools_pydantic.append(validated_tool)
-            except ValidationError as e:
-                validation_errors += 1
-                tool_name = tool_dict.get('name', 'Unknown Tool')
-                log_error(f"SettingsService (update): Validation error converting tool '{tool_name}' to Pydantic model: {e}", exc_info=False)
-            except Exception as e:
-                validation_errors += 1
-                tool_name = tool_dict.get('name', 'Unknown Tool')
-                log_error(f"SettingsService (update): Unexpected error converting tool '{tool_name}': {e}", exc_info=True)
-
-        if validation_errors > 0:
-            log_warning(f"SettingsService (update): Skipped {validation_errors} tool(s) due to validation/conversion errors.")
-
-
         # レスポンスデータを準備
         response_data = self._prepare_response_data(
-            db_settings, decrypted_api_keys, decrypted_mcp_config, available_tools_pydantic
+            db_settings, decrypted_api_keys, decrypted_mcp_config, all_available_tools_pydantic # 修正：全ツールリストを渡す
         )
 
         log_info(f"Settings update process completed for user {user_id}")
         return SettingsResponse.model_validate(response_data)
+
+
+    async def _get_all_available_tools_pydantic(self) -> List[PydanticCanonicalToolDefinition]:
+        """
+        利用可能な Built-in ツールと MCP ツールを全て取得し、Pydanticモデルのリストとして返す。
+        """
+        all_available_tools_raw: List[Dict[str, Any]] = []
+        validation_errors = 0
+
+        # 1. Built-in ツールを取得
+        try:
+            builtin_tool_funcs = get_builtin_tool_functions()
+            for func in builtin_tool_funcs:
+                try:
+                    # CanonicalToolDefinition (TypedDict) を生成
+                    tool_def_dict = generate_builtin_tool_definition(func)
+                    all_available_tools_raw.append(tool_def_dict)
+                except Exception as gen_err:
+                    log_error(f"SettingsService: Error generating definition for built-in tool '{func.__name__}': {gen_err}", exc_info=False)
+            log_info(f"SettingsService: Fetched {len(builtin_tool_funcs)} built-in tools.")
+        except Exception as e:
+            log_error(f"SettingsService: Error fetching built-in tools: {e}", exc_info=True)
+
+        # 2. MCP ツールを取得
+        try:
+            # poly-mcp-client は CanonicalToolDefinition (TypedDict) のリストを返す
+            mcp_tools_raw = await self.mcp_manager.get_available_tools(vendor="canonical")
+            all_available_tools_raw.extend(mcp_tools_raw) # リストを結合
+            log_info(f"SettingsService: Fetched {len(mcp_tools_raw)} raw available MCP tools.")
+        except Exception as e:
+            log_error(f"SettingsService: Error fetching available MCP tools: {e}", exc_info=True)
+
+        # 3. 結合したリストを Pydantic モデルに変換・バリデーション
+        all_available_tools_pydantic: List[PydanticCanonicalToolDefinition] = []
+        for tool_dict in all_available_tools_raw:
+            tool_name = tool_dict.get('name', 'Unknown Tool') # エラーログ用
+            try:
+                # TypedDict を Pydantic モデルに変換＆バリデーション
+                validated_tool = PydanticCanonicalToolDefinition.model_validate(tool_dict)
+                all_available_tools_pydantic.append(validated_tool)
+            except ValidationError as e:
+                validation_errors += 1
+                log_error(f"SettingsService: Validation error converting tool '{tool_name}' to Pydantic model: {e}", exc_info=False)
+            except Exception as e:
+                validation_errors += 1
+                log_error(f"SettingsService: Unexpected error converting tool '{tool_name}': {e}", exc_info=True)
+
+        if validation_errors > 0:
+            log_warning(f"SettingsService: Skipped {validation_errors} tool(s) due to validation/conversion errors.")
+
+        log_info(f"SettingsService: Total {len(all_available_tools_pydantic)} available tools (built-in + MCP) prepared.")
+        return all_available_tools_pydantic
+
 
     def get_decrypted_api_key(self, user_id: int, vendor: str) -> Optional[str]:
         """
@@ -283,16 +284,17 @@ class SettingsService:
             db_settings: UserSettings, 
             decrypted_api_keys: Dict[str, str], 
             decrypted_mcp_config: Dict[str, ServerConfig],
-            available_tools: List[PydanticCanonicalToolDefinition]
+            all_available_tools: List[PydanticCanonicalToolDefinition]
         ) -> Dict:
         """
         データベースモデルと復号化されたAPIキーからレスポンス用辞書を作成するヘルパー
-        
+
         引数:
             db_settings: UserSettingsモデルインスタンス
             decrypted_api_keys: 復号化されたAPIキーの辞書
             decrypted_mcp_config: 復号化・バリデーション済みのMCPサーバー設定辞書
-        
+            all_available_tools: 利用可能な全ツール（Built-in + MCP）のPydanticモデルリスト
+
         戻り値:
             レスポンススキーマに渡すための辞書
         """
@@ -322,7 +324,7 @@ class SettingsService:
             "mcpServersConfig": decrypted_mcp_config, # エイリアス 'mcpServersConfig'
             "disabledMcpServers": base_data.get("disabled_mcp_servers") or [], # エイリアス 'disabledMcpServers'
             "disabledMcpTools": base_data.get("disabled_mcp_tools") or [],   # エイリアス 'disabledMcpTools'
-            "availableMcpTools": available_tools # alias "availableMcpTools"
+            "availableMcpTools": all_available_tools # alias "availableMcpTools"
         }
         
         return response_data

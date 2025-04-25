@@ -454,7 +454,13 @@ async def detect_mime_type(url: str) -> Tuple[str, bool]:
 async def web_browsing(url: str, query: str) -> str:
     """
     Perform an interactive web browsing session on a given URL to investigate its content in detail.
-
+    - Purpose: Initiate an interactive browsing session at a provided or discovered URL for in-depth analysis.
+    - Usage Guidelines:
+        - Use this tool **immediately** if a direct or known URL is already provided (or uncovered via search)
+        - Explore the page thoroughly, collecting critical data, insights, or direct quotations to enhance and validate your response
+        - Combine with additional searches or browsing sessions if the initial page is insufficient
+        - For content-heavy pages, focus on the most relevant sections
+    
     Args:
         url: The URL of the webpage to extract information from. Must be a valid HTTP/HTTPS URL.
         query: Specific details you want to extract from the webpage.

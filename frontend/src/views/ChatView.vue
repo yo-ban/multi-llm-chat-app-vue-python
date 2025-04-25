@@ -60,6 +60,11 @@
       <span v-else-if="activeToolCall?.type === 'web_browsing'" class="tool-status">
         Browsing<span class="animate-dots">...</span> {{ truncateText(activeToolCall.input?.url, 40) }}
       </span>
+      <!-- other tool types (not empty type) -->
+      <span v-else-if="activeToolCall?.type" class="tool-status">
+        {{ activeToolCall?.type }}<span class="animate-dots">...</span> {{ activeToolCall?.input ? truncateText(JSON.stringify(activeToolCall.input), 40) : '' }}
+      </span>
+      
       <span v-else class="tool-status">
         <template v-if="hasStartedStreaming">
           Generating response<span class="animate-dots">...</span>

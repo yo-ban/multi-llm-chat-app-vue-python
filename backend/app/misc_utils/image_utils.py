@@ -3,25 +3,22 @@ import base64
 from io import BytesIO
 from PIL import Image
 from google import genai
-from google.genai.types import File
+from google.genai.types import File, FileState
 from typing import List, Dict, Any
-
-async def upload_image_to_gemini(image_data: str, mime_type: str) -> File:
+import time
+async def upload_image_to_gemini(image_data: bytes, mime_type: str) -> File:
     """
     Upload an image to Gemini API using the new client
     
     Args:
-        image_data: Base64 encoded image data
+        image_data: bytes of the image
         mime_type: MIME type of the image
         
     Returns:
         Uploaded file object from Gemini
     """
-    # Decode base64 image data to bytes
-    image_bytes = base64.b64decode(image_data)
-    
     # Create BytesIO object for the image
-    image_buffer = BytesIO(image_bytes)
+    image_buffer = BytesIO(image_data)
     
     # Upload directly from BytesIO without saving to disk
     try:
@@ -30,6 +27,11 @@ async def upload_image_to_gemini(image_data: str, mime_type: str) -> File:
             file=image_buffer,
             config={"mime_type": mime_type}
         )
+
+        # アップロードが完了するまで待機
+        while uploaded_file.state != FileState.ACTIVE:
+            time.sleep(1)
+
         return uploaded_file
     except Exception as e:
         raise ValueError(f"Error uploading image to Gemini: {str(e)}")

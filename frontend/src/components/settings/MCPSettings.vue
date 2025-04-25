@@ -53,7 +53,7 @@
         No tools available from connected servers, or no servers are configured/enabled.
       </div>
       <div v-else>
-        <PrimeAccordion :multiple="true" :activeIndex="defaultOpenAccordionTabs">
+        <PrimeAccordion :multiple="true" > <!-- :activeIndex="defaultOpenAccordionTabs" -->
           <PrimeAccordionTab v-for="group in groupedAvailableTools" :key="group.serverName" :header="group.serverName">
             <div class="item-list tool-list">
               <div v-for="tool in group.tools" :key="tool.name" class="item-card tool-card">
@@ -253,19 +253,29 @@ const groupedAvailableTools = computed(() => {
       groups[serverName].tools.push(tool);
     } else {
       // Handle tools without the expected prefix if necessary
-      if (!groups['Other Tools']) {
-        groups['Other Tools'] = { serverName: 'Other Tools', tools: [] };
+      if (!groups['Built-in Tools']) {
+        groups['Built-in Tools'] = { serverName: 'Built-in Tools', tools: [] };
       }
-      groups['Other Tools'].tools.push(tool);
+      groups['Built-in Tools'].tools.push(tool);
     }
   });
-  return Object.values(groups).sort((a, b) => a.serverName.localeCompare(b.serverName));
+
+  // Sort groups so that Built-in Tools are always first
+  return Object.values(groups).sort((a, b) => {
+    if (a.serverName === 'Built-in Tools') {
+      return -1;
+    }
+    if (b.serverName === 'Built-in Tools') {
+      return 1;
+    }
+    return a.serverName.localeCompare(b.serverName);
+  });
 });
 
 // Default open accordion tabs (all)
-const defaultOpenAccordionTabs = computed(() => {
-  return groupedAvailableTools.value.map((_, index) => index);
-});
+// const defaultOpenAccordionTabs = computed(() => {
+//   return groupedAvailableTools.value.map((_, index) => index);
+// });
 
 // Check if server data in dialog is valid for saving
 const isServerDataValid = computed(() => {
@@ -547,8 +557,8 @@ watch(() => currentServerEditData.type, (newType) => {
 }
 
 .mcp-section {
-  margin-bottom: 32px;
-  padding: 20px;
+  margin-bottom: 24px;
+  padding: 16px;
   background-color: var(--surface-section);
   border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
@@ -567,7 +577,7 @@ watch(() => currentServerEditData.type, (newType) => {
   color: var(--text-color-secondary);
   margin-bottom: 16px;
   font-size: 0.9rem;
-  line-height: 1.5;
+  line-height: 1.3;
 }
 
 .no-items-message {
@@ -582,7 +592,7 @@ watch(() => currentServerEditData.type, (newType) => {
 .item-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .item-card {
@@ -649,7 +659,7 @@ watch(() => currentServerEditData.type, (newType) => {
   font-size: 0.875rem;
   color: var(--text-color-secondary);
   margin-bottom: 10px;
-  line-height: 1.4;
+  line-height: 1.1;
   word-break: break-all;
   /* Break long commands/URLs */
 }
@@ -658,6 +668,7 @@ watch(() => currentServerEditData.type, (newType) => {
   margin-bottom: 0;
   /* Remove bottom margin for tool description */
   margin-top: 4px;
+  white-space: pre-line;
 }
 
 
