@@ -3,6 +3,7 @@ import { MODELS } from '@/constants/models';
 import type { GlobalSettings } from '@/types/settings';
 import type { Model } from '@/types/models';
 import { backendStorageService } from '@/services/storage/backend-storage-service';
+import type { McpServersConfig, CanonicalToolDefinition } from '@/types/mcp';
 
 const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   apiKeys: Object.keys(MODELS).reduce((acc, vendor) => {
@@ -16,6 +17,11 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   openrouterModels: [],
   titleGenerationVendor: 'anthropic',
   titleGenerationModel: MODELS.anthropic.CLAUDE_3_HAIKU.id,
+  // --- MCP Defaults ---
+  mcpServersConfig: {},
+  disabledMcpServers: [],
+  disabledMcpTools: [],
+  availableMcpTools: [],
 };
 
 export const useSettingsStore = defineStore('settings', {
@@ -35,14 +41,18 @@ export const useSettingsStore = defineStore('settings', {
           const mergedSettings = {
             ...DEFAULT_GLOBAL_SETTINGS, 
             ...savedSettings,           
-            apiKeys: { 
+            apiKeys: { // apiKeys は boolean の辞書
               ...DEFAULT_GLOBAL_SETTINGS.apiKeys,
-              ...(savedSettings.apiKeys || {}), // savedSettings.apiKeys は boolean 辞書のはず
+              ...(savedSettings.apiKeys || {}),
             },
             // Ensure openrouterModels is an array
             openrouterModels: savedSettings.openrouterModels || [],
+            mcpServersConfig: savedSettings.mcpServersConfig || {},
+            disabledMcpServers: savedSettings.disabledMcpServers || [],
+            disabledMcpTools: savedSettings.disabledMcpTools || [],
+            availableMcpTools: savedSettings.availableMcpTools || [], // 利用可能ツールリストも取得
           };
-          this.$patch(mergedSettings);
+          this.$patch(mergedSettings); // ストア全体をマージした設定で更新
         } else {
           // No settings from backend (or error occurred), use defaults
           console.warn('No settings loaded from backend, using default settings.');
@@ -64,17 +74,27 @@ export const useSettingsStore = defineStore('settings', {
           ...this.$state, // 現在のストアの状態をベースに
           ...adjustedSettings, // 他の変更された設定をマージ
           changedApiKeys: adjustedSettings.changedApiKeys || {}, // 変更されたAPIキーを設定
+          // availableMcpTools は送信不要
+          mcpServersConfig: adjustedSettings.mcpServersConfig ?? this.mcpServersConfig,
+          disabledMcpServers: adjustedSettings.disabledMcpServers ?? this.disabledMcpServers,
+          disabledMcpTools: adjustedSettings.disabledMcpTools ?? this.disabledMcpTools,
         };
+        // availableMcpTools は送信不要
+        delete (payloadToSend as any).availableMcpTools;
+
         // バックエンドAPIは SettingsCreate 型 (apiKeys: Dict[str, str]) を期待している
         const savedSettingsResponse = await backendStorageService.saveGlobalSettings(payloadToSend); // API呼び出し
 
         // APIから返却された最新の状態 (apiKeys: boolean) でストアを更新
         this.$patch({
           ...savedSettingsResponse,
-           // highlight-start
           // boolean の辞書でストアを更新
-          apiKeys: savedSettingsResponse.apiKeys || DEFAULT_GLOBAL_SETTINGS.apiKeys 
-           // highlight-end
+          apiKeys: savedSettingsResponse.apiKeys || DEFAULT_GLOBAL_SETTINGS.apiKeys,
+          // MCP設定を更新
+          mcpServersConfig: savedSettingsResponse.mcpServersConfig || {},
+          disabledMcpServers: savedSettingsResponse.disabledMcpServers || [],
+          disabledMcpTools: savedSettingsResponse.disabledMcpTools || [],
+          availableMcpTools: savedSettingsResponse.availableMcpTools || [], // 最新のツールリストで更新
         });
         console.log('Settings saved to backend and store updated.');
       } catch (error) {
@@ -126,6 +146,24 @@ export const useSettingsStore = defineStore('settings', {
       
       // If we have no OpenRouter models yet, preserve the current selection
       return modelId;
+    },
+
+    /** 有効なMCPサーバー設定のリストを取得 */
+    getActiveMcpServersConfig(): McpServersConfig {
+      const activeConfig: McpServersConfig = {}
+      const disabledSet = new Set(this.disabledMcpServers)
+      for (const serverName in this.mcpServersConfig) {
+        if (!disabledSet.has(serverName)) {
+          activeConfig[serverName] = this.mcpServersConfig[serverName]
+        }
+      }
+      return activeConfig
+    },
+
+    /** 利用可能なツールのうち、有効なものだけを取得 */
+    getEnabledAvailableMcpTools(): CanonicalToolDefinition[] {
+      const disabledSet = new Set(this.disabledMcpTools)
+      return this.availableMcpTools.filter(tool => !disabledSet.has(tool.name))
     }
   },
 });

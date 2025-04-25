@@ -1,10 +1,7 @@
-version: "3.8"
-
 services:
   frontend:
     build: 
       context: ./frontend
-      dockerfile: Dockerfile.prod
       args:
         - VITE_API_BASE_URL=/api
     ports:
@@ -15,23 +12,51 @@ services:
       - app-network
 
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.prod   # 本番環境用の Dockerfile を指定
+    build: ./backend
     expose:
       - "5200"
     environment:
       - PYTHONUNBUFFERED=1
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - GEMINI_MODEL_NAME=gemini-2.0-flash
+      - GEMINI_MODEL_NAME=${GEMINI_MODEL_NAME}
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-appdb}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-changeme_in_production_a_very_strong_secret_key_32_bytes}
+    volumes:
+      - app_data:/app
     security_opt: 
       - seccomp=unconfined
     cap_add:
       - SYS_ADMIN
-    shm_size: "2gb"  # ブラウザ実行における共有メモリサイズを増加（Playwright 用）
+    shm_size: "2gb"
+    entrypoint: ["/usr/local/bin/startup.sh"]
+    command: uvicorn app.main:app --host 0.0.0.0 --port 5200
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-appdb}
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-appdb} -h localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     networks:
       - app-network
 
 networks:
   app-network:
-    driver: bridge 
+    driver: bridge
+
+volumes:
+  postgres_data:
+  app_data:
+  

@@ -79,6 +79,7 @@ async def handle_tool_call(
             except Exception as e:
                 log_error(f"Error executing MCP tool: {str(e)}", {"tool": tool_name, "input": tool_input})
                 yield {"type": "error", "message": f"Error executing MCP tool {tool_name}: {str(e)}"}
+                result_to_return.append({"type": "text", "text": f"Error executing MCP tool {tool_name}: {str(e)}"})
                 # エラーが発生しても Generator は終了させない（呼び出し元で制御）
 
         else:

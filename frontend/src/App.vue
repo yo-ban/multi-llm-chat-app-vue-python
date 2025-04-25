@@ -82,6 +82,10 @@ const tempSettings = reactive<GlobalSettings>({
   openrouterModels: settingsStore.openrouterModels,
   titleGenerationVendor: settingsStore.titleGenerationVendor,
   titleGenerationModel: settingsStore.titleGenerationModel,
+  mcpServersConfig: settingsStore.mcpServersConfig,
+  disabledMcpServers: settingsStore.disabledMcpServers,
+  disabledMcpTools: settingsStore.disabledMcpTools,
+  availableMcpTools: settingsStore.availableMcpTools,
 });
 
 

@@ -36,7 +36,7 @@ mcp_client_manager = PolyMCPClient()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPIアプリケーションのライフサイクル管理"""
-    logger.info("FastAPI起動: MCPクライアントマネージャーを初期化・接続開始")
+    log_info("FastAPI起動: MCPクライアントマネージャーを初期化・接続開始")
 
     mcp_init_config = None
     # データベースからアクティブなMCPサーバー設定を取得
@@ -47,7 +47,7 @@ async def lifespan(app: FastAPI):
         active_mcp_config = settings_service.get_active_mcp_servers_config(TEMP_USER_ID)
 
         if active_mcp_config:
-            logger.info(f"データベースから {len(active_mcp_config)} 個のアクティブなMCPサーバー設定を読み込みました。")
+            log_info(f"データベースから {len(active_mcp_config)} 個のアクティブなMCPサーバー設定を読み込みました。")
             # PolyMCPClient が期待する形式 {"mcpServers": {...}} に整形
             # ServerConfig オブジェクトを辞書に変換する必要がある
             mcp_init_config_data = {
@@ -55,11 +55,11 @@ async def lifespan(app: FastAPI):
             }
             mcp_init_config = {"mcpServers": mcp_init_config_data}
         else:
-            logger.info("データベースにアクティブなMCPサーバー設定が見つかりませんでした。MCPサーバーは起動しません。")
+            log_info("データベースにアクティブなMCPサーバー設定が見つかりませんでした。MCPサーバーは起動しません。")
             mcp_init_config = {"mcpServers": {}} # 空の設定で初期化
 
     except Exception as e:
-        logger.error(f"データベースからのMCP設定読み込み中にエラーが発生しました: {e}", exc_info=True)
+        log_error(f"データベースからのMCP設定読み込み中にエラーが発生しました: {e}")
         # エラーが発生した場合も、空の設定で初期化を試みる
         mcp_init_config = {"mcpServers": {}}
     finally:
@@ -71,13 +71,13 @@ async def lifespan(app: FastAPI):
             # config_data を渡して初期化
             await mcp_client_manager.initialize(config_data=mcp_init_config)
             # 初期接続を待機 (タイムアウトを設定)
-            connection_results = await mcp_client_manager.wait_for_initial_connections(timeout=60.0)
-            logger.info(f"MCP初期接続試行完了: {connection_results}")
+            connection_results = await mcp_client_manager.wait_for_connections(timeout=60.0)
+            log_info(f"MCP初期接続試行完了: {connection_results}")
         except Exception as e:
-            logger.error(f"PolyMCPClient の初期化または接続待機中にエラーが発生しました: {e}", exc_info=True)
+            log_error(f"PolyMCPClient の初期化または接続待機中にエラーが発生しました: {e}")
             # 初期化に失敗した場合でも、アプリケーションは起動させる（MCP機能は利用不可）
     else:
-        logger.error("MCP初期化設定の準備に失敗しました。MCPクライアントは初期化されません。")
+        log_error("MCP初期化設定の準備に失敗しました。MCPクライアントは初期化されません。")
 
     logger.info("FastAPIの準備完了。")
     yield
@@ -151,7 +151,7 @@ async def update_settings_endpoint(
                 pass # 抽出失敗時は元のメッセージのまま
         raise HTTPException(status_code=422, detail=f"Invalid settings data: {detail}")
     except Exception as e:
-        log_error(f"設定更新中に予期せぬエラーが発生: {e}", exc_info=True)
+        log_error(f"設定更新中に予期せぬエラーが発生: {e}")
         raise HTTPException(status_code=500, detail="Internal server error during settings update.")
 
 # --- /api/messages エンドポイント --- 

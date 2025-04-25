@@ -2,8 +2,7 @@ import chardet
 from io import BytesIO
 from fastapi import UploadFile, HTTPException
 from typing import Dict, Any
-from app.logger.logging_utils import log_info
-
+from app.logger.logging_utils import log_info, log_warning
 
 
 class FileHandler:
@@ -71,7 +70,12 @@ class FileHandler:
             text = content.decode(detected_encoding)
             return {"text": text}
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Error processing Markdown: {str(e)}")
+            try:
+                log_warning(f"Error processing Markdown: {str(e)}")
+                text = content.decode("utf-8")
+                return {"text": text}
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Error processing Markdown: {str(e)}")
 
     @staticmethod
     async def handle_jupyter(file: UploadFile) -> Dict[str, Any]:

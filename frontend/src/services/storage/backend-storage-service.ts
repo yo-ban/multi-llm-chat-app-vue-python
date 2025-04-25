@@ -71,6 +71,9 @@ class BackendStorageServiceImpl implements BackendStorageService {
           openrouterModels: settings.openrouterModels,
           titleGenerationVendor: settings.titleGenerationVendor,
           titleGenerationModel: settings.titleGenerationModel,
+          mcpServersConfig: settings.mcpServersConfig,
+          disabledMcpServers: settings.disabledMcpServers,
+          disabledMcpTools: settings.disabledMcpTools,
         }),
       });
 

@@ -32,6 +32,7 @@
           
           <!-- スクロール可能なコンテンツ部分 -->
           <div class="settings-content">
+            <!-- API Keys -->
             <APIKeysSettings
               v-if="currentSection === 'api-keys'"
               :modelValue="tempSettings.apiKeys" 
@@ -40,6 +41,7 @@
               class="content-no-header"
             />
             
+            <!-- Vendor & Model -->
             <VendorModelSelector
               v-if="currentSection === 'vendor-model'"
               v-model:vendor="tempSettings.defaultVendor"
@@ -49,17 +51,29 @@
               class="content-no-header"
             />
             
+            <!-- Title Generation -->
             <TitleGenerationSettings
               v-if="currentSection === 'title-generation'"
               v-model="titleGenerationSettings"
               @update:modelValue="updateTitleGenerationSettings"
               class="content-no-header"
             />
-            
+
+            <!-- OpenRouter -->
             <OpenRouterModelsSettings
               v-if="currentSection === 'openrouter'"
               v-model="tempSettings.openrouterModels"
               @update:model-value="updateOpenRouterModels"
+              class="content-no-header"
+            />
+
+            <!-- MCP Servers & Tools -->
+            <MCPSettings
+              v-if="currentSection === 'mcp'"
+              v-model:mcp-servers-config="tempSettings.mcpServersConfig"
+              v-model:disabled-mcp-servers="tempSettings.disabledMcpServers"
+              v-model:disabled-mcp-tools="tempSettings.disabledMcpTools"
+              :available-mcp-tools="availableMcpTools"
               class="content-no-header"
             />
           </div>
@@ -96,15 +110,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, reactive } from 'vue';
 import { useSettingsStore } from '@/store/settings';
 import { useConfirm } from 'primevue/useconfirm';
 import type { GlobalSettings } from '@/types/settings';
+import type { CanonicalToolDefinition } from '@/types/mcp';
 import APIKeysSettings from './APIKeysSettings.vue';
 import VendorModelSelector from './VendorModelSelector.vue';
-import ModelParametersSettings from './ModelParametersSettings.vue';
 import OpenRouterModelsSettings from './OpenRouterModelsSettings.vue';
 import TitleGenerationSettings from './TitleGenerationSettings.vue';
+import MCPSettings from './MCPSettings.vue';
 
 const props = defineProps<{
   modelValue: boolean
@@ -163,6 +178,12 @@ const sections = [
     title: 'OpenRouter Models',
     description: 'Configure custom models available through OpenRouter.'
   },
+  {
+    id: 'mcp',
+    label: 'MCP Servers & Tools',
+    title: 'MCP Servers & Tools',
+    description: 'Manage Model Context Protocol (MCP) servers and enable/disable tools.'
+  },
 ];
 
 // 現在選択されているセクションの情報
@@ -176,35 +197,45 @@ const sectionInfo = computed(() => {
 
 const confirm = useConfirm();
 
+// 一時的な設定を保持 (reactive を使用してネストされたオブジェクトの変更を追跡)
+// GlobalSettings 型で初期化し、dialogVisible ウォッチャーでストアからコピーする
+const tempSettings = reactive<GlobalSettings>(JSON.parse(JSON.stringify(settingsStore.$state)));
+// 利用可能なMCPツールリスト (これはストアから直接取得し、変更しない)
+const availableMcpTools = computed<CanonicalToolDefinition[]>(() => settingsStore.availableMcpTools);
+
 // 一時的な設定を保持
-const tempSettings = ref<GlobalSettings>({
-  apiKeys: { ...settingsStore.apiKeys },
-  defaultTemperature: settingsStore.defaultTemperature,
-  defaultMaxTokens: settingsStore.defaultMaxTokens,
-  defaultVendor: settingsStore.defaultVendor,
-  defaultModel: settingsStore.defaultModel,
-  openrouterModels: [...settingsStore.openrouterModels],
-  titleGenerationVendor: settingsStore.titleGenerationVendor,
-  titleGenerationModel: settingsStore.titleGenerationModel
-});
+// const tempSettings = ref<GlobalSettings>({
+//   apiKeys: { ...settingsStore.apiKeys },
+//   defaultTemperature: settingsStore.defaultTemperature,
+//   defaultMaxTokens: settingsStore.defaultMaxTokens,
+//   defaultVendor: settingsStore.defaultVendor,
+//   defaultModel: settingsStore.defaultModel,
+//   openrouterModels: [...settingsStore.openrouterModels],
+//   titleGenerationVendor: settingsStore.titleGenerationVendor,
+//   titleGenerationModel: settingsStore.titleGenerationModel,
+//   mcpServersConfig: settingsStore.mcpServersConfig,
+//   disabledMcpServers: settingsStore.disabledMcpServers,
+//   disabledMcpTools: settingsStore.disabledMcpTools,
+//   availableMcpTools: settingsStore.availableMcpTools,
+// });
 
 const titleGenerationSettings = computed({
   get: () => ({
-    vendor: tempSettings.value.titleGenerationVendor,
-    model: tempSettings.value.titleGenerationModel
+    vendor: tempSettings.titleGenerationVendor,
+    model: tempSettings.titleGenerationModel
   }),
   set: (value) => {
     console.log('Updating title generation settings:', value);
-    tempSettings.value.titleGenerationVendor = value.vendor;
-    tempSettings.value.titleGenerationModel = value.model;
+    tempSettings.titleGenerationVendor = value.vendor;
+    tempSettings.titleGenerationModel = value.model;
   }
 });
 
 // Add watcher for title generation settings
 watch(
   [
-    () => tempSettings.value.titleGenerationVendor,
-    () => tempSettings.value.titleGenerationModel
+    () => tempSettings.titleGenerationVendor,
+    () => tempSettings.titleGenerationModel
   ],
   ([newVendor, newModel]) => {
     console.log('Title generation settings changed:', { vendor: newVendor, model: newModel });
@@ -212,54 +243,103 @@ watch(
 );
 
 // ダイアログが表示されるたびに設定を更新
+// watch(dialogVisible, (newValue) => {
+//   if (newValue) {
+//     // ダイアログが開かれたとき、最新の設定を反映
+//     tempSettings.value = {
+//       apiKeys: { ...settingsStore.apiKeys },
+//       defaultTemperature: settingsStore.defaultTemperature,
+//       defaultMaxTokens: settingsStore.defaultMaxTokens,
+//       defaultVendor: settingsStore.defaultVendor,
+//       defaultModel: settingsStore.defaultModel,
+//       // defaultReasoningEffort: settingsStore.defaultReasoningEffort,
+//       // defaultWebSearch: settingsStore.defaultWebSearch,
+//       openrouterModels: [...settingsStore.openrouterModels],
+//       titleGenerationVendor: settingsStore.titleGenerationVendor,
+//       titleGenerationModel: settingsStore.titleGenerationModel,
+//       mcpServersConfig: settingsStore.mcpServersConfig,
+//       disabledMcpServers: settingsStore.disabledMcpServers,
+//       disabledMcpTools: settingsStore.disabledMcpTools,
+//       availableMcpTools: settingsStore.availableMcpTools,
+//     };
+//     // 変更キーをリセット
+//     changedApiKeys.value = {}; 
+//   }
+// });
+
+// ダイアログが表示されるたびに設定を更新
 watch(dialogVisible, (newValue) => {
   if (newValue) {
-    // ダイアログが開かれたとき、最新の設定を反映
-    tempSettings.value = {
-      apiKeys: { ...settingsStore.apiKeys },
-      defaultTemperature: settingsStore.defaultTemperature,
-      defaultMaxTokens: settingsStore.defaultMaxTokens,
-      defaultVendor: settingsStore.defaultVendor,
-      defaultModel: settingsStore.defaultModel,
-      // defaultReasoningEffort: settingsStore.defaultReasoningEffort,
-      // defaultWebSearch: settingsStore.defaultWebSearch,
-      openrouterModels: [...settingsStore.openrouterModels],
-      titleGenerationVendor: settingsStore.titleGenerationVendor,
-      titleGenerationModel: settingsStore.titleGenerationModel
-    };
+    // ダイアログが開かれたとき、最新の設定をストアから tempSettings にディープコピー
+    // JSON.parse/stringify でディープコピー
+    const storeStateCopy = JSON.parse(JSON.stringify(settingsStore.$state)) as GlobalSettings;
+    // tempSettings の各プロパティを更新
+    Object.assign(tempSettings, storeStateCopy);
     // 変更キーをリセット
-    changedApiKeys.value = {}; 
+    changedApiKeys.value = {};
+    console.log("Dialog opened, tempSettings initialized:", JSON.parse(JSON.stringify(tempSettings)));
   }
 });
 
 // 未保存の変更があるかチェック (APIキーの変更も考慮)
-const hasUnsavedChanges = computed(() => {
-    // Check other settings change
-    const otherSettingsChanged = JSON.stringify({
-      // apiKeys を除外して比較
-      defaultTemperature: settingsStore.defaultTemperature,
-      defaultMaxTokens: settingsStore.defaultMaxTokens,
-      defaultVendor: settingsStore.defaultVendor,
-      defaultModel: settingsStore.defaultModel,
-      // defaultReasoningEffort: settingsStore.defaultReasoningEffort,
-      // defaultWebSearch: settingsStore.defaultWebSearch,
-      openrouterModels: settingsStore.openrouterModels,
-      titleGenerationVendor: settingsStore.titleGenerationVendor,
-      titleGenerationModel: settingsStore.titleGenerationModel
-    }) !== JSON.stringify({
-      defaultTemperature: tempSettings.value.defaultTemperature,
-      defaultMaxTokens: tempSettings.value.defaultMaxTokens,
-      defaultVendor: tempSettings.value.defaultVendor,
-      defaultModel: tempSettings.value.defaultModel,
-      // defaultReasoningEffort: tempSettings.value.defaultReasoningEffort,
-      // defaultWebSearch: tempSettings.value.defaultWebSearch,
-      openrouterModels: tempSettings.value.openrouterModels,
-      titleGenerationVendor: tempSettings.value.titleGenerationVendor,
-      titleGenerationModel: tempSettings.value.titleGenerationModel
-    });
+// const hasUnsavedChanges = computed(() => {
+//     // Check other settings change
+//     const otherSettingsChanged = JSON.stringify({
+//       // apiKeys を除外して比較
+//       defaultTemperature: settingsStore.defaultTemperature,
+//       defaultMaxTokens: settingsStore.defaultMaxTokens,
+//       defaultVendor: settingsStore.defaultVendor,
+//       defaultModel: settingsStore.defaultModel,
+//       // defaultReasoningEffort: settingsStore.defaultReasoningEffort,
+//       // defaultWebSearch: settingsStore.defaultWebSearch,
+//       openrouterModels: settingsStore.openrouterModels,
+//       titleGenerationVendor: settingsStore.titleGenerationVendor,
+//       titleGenerationModel: settingsStore.titleGenerationModel
+//     }) !== JSON.stringify({
+//       defaultTemperature: tempSettings.defaultTemperature,
+//       defaultMaxTokens: tempSettings.defaultMaxTokens,
+//       defaultVendor: tempSettings.defaultVendor,
+//       defaultModel: tempSettings.defaultModel,
+//       // defaultReasoningEffort: tempSettings.value.defaultReasoningEffort,
+//       // defaultWebSearch: tempSettings.value.defaultWebSearch,
+//       openrouterModels: tempSettings.openrouterModels,
+//       titleGenerationVendor: tempSettings.titleGenerationVendor,
+//       titleGenerationModel: tempSettings.titleGenerationModel
+//     });
 
-    // Check if API keys changed using our local state
+//     // Check if API keys changed using our local state
+//     const apiKeysChanged = Object.keys(changedApiKeys.value).length > 0;
+
+//     return otherSettingsChanged || apiKeysChanged;
+// });
+
+
+// 未保存の変更があるかチェック
+const hasUnsavedChanges = computed(() => {
+    // Store の現在の状態をディープコピーして比較対象とする
+    const originalSettings = JSON.parse(JSON.stringify(settingsStore.$state));
+    // tempSettings もディープコピーして比較（reactive オブジェクトの直接比較を避ける）
+    const currentTempSettings = JSON.parse(JSON.stringify(tempSettings));
+
+    // APIキー以外の設定変更をチェック (ディープ比較)
+    // 比較対象から apiKeys と availableMcpTools を除外
+    const settingsToCompareOriginal = { ...originalSettings };
+    delete settingsToCompareOriginal.apiKeys;
+    delete settingsToCompareOriginal.availableMcpTools;
+
+    const settingsToCompareTemp = { ...currentTempSettings };
+    delete settingsToCompareTemp.apiKeys;
+    delete settingsToCompareTemp.availableMcpTools;
+
+    const otherSettingsChanged = JSON.stringify(settingsToCompareOriginal) !== JSON.stringify(settingsToCompareTemp);
+
+    // APIキーの変更をチェック
     const apiKeysChanged = Object.keys(changedApiKeys.value).length > 0;
+
+    // console.log("Checking changes:", { otherSettingsChanged, apiKeysChanged });
+    // console.log("Original:", JSON.stringify(settingsToCompareOriginal));
+    // console.log("Temp:", JSON.stringify(settingsToCompareTemp));
+    // console.log("Changed API keys:", changedApiKeys.value);
 
     return otherSettingsChanged || apiKeysChanged;
 });
@@ -267,18 +347,18 @@ const hasUnsavedChanges = computed(() => {
 const updateFromModelInfo = (modelInfo: any) => {
   // Directly update maxTokens from the model info
   if (modelInfo && modelInfo.maxTokens) {
-    tempSettings.value.defaultMaxTokens = modelInfo.maxTokens;
+    tempSettings.defaultMaxTokens = modelInfo.maxTokens;
     console.log('Updated maxTokens to', modelInfo.maxTokens, 'based on model info');
   }
 };
 
 const updateOpenRouterModels = (newModels: any[]) => {
-  tempSettings.value.openrouterModels = [...newModels];
+  tempSettings.openrouterModels = [...newModels];
 };
 
 const updateTitleGenerationSettings = (newSettings: { vendor: string; model: string }) => {
-  tempSettings.value.titleGenerationVendor = newSettings.vendor;
-  tempSettings.value.titleGenerationModel = newSettings.model;
+  tempSettings.titleGenerationVendor = newSettings.vendor;
+  tempSettings.titleGenerationModel = newSettings.model;
 };
 
 // ダイアログのアクション
@@ -298,49 +378,91 @@ const onCancel = () => {
   }
 };
 
+// const onDialogHide = () => {
+//   // リセット処理
+//   tempSettings.value = {
+//     apiKeys: { ...settingsStore.apiKeys },
+//     defaultTemperature: settingsStore.defaultTemperature,
+//     defaultMaxTokens: settingsStore.defaultMaxTokens,
+//     defaultVendor: settingsStore.defaultVendor,
+//     defaultModel: settingsStore.defaultModel,
+//     // defaultReasoningEffort: settingsStore.defaultReasoningEffort,
+//     // defaultWebSearch: settingsStore.defaultWebSearch,
+//     openrouterModels: [...settingsStore.openrouterModels],
+//     titleGenerationVendor: settingsStore.titleGenerationVendor,
+//     titleGenerationModel: settingsStore.titleGenerationModel,
+//     mcpServersConfig: settingsStore.mcpServersConfig,
+//     disabledMcpServers: settingsStore.disabledMcpServers,
+//     disabledMcpTools: settingsStore.disabledMcpTools,
+//     availableMcpTools: settingsStore.availableMcpTools,
+//   };
+//   currentSection.value = 'api-keys';
+//   // 変更キーをリセット
+//   changedApiKeys.value = {};
+// };
+
 const onDialogHide = () => {
-  // リセット処理
-  tempSettings.value = {
-    apiKeys: { ...settingsStore.apiKeys },
-    defaultTemperature: settingsStore.defaultTemperature,
-    defaultMaxTokens: settingsStore.defaultMaxTokens,
-    defaultVendor: settingsStore.defaultVendor,
-    defaultModel: settingsStore.defaultModel,
-    // defaultReasoningEffort: settingsStore.defaultReasoningEffort,
-    // defaultWebSearch: settingsStore.defaultWebSearch,
-    openrouterModels: [...settingsStore.openrouterModels],
-    titleGenerationVendor: settingsStore.titleGenerationVendor,
-    titleGenerationModel: settingsStore.titleGenerationModel
-  };
-  currentSection.value = 'api-keys';
-  // 変更キーをリセット
-  changedApiKeys.value = {};
+  // リセット処理 (ダイアログが開かれるときに初期化されるので、ここでは不要かも)
+  // tempSettings は watch(dialogVisible) でリセットされる
+  currentSection.value = sections[0].id; // 最初のセクションに戻す
+  changedApiKeys.value = {}; // APIキー変更もリセット
 };
+
+// const onSave = async () => {
+//   try {
+//     isSaving.value = true;
+
+//     // ストアのアクションに渡すデータを作成
+//     const settingsToSave = {
+//       ...tempSettings, // 他の設定項目 (apiKeys: boolean を含むが、これは無視される)
+//       changedApiKeys: changedApiKeys.value // 変更された実際のキー情報
+//     };
+
+//     // ストアの saveSettings アクションを呼び出し
+//     console.log('Saving settings:', settingsToSave);
+//     await settingsStore.saveSettings(settingsToSave); 
+
+//     // Close the dialog (emit is removed as store is the source of truth)
+//     dialogVisible.value = false;
+
+//   } catch (error) {
+//     console.error('Failed to save settings:', error);
+//     // TODO: エラー通知の実装
+//   } finally {
+//     isSaving.value = false;
+//   }
+// };
 
 const onSave = async () => {
   try {
     isSaving.value = true;
 
     // ストアのアクションに渡すデータを作成
-    const settingsToSave = {
-      ...tempSettings.value, // 他の設定項目 (apiKeys: boolean を含むが、これは無視される)
-      changedApiKeys: changedApiKeys.value // 変更された実際のキー情報
+    // tempSettings の現在の値 (UIでの変更を含む) を渡す
+    // changedApiKeys も渡す
+    const settingsToSave: Partial<GlobalSettings> & { changedApiKeys?: Record<string, string> } = {
+      ...JSON.parse(JSON.stringify(tempSettings)), // tempSettings の現在の値をディープコピー
+      changedApiKeys: changedApiKeys.value // 変更されたAPIキー情報
     };
+    // availableMcpTools は保存対象外なので削除
+    delete (settingsToSave as any).availableMcpTools;
+    // apiKeys (booleanの辞書) も保存対象外 (changedApiKeys を使うため)
+    delete (settingsToSave as any).apiKeys;
 
-    // ストアの saveSettings アクションを呼び出し
-    console.log('Saving settings:', settingsToSave);
-    await settingsStore.saveSettings(settingsToSave); 
 
-    // Close the dialog (emit is removed as store is the source of truth)
-    dialogVisible.value = false;
+    console.log('Saving settings:', JSON.parse(JSON.stringify(settingsToSave)));
+    await settingsStore.saveSettings(settingsToSave);
+
+    dialogVisible.value = false; // 保存成功したらダイアログを閉じる (onDialogHide が呼ばれる)
 
   } catch (error) {
     console.error('Failed to save settings:', error);
-    // TODO: エラー通知の実装
+    // TODO: エラー通知の実装 (PrimeVue Toast など)
   } finally {
     isSaving.value = false;
   }
 };
+
 </script>
 
 <style scoped>

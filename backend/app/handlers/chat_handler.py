@@ -680,7 +680,7 @@ class ChatHandler:
                         system = chat_request.system
 
                 except Exception as e:
-                    log_error(f"Error fetching or filtering MCP tools: {e}", exc_info=True)
+                    log_error(f"Error fetching or filtering MCP tools: {e}")
                     # ツール取得/フィルタリングエラーの場合、ツールなしで続行
                     filtered_mcp_tools = None
                     system = chat_request.system # エラー時は通常のシステムプロンプト

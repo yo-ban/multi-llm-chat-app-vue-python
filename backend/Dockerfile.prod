@@ -1,8 +1,8 @@
-FROM mcr.microsoft.com/playwright/python:v1.50.0-noble
+FROM mcr.microsoft.com/playwright/python:v1.51.0-noble
 
 WORKDIR /app
 
-# システム依存ライブラリのインストール
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     libffi-dev \
@@ -11,17 +11,35 @@ RUN apt-get update && apt-get install -y \
     libmagic1 \
     && rm -rf /var/lib/apt/lists/*
 
+# Node.js 22.x をインストール (開発版Dockerfileに合わせる。不要であれば削除検討)
+RUN apt-get update && apt-get install -y ca-certificates curl gnupg \
+    && mkdir -p /etc/apt/keyrings \
+    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+    && NODE_MAJOR=22 \
+    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list \
+    && apt-get update && apt-get install nodejs -y \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install -g npm@latest
+
 ENV GEOS_CONFIG=/usr/bin/geos-config
 
-# アプリケーション依存ライブラリのインストール
+# Install application dependencies
 COPY --chown=pwuser:pwuser requirements.txt .
+RUN pip install -U setuptools
 RUN pip install --no-cache-dir -r requirements.txt
 
-# アプリケーションコードのコピー（所有権の設定付き）
+# Copy startup script (for migrations)
+COPY --chown=pwuser:pwuser startup.sh /usr/local/bin/startup.sh
+RUN chmod +x /usr/local/bin/startup.sh
+
+# Copy application code with correct ownership
 COPY --chown=pwuser:pwuser . .
 
-# 非rootユーザへ切り替え（pwuser: ベースイメージで作成済み）
+# Switch to non-root user (pwuser is pre-created in the base image)
 USER pwuser
 
-# サーバ起動
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5200"] 
+# Set the startup script as the entrypoint (runs migrations then CMD)
+ENTRYPOINT ["/usr/local/bin/startup.sh"]
+
+# Default command (passed as arguments to the entrypoint)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5200"]

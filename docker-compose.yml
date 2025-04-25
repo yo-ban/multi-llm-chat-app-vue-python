@@ -18,7 +18,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - GEMINI_MODEL_NAME=gemini-2.0-flash
+      - GEMINI_MODEL_NAME=${GEMINI_MODEL_NAME}
       # PostgreSQL接続用の環境変数
       - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-appdb}
       # APIキー暗号化用の秘密鍵

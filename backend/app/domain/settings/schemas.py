@@ -8,6 +8,40 @@ from typing import Dict, List, Optional, Any, TYPE_CHECKING
 
 from poly_mcp_client.models import ServerConfig, McpServersConfig, CanonicalToolDefinition
 
+class PydanticCanonicalToolItemsSchema(BaseModel):
+    """Pydantic版: 配列要素のスキーマ"""
+    type: str
+
+class PydanticCanonicalToolParameter(BaseModel):
+    """Pydantic版: ツールパラメータ"""
+    type: str
+    description: Optional[str] = None
+    items: Optional[PydanticCanonicalToolItemsSchema] = None
+
+    # バリデータ: type が 'array' でない場合、items は None であるべき
+    @field_validator('items', mode='before')
+    @classmethod
+    def check_items_based_on_type(cls, v, info):
+        """'items' は type が 'array' の場合にのみ存在するように調整"""
+        # 'values' は Pydantic v2 では 'info.data' を使う
+        if 'type' in info.data and info.data['type'] != 'array':
+            if v is not None:
+                # logger.warning(f"Non-array type '{info.data['type']}' has 'items' defined. Ignoring items.")
+                # typeがarrayでない場合はitemsをNoneにする
+                return None
+        # typeがarrayでitemsがない場合、デフォルト値（例: string）を設定することも可能
+        # elif 'type' in info.data and info.data['type'] == 'array' and v is None:
+        #    logger.warning("Array type missing 'items'. Assuming string items.")
+        #    return PydanticCanonicalToolItemsSchema(type='string')
+        return v # 元の値を返す (None or PydanticCanonicalToolItemsSchema)
+
+class PydanticCanonicalToolDefinition(BaseModel):
+    """Pydantic版: カノニカルツール定義"""
+    name: str
+    description: Optional[str] = None
+    parameters: Dict[str, PydanticCanonicalToolParameter]
+    required: List[str]
+
 class SettingsBase(BaseModel):
     """
     設定の基本スキーマ
@@ -87,7 +121,7 @@ class SettingsResponse(SettingsBase):
     利用可能なMCPツール定義も含む。
     """
     # 利用可能な (接続中のサーバーから取得した) MCP ツール定義のリスト
-    available_mcp_tools: List[CanonicalToolDefinition] = Field(default_factory=list, alias="availableMcpTools")
+    available_mcp_tools: List[PydanticCanonicalToolDefinition] = Field(default_factory=list, alias="availableMcpTools")
 
     class Config:
         from_attributes = True  # SQLAlchemyモデルからの変換を許可
