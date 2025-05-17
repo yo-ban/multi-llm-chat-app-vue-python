@@ -58,6 +58,36 @@ services:
     networks:
       - app-network
 
+  # MCPサーバーを実行するためのサービス
+  mcp:
+    build:
+      context: ./mcp
+      dockerfile: Dockerfile
+      # Pass the list of repositories as a build argument
+      args:
+        # Replace with your actual repository URLs, space-separated
+        - MCP_REPOS=https://github.com/yo-ban/url-image-mcp.git
+    container_name: mcp-server-container
+    # Expose expected ports if needed for host access or documentation
+    expose:
+      - "3001" # Adjust based on your servers' ports
+      # - "3002"
+    # Remove volume mount for server code - it's built into the image now
+    # volumes:
+    #   - ./mcp-servers:/mcp-servers
+    environment:
+      # Pass environment variables needed by ANY of the MCP servers
+      - PORT_SERVER_1=3001 # Example: If servers need specific ports
+      # - PORT_SERVER_2=3002
+      # - EXAMPLE_API_KEY=${EXAMPLE_API_KEY}
+      # - ANOTHER_CONFIG=${ANOTHER_CONFIG}
+      - NODE_ENV=production # Often useful for Node apps
+    entrypoint: ["/usr/local/bin/entrypoint.sh"]
+    networks:
+      - app-network
+    # Add restart policy if desired
+    restart: unless-stopped
+
 networks:
   app-network:
     driver: bridge

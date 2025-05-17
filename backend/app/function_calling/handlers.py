@@ -106,8 +106,10 @@ async def handle_tool_call(
                     # ローカルツール実行 (既存ロジック)
                     result = await tool_func(**valid_params)
                     log_info(f"Local tool execution complete: {tool_name}")
-
-                    result_to_return.append({"type": "text", "text": result})
+                    if isinstance(result, dict):
+                        result_to_return.append({"type": "text", "text": json.dumps(result)})
+                    else:
+                        result_to_return.append({"type": "text", "text": result})
 
                     # Return the final result in the last status update
                     if result_to_return: # Check for None explicitly, as some tools might return False/0

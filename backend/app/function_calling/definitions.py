@@ -8,10 +8,6 @@ import os
 import pkgutil
 
 # Import tool functions from the new tools subdirectory
-from app.function_calling.tools.web_search_tool import web_search
-from app.function_calling.tools.web_browsing_tool import web_browsing
-from app.function_calling.tools.request_clarification_tool import request_clarification
-
 from poly_mcp_client.models import CanonicalToolDefinition # 型ヒントのため
 
 # Path to the tools directory
