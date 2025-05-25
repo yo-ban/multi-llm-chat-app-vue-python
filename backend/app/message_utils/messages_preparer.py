@@ -60,6 +60,38 @@ async def prepare_openai_messages(system_message: str, messages: List[Dict[str, 
     
     return openai_messages
 
+async def prepare_openai_messages_v2(system_message: str, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Prepare messages specifically for OpenAI Responses API format
+    
+
+    Args:
+        system_message: System message to prepend
+        messages: List of message dictionaries
+        
+    Returns:
+        List of messages formatted for OpenAI API
+    """
+    openai_messages = [{"role": "developer", "content": system_message}]
+    
+    for msg in messages:
+        content = []
+        for item in msg['content']:
+            if item['type'] == 'text':
+                if msg['role'] == 'user':
+                    content.append({"type": "input_text", "text": item['text']})
+                elif msg['role'] == 'assistant':
+                    content.append({"type": "output_text", "text": item['text']})
+            if item['type'] == 'image':
+                content.append({
+                    "type": "input_image",
+                    "image_url":  f"data:{item['source']['media_type']};base64,{item['source']['data']}"                    
+                })
+        openai_messages.append({"role": msg['role'], "content": content})
+    
+    return openai_messages
+
+
 async def prepare_anthropic_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Prepare messages specifically for Anthropic API format

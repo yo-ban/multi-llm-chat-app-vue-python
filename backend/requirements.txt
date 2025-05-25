@@ -3,9 +3,9 @@ unstructured==0.17.2
 fastapi==0.115.12
 chardet==5.2.0
 pypdf==5.2.0
-openai==1.75.0
-anthropic==0.49.0
-google-genai==1.11.0
+openai==1.82.0
+anthropic==0.52.0
+google-genai==1.16.1
 uvicorn==0.34.0
 lxml[html_clean]
 python-magic; platform_system != "Windows"
@@ -22,5 +22,4 @@ SQLAlchemy>=1.4,<2.0
 psycopg2-binary
 cryptography
 alembic
-mcp==1.6.0
 git+https://github.com/yo-ban/poly-mcp-client.git

@@ -457,6 +457,7 @@ async def analyze_web_page_content(url: str, query: str) -> str:
     This function fetches the content from the specified URL (handling various content types like HTML, PDF, etc.),
     analyzes it (potentially using multimodal models for web pages including text and screenshots),
     and extracts information relevant to the provided query.
+    Image URLs are not supported.
     - Purpose: Perform a detailed analysis of a specific web page or document at a given URL to extract relevant information according to the query.
     - Usage Guidelines:
         - Use this tool when you have a specific URL and need to extract targeted information from its content.

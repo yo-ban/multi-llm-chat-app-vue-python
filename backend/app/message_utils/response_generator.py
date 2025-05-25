@@ -5,7 +5,7 @@ from openai import AsyncOpenAI
 from anthropic import AsyncAnthropic
 from app.function_calling.handlers import handle_tool_call
 from app.function_calling.definitions import get_tool_definitions, get_gemini_tool_definitions, get_anthropic_tool_definitions
-from app.message_utils.usage_parser import parse_usage, parse_usage_gemini, parse_usage_anthropic
+from app.message_utils.usage_parser import parse_usage, parse_usage_gemini, parse_usage_anthropic, parse_usage_openai_v2
 from app.logger.logging_utils import get_logger, log_error, log_info, log_warning, log_debug
 from app.misc_utils.image_utils import upload_image_to_gemini
 
@@ -358,12 +358,12 @@ async def openai_stream_generator(
                                         tool_result_image = ""
                                         for result in json.loads(tool_result):
                                             if result["type"] == "text":
-                                                tool_result_text = result
+                                                tool_result_text = result.get("text")
                                             elif result["type"] == "image":
                                                 tool_result_image = f"data:{result['source']['media_type']};base64,{result['source']['data']}"
                                         
                                         if not tool_result_text:
-                                            tool_result_text = "This tool did not return any text."
+                                            tool_result_text = f"{tool_name} did not return any text."
                                         
                                         # Create a message with the tool result
                                         tool_result_message = {
@@ -445,6 +445,221 @@ async def openai_stream_generator(
     except Exception as e:
         log_error(f"Error in OpenAI stream generator: {str(e)}")
         yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+async def openai_stream_generator_v2(
+    response: Any,
+    openai_client: AsyncOpenAI,
+    openai_messages: List[Dict[str, Any]],
+    completion_args: dict,
+    mcp_manager: PolyMCPClient,
+    enabled_tools: list[CanonicalToolDefinition],
+    multimodal: bool = False
+) -> AsyncGenerator[str, None]:
+    """
+    Generator for streaming OpenAI Responses API responses.
+    This function handles tool_calls if present in the response.
+    
+    Args:
+        response: Initial OpenAI Responses API response
+        openai_client: OpenAI client instance
+        openai_messages: Current message history
+        completion_args: The arguments to pass to the API call
+        mcp_manager: MCP Manager for tool execution
+        enabled_tools: List of enabled tools
+        multimodal: Whether multimodal content is supported
+    
+    Yields:
+        Streaming response data.
+    """
+    try:
+        should_continue = True
+        tool_calls_count = 0
+        # Create a running copy of completion args to maintain context
+        running_args = completion_args.copy()
+        # Keep track of all items for building the next input
+        accumulated_items = []
+        
+        while should_continue:  # Loop to handle recursive tool calls
+            should_continue = False  # Reset flag, will be set to True if we need to continue
+            log_info("Processing OpenAI Responses API stream")
+            function_calls = []
+            current_response_id = None
+
+            async for chunk in response:
+                event_type = chunk.type
+                
+                # Handle response creation
+                if event_type == "response.created":
+                    current_response_id = chunk.response.id
+                    
+                # Handle output item addition
+                elif event_type == "response.output_item.added":
+                    item = chunk.item  # chunk.item が正しい
+                    if hasattr(item, "type") and item.type == "function_call":
+                        function_name = item.name
+                        item_id = item.id
+                        # Notify frontend about function call start
+                        log_info("function call chunk: ", {
+                            "function_name": function_name,
+                            "item_id": item_id
+                        })
+                        
+                # Handle reasoning summary deltas
+                elif event_type == "response.reasoning_summary_text.delta":
+                    # For reasoning models, forward reasoning text
+                    # yield f"data: {json.dumps({'text': chunk.delta})}\n\n"
+                    pass
+
+                # Handle text deltas
+                elif event_type == "response.output_text.delta":
+                    yield f"data: {json.dumps({'text': chunk.delta})}\n\n"
+                    
+                # Handle function call arguments deltas
+                elif event_type == "response.function_call_arguments.delta":
+                    # Just accumulate, don't yield individual argument chunks
+                    pass
+                    
+                # Handle function call arguments completion
+                elif event_type == "response.function_call_arguments.done":
+                    function_args = json.loads(chunk.arguments)
+                    function_call_id = chunk.item_id
+                    
+                    # Find the function name - we should have it from the accumulated function calls
+                    # For now, we'll execute the tool when we get the complete function call item
+                    pass
+                    
+                # Handle output item completion
+                elif event_type == "response.output_item.done":
+                    item = chunk.item  # chunk.item が正しい
+                    if hasattr(item, "type"):
+                        if item.type == "function_call":
+                            function_calls.append(item)
+                            accumulated_items.append(item)
+                        elif item.type == "reasoning":
+                            # Add reasoning item to accumulated items for next request
+                            log_info(f"reasoning summary: {item.summary}")
+                            accumulated_items.append(item)
+                        elif item.type == "message":
+                            # Add message item to accumulated items for next request
+                            accumulated_items.append(item)
+                
+                # Handle response completion
+                elif event_type == "response.completed":
+                    response_obj = chunk.response
+                    
+                    # Check if there are function calls to process
+                    if function_calls:
+                        should_continue = True
+                        
+                        # Execute function calls and prepare input for the next request
+                        # Start with the existing messages from running_args
+                        input_content: list[Any] = running_args.get("input", []).copy()
+                        image_content: list[Any] = []
+                        
+                        # Add all accumulated items from this response
+                        for accumulated_item in accumulated_items:
+                            input_content.append(accumulated_item)
+                        
+                        # Process each function call and add their outputs
+                        for function_call in function_calls:
+                            function_args = json.loads(function_call.arguments)
+                            function_name = function_call.name
+                            
+                            yield f"data: {json.dumps({'type': 'tool_call_start', 'tool': function_name, 'input': function_args})}\n\n"
+                            
+                            # Execute the tool
+                            tool_result = None
+                            async for status in handle_tool_call(function_name, function_args, mcp_manager):
+                                if status["type"] == "tool_execution_complete":
+                                    tool_result = status["result"]
+                                else:
+                                    # Forward status updates to frontend
+                                    yield f"data: {json.dumps(status)}\n\n"
+
+                            yield f"data: {json.dumps({'type': 'tool_call_end', 'tool': function_name})}\n\n"
+                            
+                            # Parse tool result to separate text and image
+                            tool_result_text = ""
+                            tool_result_image = ""
+                            for result in json.loads(tool_result):
+                                if result["type"] == "text":
+                                    tool_result_text = result.get("text")
+                                elif result["type"] == "image":
+                                    tool_result_image = f"data:{result['source']['media_type']};base64,{result['source']['data']}"
+                            
+                            if not tool_result_text:
+                                tool_result_text = f"{function_name} did not return any text."
+                            
+                            # Add function call output to input for next request
+                            input_content.append({
+                                "type": "function_call_output",
+                                "call_id": function_call.call_id,
+                                "output": tool_result_text
+                            })
+                            
+                            # If tool returned an image and multimodal is enabled, add it as a user message
+                            if tool_result_image and multimodal:
+                                image_content.append({
+                                    "role": "user",
+                                    "content": [
+                                        {
+                                            "type": "input_text",
+                                            "text": f"{function_name} returned the following image:"
+                                        },
+                                        {
+                                            "type": "input_image",
+                                            "image_url": tool_result_image                                            
+                                        }
+                                    ]
+                                })
+
+                        if image_content:
+                            input_content.extend(image_content)
+
+                        # Update running_args with the new input content
+                        running_args["input"] = input_content
+                        
+                        # Make sure tools are included in the next request
+                        if tool_calls_count > 0 and "tools" in running_args:
+                            running_args["tools"] = get_tool_definitions(canonical_tools=enabled_tools, vendor="openai.responses")
+                            running_args["parallel_tool_calls"] = True
+                            running_args["tool_choice"] = "auto"
+                        
+                        tool_calls_count += 1
+                        
+                        # Create new response with function call outputs
+                        response = await openai_client.responses.create(
+                            model=running_args["model"],
+                            input=input_content,
+                            tools=running_args.get("tools"),
+                            parallel_tool_calls=running_args.get("parallel_tool_calls", True),
+                            tool_choice=running_args.get("tool_choice", "auto"),
+                            stream=True,
+                            **{k: v for k, v in running_args.items() if k not in ["model", "input", "tools", "parallel_tool_calls", "tool_choice", "stream"]}
+                        )
+                        
+                        function_calls = []  # Reset for next iteration
+                        accumulated_items = []  # Reset accumulated items for next iteration
+                        break  # Break inner loop to process new response
+                    else:
+                        # No function calls, handle usage and finish
+                        if hasattr(response_obj, 'usage') and response_obj.usage:
+                            usage = await parse_usage_openai_v2(response_obj.usage)
+                            log_info("Token usage in OpenAI Responses API", usage)
+                            yield f"data: {json.dumps(usage)}\n\n"
+                        
+                        should_continue = False
+                        break
+
+            # If we've completed processing and there are no more tool calls to handle
+            if not should_continue:
+                yield 'data: {"text": "[DONE]"}\n\n'
+                break
+
+    except Exception as e:
+        log_error(f"Error in OpenAI Responses API stream generator: {str(e)}")
+        yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
 
 
 async def anthropic_stream_generator(

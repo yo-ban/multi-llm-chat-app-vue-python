@@ -28,6 +28,34 @@ async def parse_usage(usage: Any) -> Dict[str, Any]:
 
     return usage_info 
 
+async def parse_usage_openai_v2(usage: Any) -> Dict[str, Any]:
+    """
+    Parse usage information from OpenAI's response.
+    This is a common utility used by both streaming and non-streaming responses.
+
+
+    Args:
+        usage: The usage object from OpenAI's response
+
+    Returns:
+        Dict containing parsed usage information
+    """
+    completion_usage = getattr(usage, 'output_tokens', 0)
+    prompt_usage = getattr(usage, 'input_tokens', 0)
+    
+    completion_tokens_details = getattr(usage, 'output_tokens_details', None)
+    reasoning_usage = getattr(completion_tokens_details, 'reasoning_tokens', 0) if completion_tokens_details else 0
+
+    usage_info = {
+        "usage": {
+            "completion_usage": completion_usage,
+            "prompt_usage": prompt_usage,
+            "reasoning_usage": reasoning_usage
+        }
+    }
+
+    return usage_info 
+
 async def parse_usage_anthropic(usage: Any) -> Dict[str, Any]:
     """
     Parse usage information from Anthropic's response.

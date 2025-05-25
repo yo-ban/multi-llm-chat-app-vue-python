@@ -26,12 +26,14 @@ from app.message_utils.response_generator import (
     gemini_non_stream_generator,
     openai_stream_generator,
     openai_non_stream_generator,
+    openai_stream_generator_v2,
     anthropic_stream_generator,
     anthropic_non_stream_generator
 )
 from app.message_utils.messages_preparer import (
     prepare_api_messages, 
     prepare_openai_messages, 
+    prepare_openai_messages_v2,
     prepare_anthropic_messages, 
 )
 
@@ -59,7 +61,7 @@ class ChatHandler:
         self.api_key = api_key
         self.settings_service = settings_service
         self.handlers = {
-            'openai': self.handle_openai,
+            'openai': self.handle_openai_v2,
             'google': self.handle_gemini,
             'openrouter': self.handle_openrouter,
             'xai': self.handle_xai,
@@ -166,6 +168,118 @@ class ChatHandler:
             except Exception as e:
                 log_error(f"OpenAI API error (non-stream): {e}", {"model": model, "stream": False})
                 raise e
+
+
+    async def handle_openai_v2(
+        self,
+        model: str,
+        messages: list,
+        max_tokens: int,
+        temperature: float,
+        stream: bool,
+        system: str,
+        mcp_manager: PolyMCPClient, # MCP Managerを追加
+        enabled_tools: Optional[List[CanonicalToolDefinition]] = None, # MCPツール定義を追加
+        toolUse: bool = False,        
+        reasoning_effort: Optional[str] = None,
+        is_reasoning_supported: bool = False,
+        reasoning_parameter_type: Optional[str] = None,
+        budget_tokens: Optional[int] = None,
+        multimodal: bool = False,
+        image_generation: bool = False
+    ) -> Any:
+        """Handle OpenAI API requests with optional function calling.
+        
+        If a BadRequest error indicates that stream mode is unsupported,
+        the generation falls back to non-streaming mode using common logic.
+        """
+        openai = AsyncOpenAI(api_key=self.api_key)
+        openai_messages = await prepare_openai_messages_v2(system, messages)
+
+        completion_args = {
+            "model": model,
+            "input": openai_messages,
+            "text": {
+                "format": {
+                    "type": "text"
+                }
+            },
+            "max_output_tokens": max_tokens,
+            "stream": stream,
+            "store": True
+        }
+
+        if is_reasoning_supported:
+            if reasoning_parameter_type == "effort" and reasoning_effort:
+                completion_args["reasoning"] = {
+                    "effort": reasoning_effort,
+                    "summary": "auto"
+                }
+        else:
+            completion_args["temperature"] = temperature
+
+        if toolUse and enabled_tools:
+            completion_args["tools"] = get_tool_definitions(canonical_tools=enabled_tools, vendor="openai.responses")
+            completion_args["parallel_tool_calls"] = True
+            completion_args["tool_choice"] = "required"
+
+        elif toolUse:
+            log_warning("Tool use requested, but no MCP tools are available/enabled.")
+
+        # If streaming is requested, try using stream mode.
+        if stream:
+            try:
+                response = await openai.responses.create(**completion_args)
+                return StreamingResponse(
+                    openai_stream_generator_v2(
+                        response,
+                        openai_client=openai,
+                        openai_messages=openai_messages,
+                        completion_args=completion_args,
+                        multimodal=multimodal,
+                        mcp_manager=mcp_manager,
+                        enabled_tools=enabled_tools
+                    ),
+                    media_type="text/event-stream"
+                )
+            except Exception as e:
+                # If the error indicates that stream mode is unsupported, fall back.
+                if "Unsupported value: 'stream'" in str(e):
+                    log_warning("Stream mode is unsupported, falling back to non-streaming mode")
+                    completion_args["stream"] = False
+                    # Delegate non-streamed handling to the common function.
+                    return StreamingResponse(
+                        openai_non_stream_generator(
+                            openai_client=openai, 
+                            completion_args=completion_args, 
+                            openai_messages=openai_messages,
+                            multimodal=multimodal,
+                            mcp_manager=mcp_manager,
+                            enabled_tools=enabled_tools
+                        ),
+                        media_type="text/event-stream"
+                    )
+                else:
+                    log_error(f"OpenAI API error (stream): {e}", {"model": model, "stream": True})
+                    raise e
+        else:
+            completion_args["stream"] = False
+            try:
+                return StreamingResponse(
+                    openai_non_stream_generator(
+                        openai_client=openai,
+                        completion_args=completion_args,
+                        openai_messages=openai_messages,
+                        multimodal=multimodal,
+                        mcp_manager=mcp_manager,
+                        enabled_tools=enabled_tools
+                    ),
+                    media_type="text/event-stream"
+                )
+            except Exception as e:
+                log_error(f"OpenAI API error (non-stream): {e}", {"model": model, "stream": False})
+                raise e
+
 
     async def handle_anthropic(
         self,

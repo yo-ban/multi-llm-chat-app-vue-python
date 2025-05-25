@@ -171,7 +171,7 @@ def convert_tool_definition_for_vendor(tool_def: Dict[str, Any], vendor: str) ->
     Returns:
         Dict[str, Any]: The vendor-specific tool definition
     """
-    if vendor == "openai":
+    if vendor == "openai.chat_completion":
         # OpenAI format
         return {
             "type": "function",
@@ -187,7 +187,20 @@ def convert_tool_definition_for_vendor(tool_def: Dict[str, Any], vendor: str) ->
                 "strict": False
             }
         }
-
+    elif vendor == "openai.responses":
+        # OpenAI Responses API format - similar to chat completions but may have slight differences
+        return {
+            "type": "function",
+            "name": tool_def["name"],
+            "description": tool_def["description"],
+            "parameters": {
+                "type": "object",
+                "properties": tool_def["parameters"],
+                "required": tool_def["required"],
+                "additionalProperties": False
+            },
+            "strict": False
+        }
     elif vendor == "anthropic":
         # Anthropic format
         return {
@@ -286,7 +299,7 @@ def get_tool_definitions(
 
     Args:
         without_human_fallback: Whether to exclude the request_clarification tool
-        vendor: The vendor name (openai, anthropic, gemini) to format the definitions for
+        vendor: The vendor name (openai, openai.responses, anthropic, gemini) to format the definitions for
         canonical_tools: Optional list of canonical tool definitions
 
     Returns:
@@ -305,7 +318,7 @@ def get_tool_definitions(
         canonical_defs = canonical_tools
 
     # 4. Convert definitions to the target vendor format
-    target_vendor = vendor or "openai" # Default to OpenAI if vendor is None
+    target_vendor = vendor or "openai.chat_completion" # Default to OpenAI Chat Completions if vendor is None
 
     if target_vendor == "gemini":
         # For Gemini, convert to FunctionDeclaration objects and return as Tool
