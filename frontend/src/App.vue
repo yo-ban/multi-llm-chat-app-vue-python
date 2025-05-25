@@ -166,7 +166,7 @@ watch(
   () => tempSettings.defaultVendor,
   (newVendor) => {
     const newModel = Object.values(MODELS[newVendor] || {})[0];
-    tempSettings.defaultModel = newModel ? newModel.id : MODELS.anthropic.CLAUDE_3_5_SONNET.id;
+    tempSettings.defaultModel = newModel ? newModel.id : MODELS.anthropic.CLAUDE_SONNET_4.id;
   }
 );
 

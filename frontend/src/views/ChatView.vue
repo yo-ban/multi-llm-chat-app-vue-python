@@ -156,7 +156,7 @@ const currentConversationSettings = computed<APISettings>(() => {
   if (!currentConversation.value) {
     return {
       vendor: 'anthropic',
-      model: MODELS.anthropic.CLAUDE_3_5_SONNET.id,
+      model: MODELS.anthropic.CLAUDE_SONNET_4.id,
       maxTokens: 4096,
       temperature: 0.5,
     };
@@ -255,7 +255,7 @@ const selectedModel = computed(() => {
   }
   
   // モデルが見つからない場合のフォールバック
-  return MODELS.anthropic.CLAUDE_3_5_SONNET;
+  return MODELS.anthropic.CLAUDE_SONNET_4;
 });
 
 const activeToolCall = ref<ToolCall | null>(null);

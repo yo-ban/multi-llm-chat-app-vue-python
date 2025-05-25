@@ -3,6 +3,24 @@ import type { ReasoningParameters } from '@/types/reasoning';
 
 export const MODELS: { [key: string]: { [key: string]: Model } } = {
   anthropic: {
+    CLAUDE_SONNET_4: {
+      id: 'claude-sonnet-4-20250514',
+      name: 'Claude Sonnet 4',
+      contextWindow: 200000,
+      maxTokens: 8192,
+      multimodal: true,
+      supportFunctionCalling: true,
+      supportsReasoning: false,
+    },
+    CLAUDE_OPUS_4: {
+      id: 'claude-opus-4-20250514',
+      name: 'Claude Opus 4',
+      contextWindow: 200000,
+      maxTokens: 8192,
+      multimodal: true,
+      supportFunctionCalling: true,
+      supportsReasoning: false,
+    },
     CLAUDE_3_7_SONNET: {
       id: 'claude-3-7-sonnet-20250219',
       name: 'Claude 3.7 Sonnet',
@@ -12,6 +30,35 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       supportFunctionCalling: true,
       supportsReasoning: false,
     },
+    CLAUDE_SONNET_4_THINKING: {
+      id: 'claude-sonnet-4-20250514-thinking',
+      name: 'Claude Sonnet 4 (with Thinking)',
+      contextWindow: 200000,
+      maxTokens: 8192,
+      multimodal: true,
+      supportFunctionCalling: true,
+      supportsReasoning: true,
+      reasoningParameters: {
+        type: 'budget',
+        budgetTokenLimit: 32768,
+        budgetTokens: 4096,
+      },
+    },
+    CLAUDE_OPUS_4_THINKING: {
+      id: 'claude-opus-4-20250514-thinking',
+      name: 'Claude Opus 4 (with Thinking)',
+      contextWindow: 200000,
+      maxTokens: 8192,
+      multimodal: true,
+      supportFunctionCalling: true,
+      supportsReasoning: true,
+      reasoningParameters: {
+        type: 'budget',
+        budgetTokenLimit: 32768,
+        budgetTokens: 4096,
+      },
+    },
+
     CLAUDE_3_7_SONNET_THINKING: {
       id: 'claude-3-7-sonnet-20250219-thinking',
       name: 'Claude 3.7 Sonnet (with Thinking)',
@@ -24,14 +71,6 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
         budgetTokenLimit: 32768,
         budgetTokens: 4096,
       },
-    },
-    CLAUDE_3_5_SONNET: {
-      id: 'claude-3-5-sonnet-20241022',
-      name: 'Claude 3.5 Sonnet',
-      contextWindow: 200000,
-      maxTokens: 8192,
-      multimodal: true,
-      supportsReasoning: false,
     },
     CLAUDE_3_HAIKU: {
       id: 'claude-3-haiku-20240307',
@@ -154,9 +193,9 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
     }
   },
   google: {
-    GEMINI_2_5_FLASH:{
-      id: 'gemini-2.5-flash-preview-04-17',
-      name: 'Gemini 2.5 Flash Preview 04-17',
+    GEMINI_2_5_FLASH_PREVIEW_05_20:{
+      id: 'gemini-2.5-flash-preview-05-20',
+      name: 'Gemini 2.5 Flash Preview 05-20',
       contextWindow: 1048576,
       maxTokens: 65536,
       multimodal: true,
@@ -167,15 +206,6 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
         budgetTokenLimit: 24576,
         budgetTokens: 4096,
       },
-    },
-    GEMINI_2_5_PRO_EXP: {
-      id: 'gemini-2.5-pro-exp-03-25',
-      name: 'Gemini 2.5 Pro Experimental 03-25',
-      contextWindow: 1048576,
-      maxTokens: 65536,
-      multimodal: true,
-      supportFunctionCalling: true,
-      supportsReasoning: true,
     },
     GEMINI_2_5_PRO_PREVIEW: {
       id: 'gemini-2.5-pro-preview-03-25',
@@ -196,6 +226,15 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       supportFunctionCalling: true,
       supportsReasoning: false,
     },
+    GEMINI_2_5_PRO_EXP: {
+      id: 'gemini-2.5-pro-exp-03-25',
+      name: 'Gemini 2.5 Pro Experimental 03-25',
+      contextWindow: 1048576,
+      maxTokens: 65536,
+      multimodal: true,
+      supportFunctionCalling: true,
+      supportsReasoning: true,
+    },
     GEMINI_2_0_FLASH: {
       id: 'gemini-2.0-flash',
       name: 'Gemini 2.0 Flash',
@@ -204,23 +243,7 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       multimodal: true,
       supportFunctionCalling: true,
       supportsReasoning: false,
-    },
-    GEMINI_2_0_FLASH_THINKING_EXP: {
-      id: 'gemini-2.0-flash-thinking-exp-01-21',
-      name: 'Gemini 2.0 Flash Thinking Experimental',
-      contextWindow: 1048576,
-      maxTokens: 65536,
-      multimodal: true,
-      supportsReasoning: true,
-    },
-    GEMINI_2_0_PRO_EXP: {
-      id: 'gemini-2.0-pro-exp-02-05',
-      name: 'Gemini 2.0 Pro Experimental',
-      contextWindow: 2097152,
-      maxTokens: 8192,
-      multimodal: true,
-      supportsReasoning: false,
-    },
+    }
   },
   xai: {
     XAI_GROK_3_MINI_BETA: {

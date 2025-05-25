@@ -377,7 +377,7 @@ const selectedModel = computed(() => {
   
   // OpenRouter以外の場合は従来のロジックを使用
   return Object.values(MODELS[localSettings.value.vendor] || {})
-    .find((m) => m.id === localSettings.value.model) || MODELS.anthropic.CLAUDE_3_5_SONNET;
+    .find((m) => m.id === localSettings.value.model) || MODELS.anthropic.CLAUDE_SONNET_4;
 });
 
 /**
@@ -464,7 +464,7 @@ watch(
         // Don't reset maxTokens here - let the model watcher handle it or dialog handler
       } else {
         // Fallback model
-        localSettings.value.model = MODELS.anthropic.CLAUDE_3_5_SONNET.id;
+        localSettings.value.model = MODELS.anthropic.CLAUDE_SONNET_4.id;
       }
     }
 

@@ -13,7 +13,7 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   defaultTemperature: 0.7,
   defaultMaxTokens: 4096,
   defaultVendor: 'anthropic',
-  defaultModel: MODELS.anthropic.CLAUDE_3_5_SONNET.id,
+  defaultModel: MODELS.anthropic.CLAUDE_SONNET_4.id,
   openrouterModels: [],
   titleGenerationVendor: 'anthropic',
   titleGenerationModel: MODELS.anthropic.CLAUDE_3_HAIKU.id,
