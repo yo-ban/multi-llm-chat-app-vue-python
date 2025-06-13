@@ -193,6 +193,20 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
     }
   },
   google: {
+    GEMINI_2_5_PRO_PREVIEW_06_05: {
+      id: 'gemini-2.5-pro-preview-06-05',
+      name: 'Gemini 2.5 Pro Preview 06-05',
+      contextWindow: 1048576,
+      maxTokens: 65536,
+      multimodal: true,
+      supportFunctionCalling: true,
+      supportsReasoning: true,
+      reasoningParameters: {
+        type: 'budget',
+        budgetTokenLimit: 32768,
+        budgetTokens: 4096,
+      },
+    },
     GEMINI_2_5_FLASH_PREVIEW_05_20:{
       id: 'gemini-2.5-flash-preview-05-20',
       name: 'Gemini 2.5 Flash Preview 05-20',
