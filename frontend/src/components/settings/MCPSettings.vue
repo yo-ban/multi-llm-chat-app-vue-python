@@ -113,6 +113,14 @@
         </div>
 
         <!-- Http Fields -->
+        <div v-if="currentServerEditData.type === 'streamable-http'">
+          <div class="field">
+            <label for="streamable-http-url">Server URL *</label>
+            <PrimeInputText id="streamable-http-url" v-model="currentHttpConfig.url" placeholder="e.g., http://localhost:8000" />
+          </div>
+          <!-- Add fields for authentication etc. if needed -->
+        </div>
+        
         <div v-if="currentServerEditData.type === 'http'">
           <div class="field">
             <label for="http-url">Server URL *</label>
@@ -151,6 +159,7 @@ import type {
   ServerConfig,
   StdioServerConfig,
   HttpServerConfig,
+  StreamableHttpServerConfig,
   CanonicalToolDefinition
 } from '@/types/mcp';
 
@@ -203,10 +212,10 @@ const isServerDialogVisible = ref(false);
 const editingServerName = ref<string | null>(null); // null for adding, string for editing
 const currentServerEditData = reactive({
   name: '',
-  type: 'stdio' as 'stdio' | 'http',
+  type: 'stdio' as 'stdio' | 'http' | 'streamable-http',
   argsString: '', // For easier textarea binding
   envString: '{}', // For easier textarea binding and JSON validation
-  config: {} as Partial<StdioServerConfig | HttpServerConfig> // Holds specific config
+  config: {} as Partial<StdioServerConfig | HttpServerConfig | StreamableHttpServerConfig> // Holds specific config
 });
 const serverNameError = ref('');
 const envJsonError = ref('');

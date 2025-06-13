@@ -13,8 +13,15 @@ export interface HttpServerConfig {
   // 必要に応じて認証情報などを追加
 }
 
+/** Streamable HTTPサーバー固有の設定 */
+export interface StreamableHttpServerConfig {
+  type: 'streamable-http'
+  url: string
+  // 必要に応じて認証情報などを追加
+}
+
 /** MCPサーバー設定 (Stdio または Http) */
-export type ServerConfig = StdioServerConfig | HttpServerConfig
+export type ServerConfig = StdioServerConfig | HttpServerConfig | StreamableHttpServerConfig
 
 /** MCPサーバー設定の辞書型 (キーはサーバー名) */
 export type McpServersConfig = Record<string, ServerConfig>
