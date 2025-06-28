@@ -34,7 +34,7 @@ RUN \
   # $MCP_REPOS を echo し、xargs で各 URL を処理
   # -n 1: 一度に1つの引数（URL）を処理
   # -I {}: 各引数（URL）を {} で参照できるようにする
-  echo "$MCP_REPOS" | xargs -n 1 -I {} sh -c ' \
+  echo "$MCP_REPOS" | tr ' ' '\n' | xargs -I {} sh -c ' \
     repo_url="{}" && \
     # リポジトリ名を取得 (以前と同じ)
     repo_name=$(basename "$repo_url" .git) && \
