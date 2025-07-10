@@ -169,22 +169,30 @@ const emit = defineEmits<{
   (e: 'update:modelValue', value: Model[]): void
 }>();
 
+// Helper function to create a default model
+function createDefaultModel(): Model {
+  return {
+    id: '',
+    name: '',
+    contextWindow: 4096,
+    maxTokens: 4096,
+    multimodal: false,
+    supportFunctionCalling: false,
+    supportsReasoning: false,
+    reasoningParameters: undefined,
+    unsupportsTemperature: false,
+    imageGeneration: false,
+  };
+}
+
 // ローカルモデルリスト
-const localModels = ref<Model[]>([...props.modelValue]);
+const localModels = computed({
+  get: () => props.modelValue,
+  set: (value) => emit('update:modelValue', value)
+});
 
 // 編集用の一時データ
-const editingModel = ref<Model>({
-  id: '',
-  name: '',
-  contextWindow: 4096,
-  maxTokens: 4096,
-  multimodal: false,
-  supportFunctionCalling: false,
-  supportsReasoning: false,
-  reasoningParameters: undefined,
-  unsupportsTemperature: false,
-  imageGeneration: false,
-});
+const editingModel = ref<Model>(createDefaultModel());
 
 const modelDialogVisible = ref(false);
 const editingIndex = ref(-1);
@@ -192,6 +200,16 @@ const editingIndex = ref(-1);
 // モデル情報の自動補完
 const isLoading = ref(false);
 const errorMessage = ref('');
+
+// Helper function to validate model fields
+function isValidModel(model: Model): boolean {
+  return (
+    model.id.trim() !== '' &&
+    model.name.trim() !== '' &&
+    model.contextWindow > 0 &&
+    model.maxTokens > 0
+  );
+}
 
 async function fetchModelInfo(modelId: string) {
   try {
@@ -214,7 +232,6 @@ async function fetchModelInfo(modelId: string) {
       errorMessage.value = 'Model not found in OpenRouter API';
     }
   } catch (error) {
-    console.error('Error fetching model info:', error);
     errorMessage.value = 'Failed to fetch model information';
   } finally {
     isLoading.value = false;
@@ -224,18 +241,7 @@ async function fetchModelInfo(modelId: string) {
 // モデルの追加
 const addModel = () => {
   editingIndex.value = -1;
-  editingModel.value = {
-    id: '',
-    name: '',
-    contextWindow: 4096,
-    maxTokens: 4096,
-    multimodal: false,
-    supportFunctionCalling: false,
-    supportsReasoning: false,
-    reasoningParameters: undefined,
-    unsupportsTemperature: false,
-    imageGeneration: false,
-  };
+  editingModel.value = createDefaultModel();
   modelDialogVisible.value = true;
 };
 
@@ -249,17 +255,17 @@ const editModel = (index: number) => {
 // モデルの削除
 const removeModel = (index: number) => {
   localModels.value = localModels.value.filter((_, i) => i !== index);
-  emit('update:modelValue', localModels.value);
 };
 
 // モデルの保存
 const saveModel = () => {
+  const models = [...localModels.value];
   if (editingIndex.value === -1) {
-    localModels.value.push({ ...editingModel.value });
+    models.push({ ...editingModel.value });
   } else {
-    localModels.value[editingIndex.value] = { ...editingModel.value };
+    models[editingIndex.value] = { ...editingModel.value };
   }
-  emit('update:modelValue', localModels.value);
+  localModels.value = models;
   closeModelDialog();
 };
 
@@ -267,17 +273,11 @@ const saveModel = () => {
 const closeModelDialog = () => {
   modelDialogVisible.value = false;
   editingIndex.value = -1;
+  errorMessage.value = '';
 };
 
 // モデルのバリデーション
-const isModelValid = computed(() => {
-  return (
-    editingModel.value.id.trim() !== '' &&
-    editingModel.value.name.trim() !== '' &&
-    editingModel.value.contextWindow > 0 &&
-    editingModel.value.maxTokens > 0
-  );
-});
+const isModelValid = computed(() => isValidModel(editingModel.value));
 </script>
 
 <style scoped>

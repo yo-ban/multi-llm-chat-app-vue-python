@@ -17,6 +17,12 @@ export interface OpenRouterModelTopProvider {
     is_moderated: boolean;
 }
 
+export interface PerRequestLimits {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    [key: string]: number | undefined;
+}
+
 export interface OpenRouterModel {
     id: string;
     name: string;
@@ -26,7 +32,7 @@ export interface OpenRouterModel {
     architecture: OpenRouterModelArchitecture;
     pricing: OpenRouterModelPricing;
     top_provider: OpenRouterModelTopProvider;
-    per_request_limits: any | null;
+    per_request_limits: PerRequestLimits | null;
 }
 
 export interface OpenRouterModelsResponse {

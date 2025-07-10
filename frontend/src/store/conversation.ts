@@ -20,26 +20,37 @@ export const useConversationStore = defineStore('conversation', {
     async initializeConversationStore() {
 
       // Load data using new storage service methods
-      this.conversationList = await storageService.getAllConversationMetas();
-      this.folders = await storageService.getAllFolders();
-      this.currentConversationId = await storageService.getCurrentConversationId();
+      const conversationList = await storageService.getAllConversationMetas();
+      const folders = await storageService.getAllFolders();
+      const currentConversationId = await storageService.getCurrentConversationId();
+      
+      this.$patch({
+        conversationList,
+        folders,
+        currentConversationId
+      });
       
       // --- Start Fallback Logic ---
       // Create a set of valid folder IDs
       const validFolderIds = new Set(this.folders.map(f => f.id));
       const conversationsToUpdate: Conversation[] = [];
+      const updatedConversationList: Conversation[] = [];
 
-      // Check conversation list and mark those needing update
+      // Check conversation list and create updated versions
       this.conversationList.forEach(conversation => {
         if (conversation.folderId && !validFolderIds.has(conversation.folderId)) {
           console.warn(`Conversation "${conversation.title}" (${conversation.conversationId}) had an invalid folderId "${conversation.folderId}". Moving to root.`);
-          conversation.folderId = null;
-          conversationsToUpdate.push(conversation);
+          const updatedConversation = { ...conversation, folderId: null };
+          conversationsToUpdate.push(updatedConversation);
+          updatedConversationList.push(updatedConversation);
+        } else {
+          updatedConversationList.push(conversation);
         }
       });
 
-      // Save updates for affected conversations individually
+      // Update state if there were changes
       if (conversationsToUpdate.length > 0) {
+        this.$patch({ conversationList: updatedConversationList });
         console.log(`Saving updates for ${conversationsToUpdate.length} conversations after cleaning invalid folderIds.`);
         await Promise.all(
           conversationsToUpdate.map(conv => storageService.saveConversationMeta(conv))
@@ -56,8 +67,8 @@ export const useConversationStore = defineStore('conversation', {
     
       if (existingEmptyConversation) {
         // If an empty "New Chat" exists, just select it
-        this.currentConversationId = existingEmptyConversation.conversationId;
-        await storageService.saveCurrentConversationId(this.currentConversationId);
+        this.$patch({ currentConversationId: existingEmptyConversation.conversationId });
+        await storageService.saveCurrentConversationId(existingEmptyConversation.conversationId);
       } else {
         // Create a new conversation
         const newConversationId = `conv-${uuidv4()}`;
@@ -69,7 +80,6 @@ export const useConversationStore = defineStore('conversation', {
           modelId = settingsStore.validateModelSelection(modelId, settingsStore.defaultVendor);
         }
         const model = settingsStore.getModelById(modelId);
-        console.log("model?", model) 
         const newConversation: Conversation = {
           conversationId: newConversationId,
           title: 'New Chat',
@@ -94,21 +104,23 @@ export const useConversationStore = defineStore('conversation', {
           // messages: [], // Removed
         };
 
-        // Add to local state
-        this.conversationList.unshift(newConversation);
+        // Update local state
+        this.$patch((state) => {
+          state.conversationList.unshift(newConversation);
+          state.currentConversationId = newConversationId;
+        });
         // Save the metadata of the new conversation
         await storageService.saveConversationMeta(newConversation);
-        // Select the new conversation
-        this.currentConversationId = newConversationId;
-        await storageService.saveCurrentConversationId(this.currentConversationId);
+        // Save current conversation ID
+        await storageService.saveCurrentConversationId(newConversationId);
         // Clear messages for the new conversation in storage (optional, but good practice)
         await storageService.saveConversationMessages(newConversationId, []);
       }
     },
         
     async selectConversation(conversationId: string) {
-      this.currentConversationId = conversationId;
-      await storageService.saveCurrentConversationId(this.currentConversationId);
+      this.$patch({ currentConversationId: conversationId });
+      await storageService.saveCurrentConversationId(conversationId);
     },
 
     async updateConversationTitle(conversationId: string, newTitle: string) {
@@ -176,35 +188,54 @@ export const useConversationStore = defineStore('conversation', {
       const conversationIndex = this.conversationList.findIndex(c => c.conversationId === conversationId);
       if (conversationIndex !== -1) {
         const conversation = this.conversationList[conversationIndex];
-        if (conversation.files) {
-          delete conversation.files[fileName];
+        if (conversation.files && conversation.files[fileName]) {
+          // Create a new files object without the deleted file
+          const newFiles = { ...conversation.files };
+          delete newFiles[fileName];
+          
+          // Create updated conversation
+          const updatedConversation = { ...conversation, files: newFiles };
+          
+          // Update state
+          this.$patch((state) => {
+            state.conversationList[conversationIndex] = updatedConversation;
+          });
+          
           // Save the updated individual conversation metadata
-          await storageService.saveConversationMeta(conversation);
+          await storageService.saveConversationMeta(updatedConversation);
         }
       }
     },
 
     async deleteConversation(conversationId: string) {
-      // Remove from local list first
-      this.conversationList = this.conversationList.filter(c => c.conversationId !== conversationId);
+      // Filter the conversation list
+      const filteredList = this.conversationList.filter(c => c.conversationId !== conversationId);
       
       // Call the combined delete method in storageService
       await storageService.deleteConversation(conversationId);
 
       // Handle selecting a new current conversation if the deleted one was active
+      let nextConversationId: string | null = null;
       if (this.currentConversationId === conversationId) {
-        let nextConversationId: string | null = null;
-        if (this.conversationList.length > 0) {
-          nextConversationId = this.conversationList[0].conversationId;
+        if (filteredList.length > 0) {
+          nextConversationId = filteredList[0].conversationId;
         } else {
           // No conversations left, create a new one implicitly?
           // Or just set currentConversationId to null?
           // For now, just setting to null and letting UI handle empty state.
           nextConversationId = null;
         }
-        this.currentConversationId = nextConversationId;
-        await storageService.saveCurrentConversationId(this.currentConversationId);
+      } else {
+        nextConversationId = this.currentConversationId;
       }
+      
+      // Update state
+      this.$patch({
+        conversationList: filteredList,
+        currentConversationId: nextConversationId
+      });
+      
+      await storageService.saveCurrentConversationId(nextConversationId);
     },
 
     async exportConversation(messages: Message[]) {
@@ -413,12 +444,14 @@ export const useConversationStore = defineStore('conversation', {
         // Save the updated individual conversation metadata
         await storageService.saveConversationMeta(this.conversationList[conversationIndex]);
       }
-    },
+    }
   },
   getters: {
     // フォルダ内の会話を取得するゲッター
-    getConversationsInFolder: (state) => (folderId: string | null) => {
-      return state.conversationList.filter(conversation => conversation.folderId === folderId);
+    getConversationsInFolder: (state) => {
+      return (folderId: string | null) => {
+        return state.conversationList.filter(conversation => conversation.folderId === folderId);
+      };
     },
     
     // ルート（フォルダに属さない）会話を取得するゲッター

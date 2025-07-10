@@ -62,10 +62,7 @@
           </div>
         </div>
         <small class="parameter-description" :class="{ 'text-disabled': selectedModelInfo?.unsupportsTemperature }">
-          {{ selectedModelInfo?.unsupportsTemperature
-            ? 'This model does not support temperature adjustments.'
-            : 'Controls randomness in the model\'s responses. Lower values make the output more focused and deterministic, while higher values make it more creative and diverse.'
-          }}
+          {{ getTemperatureDescription(selectedModelInfo?.unsupportsTemperature || false) }}
         </small>
       </div>
     </div>
@@ -114,20 +111,39 @@ const emit = defineEmits<{
 
 const settingsStore = useSettingsStore();
 
+// Helper function to capitalize vendor name
+function capitalizeVendorName(vendor: string): string {
+  return vendor.charAt(0).toUpperCase() + vendor.slice(1);
+}
+
+// Helper function to find model by vendor and id
+function findModel(vendor: string, modelId: string) {
+  if (vendor === 'openrouter') {
+    return settingsStore.openrouterModels.find(m => m.id === modelId);
+  }
+  const vendorModels = MODELS[vendor] || {};
+  return Object.values(vendorModels).find(m => m.id === modelId);
+}
+
+// Helper function to get temperature description
+function getTemperatureDescription(isUnsupported: boolean): string {
+  return isUnsupported
+    ? 'This model does not support temperature adjustments.'
+    : 'Controls randomness in the model\'s responses. Lower values make the output more focused and deterministic, while higher values make it more creative and diverse.';
+}
+
 // ベンダーオプションの生成
 const vendorOptions = computed(() => {
   return Object.keys(MODELS).map(id => ({
     id,
-    name: id.charAt(0).toUpperCase() + id.slice(1)
+    name: capitalizeVendorName(id)
   }));
 });
 
 // 選択中のベンダー
 const selectedVendor = computed({
   get: () => props.vendor,
-  set: (value) => {
-    emit('update:vendor', value);
-  }
+  set: (value) => emit('update:vendor', value)
 });
 
 // 利用可能なモデルのリスト
@@ -141,21 +157,14 @@ const availableModels = computed(() => {
 // 選択中のモデル
 const selectedModel = computed({
   get: () => props.model,
-  set: (value) => {
-    emit('update:model', value);
-  }
+  set: (value) => emit('update:model', value)
 });
 
 // 選択中のモデル情報
 const selectedModelInfo = computed(() => {
-  if (!selectedModel.value) return null;
-  
-  if (selectedVendor.value === 'openrouter') {
-    return settingsStore.openrouterModels.find(m => m.id === selectedModel.value);
-  }
-  
-  const vendorModels = MODELS[selectedVendor.value] || {};
-  return Object.values(vendorModels).find(m => m.id === selectedModel.value);
+  return selectedModel.value 
+    ? findModel(selectedVendor.value, selectedModel.value) 
+    : null;
 });
 
 // Temperature computed using props and model support
@@ -170,7 +179,6 @@ const temperature = computed({
 
 // ベンダー変更時の処理
 watch(selectedVendor, (newVendor, oldVendor) => {
-  // ベンダーが実際に変更された場合のみモデルをリセット
   if (oldVendor && newVendor !== oldVendor) {
     const models = availableModels.value;
     if (models.length > 0 && !models.some(m => m.id === selectedModel.value)) {

@@ -23,9 +23,7 @@
           </div>
         </div>
         <small class="parameter-description" :class="{ 'text-disabled': selectedModel?.unsupportsTemperature }">
-          {{ !selectedModel?.unsupportsTemperature 
-            ? 'Controls randomness in the model\'s responses. Lower values make the output more focused and deterministic, while higher values make it more creative and diverse.'
-            : 'This model does not support temperature adjustments.' }}
+          {{ getTemperatureDescription(selectedModel?.unsupportsTemperature || false) }}
         </small>
       </div>
       
@@ -102,6 +100,22 @@ const reasoningEffortOptions = [
   { label: 'High', value: 'high' }
 ];
 
+// Helper function to find model by vendor and id
+function findModel(vendor: string, modelId: string) {
+  if (vendor === 'openrouter') {
+    return settingsStore.openrouterModels.find(m => m.id === modelId);
+  }
+  const vendorModels = MODELS[vendor] || {};
+  return Object.values(vendorModels).find(m => m.id === modelId);
+}
+
+// Helper function to get temperature description
+function getTemperatureDescription(isUnsupported: boolean): string {
+  return isUnsupported 
+    ? 'This model does not support temperature adjustments.'
+    : 'Controls randomness in the model\'s responses. Lower values make the output more focused and deterministic, while higher values make it more creative and diverse.';
+}
+
 // Temperature setting
 const temperature = computed({
   get: () => props.temperature,
@@ -113,23 +127,13 @@ const temperature = computed({
 });
 
 // Add selectedModel computed property
-const selectedModel = computed(() => {
-  if (props.selectedVendor === 'openrouter') {
-    return settingsStore.openrouterModels.find(m => m.id === props.selectedModel);
-  }
-  const vendorModels = MODELS[props.selectedVendor] || {};
-  return Object.values(vendorModels).find(m => m.id === props.selectedModel);
-});
+const selectedModel = computed(() => 
+  findModel(props.selectedVendor, props.selectedModel)
+);
 
 // Maximum tokens for the selected model
 const modelMaxTokens = computed(() => {
-  if (props.selectedVendor === 'openrouter') {
-    const model = settingsStore.openrouterModels.find(m => m.id === props.selectedModel);
-    return model?.maxTokens || 4096;
-  }
-  
-  const vendorModels = MODELS[props.selectedVendor] || {};
-  const model = Object.values(vendorModels).find(m => m.id === props.selectedModel);
+  const model = findModel(props.selectedVendor, props.selectedModel);
   return model?.maxTokens || 4096;
 });
 
@@ -146,14 +150,11 @@ const reasoningEffort = computed({
 });
 
 // Adjust max tokens when model changes
-watch(
-  [() => props.selectedVendor, () => props.selectedModel],
-  () => {
-    if (props.maxTokens > modelMaxTokens.value) {
-      emit('update:maxTokens', modelMaxTokens.value);
-    }
+watch([() => props.selectedVendor, () => props.selectedModel], () => {
+  if (props.maxTokens > modelMaxTokens.value) {
+    emit('update:maxTokens', modelMaxTokens.value);
   }
-);
+});
 </script>
 
 <style scoped>

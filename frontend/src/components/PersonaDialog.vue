@@ -39,19 +39,45 @@ const defaultIcon = computed(() => {
     return new URL('../assets/images/persona.svg', import.meta.url).href;
 });
 
-
 const emit = defineEmits<{
   (e: 'update:visible', value: boolean): void;
   (e: 'save', persona: UserDefinedPersona): void;
 }>();
 
-const personaData = ref<UserDefinedPersona>({
-  id: '',
-  name: '',
-  image: '',
-  systemMessage: '',
-  custom: true,
-});
+// Helper function to create default persona data
+function createDefaultPersonaData(): UserDefinedPersona {
+  return {
+    id: '',
+    name: '',
+    image: '',
+    systemMessage: '',
+    custom: true,
+  };
+}
+
+// Helper function to read file as data URL
+function readFileAsDataURL(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// Helper function to load default SVG as base64
+async function loadDefaultImageAsBase64(): Promise<string | null> {
+  try {
+    const response = await fetch(defaultIcon.value);
+    const svgText = await response.text();
+    const svgBase64 = btoa(svgText);
+    return `data:image/svg+xml;base64,${svgBase64}`;
+  } catch (error) {
+    return null;
+  }
+}
+
+const personaData = ref<UserDefinedPersona>(createDefaultPersonaData());
 
 const fileInput = ref<HTMLInputElement | null>(null);
 
@@ -59,26 +85,20 @@ const onImageClick = () => {
   fileInput.value?.click();
 };
 
-const onImageSelect = (event: Event) => {
+const onImageSelect = async (event: Event) => {
   const files = (event.target as HTMLInputElement).files;
   if (files && files.length > 0) {
     const file = files[0];
-    const reader = new FileReader();
-    reader.onload = () => {
-      personaData.value.image = reader.result as string;
-    };
-    reader.readAsDataURL(file);
+    try {
+      personaData.value.image = await readFileAsDataURL(file);
+    } catch (error) {
+      // Failed to read file, image remains unchanged
+    }
   }
 };
 
 const resetForm = () => {
-  personaData.value = {
-    id: '',
-    name: '',
-    image: '',
-    systemMessage: '',
-    custom: true,
-  };
+  personaData.value = createDefaultPersonaData();
   if (fileInput.value) {
     fileInput.value.value = '';
   }
@@ -90,13 +110,9 @@ const closeDialog = () => {
 
 const savePersona = async () => {
   if (!personaData.value.image) {
-    try {
-      const response = await fetch(new URL('../assets/images/persona.svg', import.meta.url).href);
-      const svgText = await response.text();
-      const svgBase64 = btoa(svgText);
-      personaData.value.image = `data:image/svg+xml;base64,${svgBase64}`;
-    } catch (error) {
-      console.error('Error loading default role image:', error);
+    const defaultImage = await loadDefaultImageAsBase64();
+    if (defaultImage) {
+      personaData.value.image = defaultImage;
     }
   }
   emit('save', personaData.value);

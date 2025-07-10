@@ -89,6 +89,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch, inject } from 'vue';
+import type { DirectiveBinding } from 'vue';
 import DOMPurify from 'dompurify';
 import MarkdownIt from 'markdown-it';
 
@@ -143,11 +144,11 @@ const props = defineProps({
 const emit = defineEmits(['save-edited-message', 'delete-message', 'delete-image', 'resend-message']);
 
 const vTripleClick = {
-  mounted(el: HTMLElement, binding: any) {
+  mounted(el: HTMLElement, binding: DirectiveBinding<() => void>) {
     let timer: NodeJS.Timeout | null = null;
     let counter = 0;
 
-    el.addEventListener('click', () => {
+    const handleClick = () => {
       counter++;
       if (counter === 1) {
         timer = setTimeout(() => {
@@ -160,7 +161,20 @@ const vTripleClick = {
         counter = 0;
         binding.value();
       }
-    });
+    };
+
+    el.addEventListener('click', handleClick);
+    
+    // Store the handler on the element for cleanup
+    (el as HTMLElement & { _tripleClickHandler?: () => void })._tripleClickHandler = handleClick;
+  },
+  
+  unmounted(el: HTMLElement) {
+    const extendedEl = el as HTMLElement & { _tripleClickHandler?: () => void };
+    if (extendedEl._tripleClickHandler) {
+      el.removeEventListener('click', extendedEl._tripleClickHandler);
+      delete extendedEl._tripleClickHandler;
+    }
   },
 };
 
@@ -173,11 +187,8 @@ const purifyConfig = {
 
 // カスタムプラグインで、コードブロックを特殊処理
 const safeCodePlugin = (md: MarkdownIt) => {
-  // 元のフェンスドコードブロックルールを保存
-  const defaultFence = md.renderer.rules.fence!;
-
   // カスタムレンダラーでフェンスドコードブロックを処理
-  md.renderer.rules.fence = (tokens, idx, options, env, self) => {
+  md.renderer.rules.fence = (tokens, idx) => {
     const token = tokens[idx];
     const content = token.content;
     const lang = token.info || '';
@@ -204,18 +215,47 @@ const editedText = ref('');
 const hovering = ref(false);
 const editTextarea = ref<HTMLTextAreaElement | null>(null);
 
-// スムーズなタイピングエフェクト用の変数
-const smoothText = ref('');
-const targetText = ref('');
-const typingInterval = ref<number | null>(null);
-const baseTypingSpeed = ref(20); // 基本タイピング速度（ミリ秒）
-const lastPunctuationTime = ref(0);
+// Helper functions
+function showToast(severity: 'success' | 'error' | 'info' | 'warn', summary: string, detail: string, life: number = 3000) {
+  toast.add({ severity, summary, detail, life, closable: severity === 'error' });
+}
+
+function showConfirmDialog(message: string, onAccept: () => void) {
+  confirm.require({
+    message,
+    header: 'Confirmation',
+    icon: 'pi pi-exclamation-triangle',
+    accept: onAccept,
+  });
+}
+
+function getPersonaById(personaId: string | undefined) {
+  if (!personaId) return null;
+  return PERSONAS.find(p => p.id === personaId) || 
+         personaStore.userDefinedPersonas.find(p => p.id === personaId);
+}
+
+function getPersonaImageUrl(persona: any) {
+  if (!persona) return new URL('../assets/images/chat.svg', import.meta.url).href;
+  return persona.image.startsWith('data:') 
+    ? persona.image 
+    : new URL(`../assets/images/${persona.image}`, import.meta.url).href;
+}
+
+// Typing animation state
+const typingState = {
+  smoothText: ref(''),
+  targetText: ref(''),
+  interval: ref<number | null>(null),
+  baseSpeed: 20, // Base typing speed (milliseconds)
+  lastPunctuationTime: ref(0)
+};
 
 // スムーズ表示のためにタイピングエフェクトを実装
 function updateSmoothText() {
-  if (targetText.value.length > smoothText.value.length) {
-    const currentLength = smoothText.value.length;
-    const targetLength = targetText.value.length;
+  if (typingState.targetText.value.length > typingState.smoothText.value.length) {
+    const currentLength = typingState.smoothText.value.length;
+    const targetLength = typingState.targetText.value.length;
     const remaining = targetLength - currentLength;
     
     // 追加する文字数の計算 (テキスト長さと状況に応じて調整)
@@ -230,43 +270,43 @@ function updateSmoothText() {
     }
     
     // 文の終わりの句読点で少し一時停止する
-    const nextChar = targetText.value.charAt(currentLength);
+    const nextChar = typingState.targetText.value.charAt(currentLength);
     const isPunctuation = ['.', '!', '?', '。', '！', '？'].includes(nextChar);
     const now = Date.now();
     
-    if (isPunctuation && (now - lastPunctuationTime.value > 1000)) {
-      lastPunctuationTime.value = now;
+    if (isPunctuation && (now - typingState.lastPunctuationTime.value > 1000)) {
+      typingState.lastPunctuationTime.value = now;
       // 句読点を追加して一時停止
-      smoothText.value = targetText.value.substring(0, currentLength + 1);
+      typingState.smoothText.value = typingState.targetText.value.substring(0, currentLength + 1);
       return;
     }
     
     // 実際にテキストを追加
-    smoothText.value = targetText.value.substring(0, currentLength + charsToAdd);
+    typingState.smoothText.value = typingState.targetText.value.substring(0, currentLength + charsToAdd);
 
     // 状況に応じて速度を調整
     adjustTypingSpeed();
   } else {
     // 目標のテキストに到達したら停止
-    if (typingInterval.value) {
-      clearInterval(typingInterval.value);
-      typingInterval.value = null;
+    if (typingState.interval.value) {
+      clearInterval(typingState.interval.value);
+      typingState.interval.value = null;
     }
   }
 }
 
 // 状況に応じてタイピング速度を調整
 function adjustTypingSpeed() {
-  let newSpeed = baseTypingSpeed.value;
+  let newSpeed = typingState.baseSpeed;
 
   // 文が長くなるほど若干速くする
-  const textLengthFactor = 1 - Math.min(0.5, smoothText.value.length / 5000);
+  const textLengthFactor = 1 - Math.min(0.5, typingState.smoothText.value.length / 5000);
   newSpeed = Math.max(10, Math.floor(newSpeed * textLengthFactor));
   
   // 速度が変わったらインターバルを再設定
-  if (typingInterval.value) {
-    clearInterval(typingInterval.value);
-    typingInterval.value = window.setInterval(updateSmoothText, newSpeed);
+  if (typingState.interval.value) {
+    clearInterval(typingState.interval.value);
+    typingState.interval.value = window.setInterval(updateSmoothText, newSpeed);
   }
 }
 
@@ -274,57 +314,57 @@ function adjustTypingSpeed() {
 watch(() => props.streamedText, (newText) => {
   if (props.streaming && newText) {
     // 前回のテキストから新しいテキストへの変更を処理
-    targetText.value = newText;
+    typingState.targetText.value = newText;
     
     // 初回表示または大幅なテキスト追加の場合
-    if (!smoothText.value) {
+    if (!typingState.smoothText.value) {
       // 初回表示時は少し先に表示してからアニメーション
       const initialDisplayLength = Math.min(100, Math.floor(newText.length * 0.3));
-      smoothText.value = newText.substring(0, initialDisplayLength);
-    } else if (newText.length < smoothText.value.length) {
+      typingState.smoothText.value = newText.substring(0, initialDisplayLength);
+    } else if (newText.length < typingState.smoothText.value.length) {
       // テキストが減った場合（まれなケース）
-      smoothText.value = newText;
-    } else if (newText.length - smoothText.value.length > 500) {
+      typingState.smoothText.value = newText;
+    } else if (newText.length - typingState.smoothText.value.length > 500) {
       // 大量テキストが一度に来た場合、前のテキストは保持して新しい部分のみ一部先行表示
       
       // すでに表示しているテキストが新しいテキストに含まれているか確認
-      if (newText.startsWith(smoothText.value)) {
+      if (newText.startsWith(typingState.smoothText.value)) {
         // 既存テキストを保持し、追加分の一部を先行表示
-        const additionalText = newText.substring(smoothText.value.length);
+        const additionalText = newText.substring(typingState.smoothText.value.length);
         const additionalDisplayLength = Math.floor(additionalText.length * 0.3);
-        smoothText.value = newText.substring(0, smoothText.value.length + additionalDisplayLength);
+        typingState.smoothText.value = newText.substring(0, typingState.smoothText.value.length + additionalDisplayLength);
       } else {
         // 既存テキストが新テキストと一致しない場合（まれなケース）は新テキストの一部を表示
         const displayLength = Math.floor(newText.length * 0.3);
-        smoothText.value = newText.substring(0, displayLength);
+        typingState.smoothText.value = newText.substring(0, displayLength);
       }
     }
         
     // インターバルがまだ設定されていなければ設定
-    if (!typingInterval.value) {
-      typingInterval.value = window.setInterval(updateSmoothText, baseTypingSpeed.value);
+    if (!typingState.interval.value) {
+      typingState.interval.value = window.setInterval(updateSmoothText, typingState.baseSpeed);
     }
   } else {
     // ストリーミングが終了したら、すぐに完全なテキストを表示
-    smoothText.value = newText || '';
-    if (typingInterval.value) {
-      clearInterval(typingInterval.value);
-      typingInterval.value = null;
+    typingState.smoothText.value = newText || '';
+    if (typingState.interval.value) {
+      clearInterval(typingState.interval.value);
+      typingState.interval.value = null;
     }
   }
 }, { immediate: true });
 
 // コンポーネントがアンマウントされたときにインターバルをクリア
 onBeforeUnmount(() => {
-  if (typingInterval.value) {
-    clearInterval(typingInterval.value);
-    typingInterval.value = null;
+  if (typingState.interval.value) {
+    clearInterval(typingState.interval.value);
+    typingState.interval.value = null;
   }
 });
 
 const displayText = computed(() => {
   if (props.role === 'assistant') {
-    return props.streaming ? smoothText.value : props.text;
+    return props.streaming ? typingState.smoothText.value : props.text;
   } else {
     return props.text;
   }
@@ -350,8 +390,8 @@ const personaIcon = computed(() => {
   if (props.role === 'user') {
     return new URL('../assets/images/user.svg', import.meta.url).href;
   } else if (props.role === 'assistant') {
-    const persona = PERSONAS.find(p => p.id === props.personaId) || personaStore.userDefinedPersonas.find(p => p.id === props.personaId);
-    return persona ? persona.image.startsWith('data:') ? persona.image : new URL(`../assets/images/${persona.image}`, import.meta.url).href : new URL('../assets/images/chat.svg', import.meta.url).href;
+    const persona = getPersonaById(props.personaId);
+    return getPersonaImageUrl(persona);
   } else {
     return new URL('../assets/images/warning.svg', import.meta.url).href;
   }
@@ -361,7 +401,7 @@ const personaRole = computed(() => {
   if (props.role === 'user') {
     return 'You';
   } else if (props.role === 'assistant') {
-    const persona = PERSONAS.find(p => p.id === props.personaId) || personaStore.userDefinedPersonas.find(p => p.id === props.personaId);
+    const persona = getPersonaById(props.personaId);
     return persona ? persona.name : 'Assistant';
   } else {
     return 'Error';
@@ -394,12 +434,9 @@ const scrollTop = ref(0);
 function adjustTextareaHeight(event: Event) {
   const textarea = event.target as HTMLTextAreaElement;
   scrollTop.value = textarea.scrollTop;
-  console.log(textarea.scrollTop)
   textarea.style.height = 'auto';
   textarea.style.height = `${textarea.scrollHeight}px`;
   textarea.scrollTop = scrollTop.value;
-  console.log(textarea.scrollTop)
-
 }
 
 function focusEditTextarea() {
@@ -412,14 +449,10 @@ function focusEditTextarea() {
 }
 
 const confirmDeleteMessage = () => {
-  confirm.require({
-    message: 'Are you sure you want to delete this message?',
-    header: 'Confirmation',
-    icon: 'pi pi-exclamation-triangle',
-    accept: () => {
-      emit('delete-message', props.id);
-    },
-  });
+  showConfirmDialog(
+    'Are you sure you want to delete this message?',
+    () => emit('delete-message', props.id)
+  );
 };
 
 function deleteImage(index: number) {
@@ -428,58 +461,28 @@ function deleteImage(index: number) {
 
 function copyMessage() {
   const messageText = props.text;
-  console.log('Copying message:', messageText.substring(0, 50) + '...');
   navigator.clipboard.writeText(messageText).then(() => {
-    console.log('Message copied successfully, showing toast');
-    toast.add({
-      severity: 'info',
-      summary: 'Copied',
-      detail: 'Message copied to clipboard',
-      life: 1500,
-      closable: false
-    });
-    console.log('Toast add called');
+    showToast('info', 'Copied', 'Message copied to clipboard', 1500);
   }).catch(err => {
     console.error('Failed to copy message:', err);
-    toast.add({
-      severity: 'error',
-      summary: 'Error',
-      detail: 'Failed to copy message',
-      life: 3000,
-      closable: true
-    });
+    showToast('error', 'Error', 'Failed to copy message');
   });
 }
 
 function createBranchFromHere() {
   const { currentConversationId } = useConversationStore();
   if (!currentConversationId) {
-    toast.add({
-      severity: 'error',
-      summary: 'Error',
-      detail: 'No active conversation',
-      life: 3000
-    });
+    showToast('error', 'Error', 'No active conversation');
     return;
   }
   
   useConversationStore().createBranchFromMessage(props.id)
     .then(() => {
-      toast.add({
-        severity: 'success',
-        summary: 'Branch Created',
-        detail: 'New conversation branch has been created',
-        life: 3000
-      });
+      showToast('success', 'Branch Created', 'New conversation branch has been created');
     })
     .catch((error) => {
       console.error('Error creating branch:', error);
-      toast.add({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Failed to create conversation branch',
-        life: 3000
-      });
+      showToast('error', 'Error', 'Failed to create conversation branch');
     });
 }
 

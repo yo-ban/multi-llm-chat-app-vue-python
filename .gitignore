@@ -25,6 +25,7 @@ temp
 .env.production
 /cypress/videos/
 /cypress/screenshots/
+.claude
 
 # Editor directories and files
 .vscode/*

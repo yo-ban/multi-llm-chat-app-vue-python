@@ -32,8 +32,14 @@ class FileServiceImpl implements FileService {
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(`API error: ${response.status}, message: ${errorData.error}`);
+      let errorMessage = `API error: ${response.status}`;
+      try {
+        const errorData = await response.json();
+        errorMessage += `, message: ${errorData.error || response.statusText}`;
+      } catch {
+        errorMessage += `, message: ${response.statusText}`;
+      }
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();

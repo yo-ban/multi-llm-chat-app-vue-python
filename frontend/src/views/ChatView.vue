@@ -55,10 +55,10 @@
       
       <!-- Display based on tool type and input content -->
       <span v-if="activeToolCall?.type === 'web_search'" class="tool-status">
-        Searching<span class="animate-dots">...</span> {{ truncateText(activeToolCall.input?.query, 30) }}
+        Searching<span class="animate-dots">...</span> {{ truncateText(activeToolCall.input?.query as string | undefined, 30) }}
       </span>
       <span v-else-if="activeToolCall?.type === 'web_browsing'" class="tool-status">
-        Browsing<span class="animate-dots">...</span> {{ truncateText(activeToolCall.input?.url, 40) }}
+        Browsing<span class="animate-dots">...</span> {{ truncateText(activeToolCall.input?.url as string | undefined, 40) }}
       </span>
       <!-- other tool types (not empty type) -->
       <span v-else-if="activeToolCall?.type" class="tool-status">
@@ -206,56 +206,100 @@ const systemMessage = ref('');
 const currentPersonaId = ref('');
 const isCustomSystemMessageSelected = ref(false);
 
+// Token counting optimization with memoization
+const systemMessageTokenCache = new Map<string, number>();
+const messageTokenCache = new Map<string, number>();
+
+// Clear message cache when messages change significantly
+watch(() => chatStore.messages.length, () => {
+  // Clear cache when conversation changes
+  if (chatStore.messages.length === 0) {
+    messageTokenCache.clear();
+  }
+});
+
 const totalTokens = computed(() => {
-  const messages = generateSystemMessageWithFiles(systemMessage.value, currentConversation.value?.files) + chatStore.messages.map(message => message.text).join('\n');
-  return countTokens(messages);
+  // Calculate system message tokens with caching
+  const systemKey = generateSystemMessageWithFiles(systemMessage.value, currentConversation.value?.files);
+  let systemTokens = systemMessageTokenCache.get(systemKey);
+  if (systemTokens === undefined) {
+    systemTokens = countTokens(systemKey);
+    systemMessageTokenCache.set(systemKey, systemTokens);
+    // Limit cache size
+    if (systemMessageTokenCache.size > 10) {
+      const firstKey = systemMessageTokenCache.keys().next().value;
+      if (firstKey !== undefined) {
+        systemMessageTokenCache.delete(firstKey);
+      }
+    }
+  }
+  
+  // Calculate message tokens with caching
+  let messageTokens = 0;
+  for (const message of chatStore.messages) {
+    let tokens = messageTokenCache.get(message.id);
+    if (tokens === undefined) {
+      tokens = countTokens(message.text);
+      messageTokenCache.set(message.id, tokens);
+      // Limit cache size
+      if (messageTokenCache.size > 100) {
+        const firstKey = messageTokenCache.keys().next().value;
+        if (firstKey !== undefined) {
+          messageTokenCache.delete(firstKey);
+        }
+      }
+    }
+    messageTokens += tokens;
+  }
+  
+  return systemTokens + messageTokens;
 });
 
 
+// Optimized model lookup with memoization
+const modelLookupCache = new Map<string, any>();
+
 const selectedModel = computed(() => {
   const { vendor, model } = currentConversationSettings.value;
-  console.log("model:", model)
-  console.log("vendor:", vendor)
+  const cacheKey = `${vendor}:${model}`;
   
-  // OpenRouterの場合は openrouterModels から検索
+  // Check cache first
+  const cached = modelLookupCache.get(cacheKey);
+  if (cached) return cached;
+  
+  let result;
+  
   if (vendor === 'openrouter') {
-    // openrouterModels から指定されたモデルIDを検索
-    const openRouterModel = settingsStore.openrouterModels.find(m => m.id === model);
-    if (openRouterModel) {
-      return openRouterModel;
-    }
-    
-    // モデルが見つからない場合でも、openrouterModelsが空でなければそこから取得
-    if (settingsStore.openrouterModels.length > 0) {
-      // 現在選択されているモデルが存在しない場合は、一番目のモデルを返す
-      return settingsStore.openrouterModels[0];
-    }
-    
-    // openrouterModelsが空の場合は現在のモデルIDを持つ最小限のモデル情報を返す
-    // （読み込み完了前の一時的な状態を処理するため）
-    return {
-      id: model,
-      name: model.split('/').pop() || model,
-      contextWindow: 8000,
-      maxTokens: 8000,
-      multimodal: false,
-      supportsReasoning: false,
-      unsupportsTemperature: false,
-      supportFunctionCalling: false,
-      imageGeneration: false
-    };
+    // OpenRouter model lookup
+    result = settingsStore.openrouterModels.find(m => m.id === model) ||
+             (settingsStore.openrouterModels.length > 0 ? settingsStore.openrouterModels[0] : {
+               id: model,
+               name: model.split('/').pop() || model,
+               contextWindow: 8000,
+               maxTokens: 8000,
+               multimodal: false,
+               supportsReasoning: false,
+               unsupportsTemperature: false,
+               supportFunctionCalling: false,
+               imageGeneration: false
+             });
+  } else {
+    // Standard vendor model lookup
+    const vendorModels = MODELS[vendor] || {};
+    result = Object.values(vendorModels).find(m => m.id === model) || MODELS.anthropic.CLAUDE_SONNET_4;
   }
   
-  // 通常のベンダー（OpenRouter以外）の場合は従来の実装を使用
-  const vendorModels = MODELS[vendor] || {};
-  for (const key in vendorModels) {
-    if (vendorModels[key].id === model) {
-      return vendorModels[key];
+  // Cache the result
+  modelLookupCache.set(cacheKey, result);
+  // Limit cache size
+  if (modelLookupCache.size > 20) {
+    const firstKey = modelLookupCache.keys().next().value;
+    if (firstKey !== undefined) {
+      modelLookupCache.delete(firstKey);
     }
   }
   
-  // モデルが見つからない場合のフォールバック
-  return MODELS.anthropic.CLAUDE_SONNET_4;
+  return result;
 });
 
 const activeToolCall = ref<ToolCall | null>(null);
@@ -275,7 +319,7 @@ const onUpdate = async (text: string, toolCall?: ToolCall, isIndicator?: boolean
   if (!isIndicator && !chatStore.messages.some(message => 
     isAssistantMessage(message) && message.streaming
   )) {
-    await chatStore.addMessage('assistant', '', undefined, true);
+    chatStore.addMessage('assistant', '', undefined, true);
   }
   if (!isIndicator) {
     chatStore.updateStreamedMessage(text, image);
@@ -405,7 +449,7 @@ async function onSendMessage(newMessage: string, uploadedImages: string[]) {
       await conversationStore.updateConversationSystem(currentConversationId, systemMessage.value, currentPersonaId.value);
       showSystemMessageInput.value = false;
     }
-    await chatStore.addMessage('user' as MessageRole, newMessage, uploadedImages, false);
+    chatStore.addMessage('user' as MessageRole, newMessage, uploadedImages, false);
     await chatStore.saveMessages(currentConversationId);
 
     nextTick(() => {
@@ -467,7 +511,17 @@ async function sendMessage() {
     chatStore.stopStreaming();
     if ((error as Error).name !== 'AbortError') {
       console.error('Error in sendMessage:', error);
-      await chatStore.addMessage('error', `An error occurred while processing your request.\nTry to resend your message.\nDetail:\n${error}`);
+      // ユーザーフレンドリーなエラーメッセージ
+      let errorMessage = 'An error occurred while processing your request.\nPlease try sending your message again.';
+      
+      // 特定のエラータイプに対するメッセージ
+      if ((error as Error).message?.includes('API error')) {
+        errorMessage = 'Unable to connect to the AI service.\nPlease check your API settings and try again.';
+      } else if ((error as Error).message?.includes('Network')) {
+        errorMessage = 'Network connection error.\nPlease check your internet connection and try again.';
+      }
+      
+      chatStore.addMessage('error', errorMessage);
     }
   } finally {
     if (currentConversationId) {
@@ -490,8 +544,10 @@ function cancelStreaming() {
 }
 
 async function saveEditedMessage(id: string, editedText: string) {
-  await chatStore.updateMessage(id, editedText);
-  await chatStore.saveMessages(conversationStore.currentConversationId!);
+  chatStore.updateMessage(id, editedText);
+  if (conversationStore.currentConversationId) {
+    await chatStore.saveMessages(conversationStore.currentConversationId);
+  }
 }
 
 async function resendMessage(id: string) {
@@ -507,8 +563,10 @@ async function resendMessage(id: string) {
 }
 
 async function deleteMessage(id: string) {
-  await chatStore.deleteMessage(id);
-  await chatStore.saveMessages(conversationStore.currentConversationId!);
+  chatStore.deleteMessage(id);
+  if (conversationStore.currentConversationId) {
+    await chatStore.saveMessages(conversationStore.currentConversationId);
+  }
   
   if (chatStore.messages.length === 0) {
     showSystemMessageInput.value = true;
@@ -518,8 +576,10 @@ async function deleteMessage(id: string) {
 }
 
 async function deleteImage(messageId: string, imageIndex: number) {
-  await chatStore.deleteImage(messageId, imageIndex);
-  await chatStore.saveMessages(conversationStore.currentConversationId!);
+  chatStore.deleteImage(messageId, imageIndex);
+  if (conversationStore.currentConversationId) {
+    await chatStore.saveMessages(conversationStore.currentConversationId);
+  }
 }
 
 function onScroll() {

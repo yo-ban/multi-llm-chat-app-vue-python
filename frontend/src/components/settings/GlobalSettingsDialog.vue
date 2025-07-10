@@ -197,27 +197,20 @@ const sectionInfo = computed(() => {
 
 const confirm = useConfirm();
 
+// Helper functions
+function deepClone<T>(obj: T): T {
+  return JSON.parse(JSON.stringify(obj));
+}
+
+function copySettingsFromStore(): GlobalSettings {
+  return deepClone(settingsStore.$state);
+}
+
 // 一時的な設定を保持 (reactive を使用してネストされたオブジェクトの変更を追跡)
-// GlobalSettings 型で初期化し、dialogVisible ウォッチャーでストアからコピーする
-const tempSettings = reactive<GlobalSettings>(JSON.parse(JSON.stringify(settingsStore.$state)));
+const tempSettings = reactive<GlobalSettings>(copySettingsFromStore());
+
 // 利用可能なMCPツールリスト (これはストアから直接取得し、変更しない)
 const availableMcpTools = computed<CanonicalToolDefinition[]>(() => settingsStore.availableMcpTools);
-
-// 一時的な設定を保持
-// const tempSettings = ref<GlobalSettings>({
-//   apiKeys: { ...settingsStore.apiKeys },
-//   defaultTemperature: settingsStore.defaultTemperature,
-//   defaultMaxTokens: settingsStore.defaultMaxTokens,
-//   defaultVendor: settingsStore.defaultVendor,
-//   defaultModel: settingsStore.defaultModel,
-//   openrouterModels: [...settingsStore.openrouterModels],
-//   titleGenerationVendor: settingsStore.titleGenerationVendor,
-//   titleGenerationModel: settingsStore.titleGenerationModel,
-//   mcpServersConfig: settingsStore.mcpServersConfig,
-//   disabledMcpServers: settingsStore.disabledMcpServers,
-//   disabledMcpTools: settingsStore.disabledMcpTools,
-//   availableMcpTools: settingsStore.availableMcpTools,
-// });
 
 const titleGenerationSettings = computed({
   get: () => ({
@@ -225,130 +218,68 @@ const titleGenerationSettings = computed({
     model: tempSettings.titleGenerationModel
   }),
   set: (value) => {
-    console.log('Updating title generation settings:', value);
     tempSettings.titleGenerationVendor = value.vendor;
     tempSettings.titleGenerationModel = value.model;
   }
 });
 
-// Add watcher for title generation settings
-watch(
-  [
-    () => tempSettings.titleGenerationVendor,
-    () => tempSettings.titleGenerationModel
-  ],
-  ([newVendor, newModel]) => {
-    console.log('Title generation settings changed:', { vendor: newVendor, model: newModel });
-  }
-);
-
-// ダイアログが表示されるたびに設定を更新
-// watch(dialogVisible, (newValue) => {
-//   if (newValue) {
-//     // ダイアログが開かれたとき、最新の設定を反映
-//     tempSettings.value = {
-//       apiKeys: { ...settingsStore.apiKeys },
-//       defaultTemperature: settingsStore.defaultTemperature,
-//       defaultMaxTokens: settingsStore.defaultMaxTokens,
-//       defaultVendor: settingsStore.defaultVendor,
-//       defaultModel: settingsStore.defaultModel,
-//       // defaultReasoningEffort: settingsStore.defaultReasoningEffort,
-//       // defaultWebSearch: settingsStore.defaultWebSearch,
-//       openrouterModels: [...settingsStore.openrouterModels],
-//       titleGenerationVendor: settingsStore.titleGenerationVendor,
-//       titleGenerationModel: settingsStore.titleGenerationModel,
-//       mcpServersConfig: settingsStore.mcpServersConfig,
-//       disabledMcpServers: settingsStore.disabledMcpServers,
-//       disabledMcpTools: settingsStore.disabledMcpTools,
-//       availableMcpTools: settingsStore.availableMcpTools,
-//     };
-//     // 変更キーをリセット
-//     changedApiKeys.value = {}; 
-//   }
-// });
+// tempSettingsをストアの最新データで同期する関数
+function syncTempSettingsFromStore() {
+  const freshSettings = copySettingsFromStore();
+  
+  // Vue3のreactiveオブジェクトを正しく更新するため、各プロパティを個別に設定
+  Object.keys(freshSettings).forEach(key => {
+    const typedKey = key as keyof GlobalSettings;
+    (tempSettings as any)[typedKey] = (freshSettings as any)[typedKey];
+  });
+  
+  // freshSettingsに存在しないキーは削除
+  Object.keys(tempSettings).forEach(key => {
+    if (!(key in freshSettings)) {
+      delete (tempSettings as any)[key];
+    }
+  });
+}
 
 // ダイアログが表示されるたびに設定を更新
 watch(dialogVisible, (newValue) => {
   if (newValue) {
-    // ダイアログが開かれたとき、最新の設定をストアから tempSettings にディープコピー
-    // JSON.parse/stringify でディープコピー
-    const storeStateCopy = JSON.parse(JSON.stringify(settingsStore.$state)) as GlobalSettings;
-    // tempSettings の各プロパティを更新
-    Object.assign(tempSettings, storeStateCopy);
+    // ダイアログが開かれたとき、最新の設定をストアから tempSettings に同期
+    syncTempSettingsFromStore();
     // 変更キーをリセット
     changedApiKeys.value = {};
-    console.log("Dialog opened, tempSettings initialized:", JSON.parse(JSON.stringify(tempSettings)));
   }
 });
 
-// 未保存の変更があるかチェック (APIキーの変更も考慮)
-// const hasUnsavedChanges = computed(() => {
-//     // Check other settings change
-//     const otherSettingsChanged = JSON.stringify({
-//       // apiKeys を除外して比較
-//       defaultTemperature: settingsStore.defaultTemperature,
-//       defaultMaxTokens: settingsStore.defaultMaxTokens,
-//       defaultVendor: settingsStore.defaultVendor,
-//       defaultModel: settingsStore.defaultModel,
-//       // defaultReasoningEffort: settingsStore.defaultReasoningEffort,
-//       // defaultWebSearch: settingsStore.defaultWebSearch,
-//       openrouterModels: settingsStore.openrouterModels,
-//       titleGenerationVendor: settingsStore.titleGenerationVendor,
-//       titleGenerationModel: settingsStore.titleGenerationModel
-//     }) !== JSON.stringify({
-//       defaultTemperature: tempSettings.defaultTemperature,
-//       defaultMaxTokens: tempSettings.defaultMaxTokens,
-//       defaultVendor: tempSettings.defaultVendor,
-//       defaultModel: tempSettings.defaultModel,
-//       // defaultReasoningEffort: tempSettings.value.defaultReasoningEffort,
-//       // defaultWebSearch: tempSettings.value.defaultWebSearch,
-//       openrouterModels: tempSettings.openrouterModels,
-//       titleGenerationVendor: tempSettings.titleGenerationVendor,
-//       titleGenerationModel: tempSettings.titleGenerationModel
-//     });
-
-//     // Check if API keys changed using our local state
-//     const apiKeysChanged = Object.keys(changedApiKeys.value).length > 0;
-
-//     return otherSettingsChanged || apiKeysChanged;
-// });
-
+// Helper function to prepare settings for comparison
+function prepareSettingsForComparison(settings: any) {
+  const settingsCopy = { ...settings };
+  delete settingsCopy.apiKeys;
+  delete settingsCopy.availableMcpTools;
+  return settingsCopy;
+}
 
 // 未保存の変更があるかチェック
 const hasUnsavedChanges = computed(() => {
-    // Store の現在の状態をディープコピーして比較対象とする
-    const originalSettings = JSON.parse(JSON.stringify(settingsStore.$state));
-    // tempSettings もディープコピーして比較（reactive オブジェクトの直接比較を避ける）
-    const currentTempSettings = JSON.parse(JSON.stringify(tempSettings));
+    // Store の現在の状態と一時設定を比較
+    const originalSettings = deepClone(settingsStore.$state);
+    const currentTempSettings = deepClone(tempSettings);
 
     // APIキー以外の設定変更をチェック (ディープ比較)
-    // 比較対象から apiKeys と availableMcpTools を除外
-    const settingsToCompareOriginal = { ...originalSettings };
-    delete settingsToCompareOriginal.apiKeys;
-    delete settingsToCompareOriginal.availableMcpTools;
-
-    const settingsToCompareTemp = { ...currentTempSettings };
-    delete settingsToCompareTemp.apiKeys;
-    delete settingsToCompareTemp.availableMcpTools;
+    const settingsToCompareOriginal = prepareSettingsForComparison(originalSettings);
+    const settingsToCompareTemp = prepareSettingsForComparison(currentTempSettings);
 
     const otherSettingsChanged = JSON.stringify(settingsToCompareOriginal) !== JSON.stringify(settingsToCompareTemp);
-
     // APIキーの変更をチェック
     const apiKeysChanged = Object.keys(changedApiKeys.value).length > 0;
-
-    // console.log("Checking changes:", { otherSettingsChanged, apiKeysChanged });
-    // console.log("Original:", JSON.stringify(settingsToCompareOriginal));
-    // console.log("Temp:", JSON.stringify(settingsToCompareTemp));
-    // console.log("Changed API keys:", changedApiKeys.value);
 
     return otherSettingsChanged || apiKeysChanged;
 });
 
 const updateFromModelInfo = (modelInfo: any) => {
   // Directly update maxTokens from the model info
-  if (modelInfo && modelInfo.maxTokens) {
+  if (modelInfo?.maxTokens) {
     tempSettings.defaultMaxTokens = modelInfo.maxTokens;
-    console.log('Updated maxTokens to', modelInfo.maxTokens, 'based on model info');
   }
 };
 
@@ -378,82 +309,35 @@ const onCancel = () => {
   }
 };
 
-// const onDialogHide = () => {
-//   // リセット処理
-//   tempSettings.value = {
-//     apiKeys: { ...settingsStore.apiKeys },
-//     defaultTemperature: settingsStore.defaultTemperature,
-//     defaultMaxTokens: settingsStore.defaultMaxTokens,
-//     defaultVendor: settingsStore.defaultVendor,
-//     defaultModel: settingsStore.defaultModel,
-//     // defaultReasoningEffort: settingsStore.defaultReasoningEffort,
-//     // defaultWebSearch: settingsStore.defaultWebSearch,
-//     openrouterModels: [...settingsStore.openrouterModels],
-//     titleGenerationVendor: settingsStore.titleGenerationVendor,
-//     titleGenerationModel: settingsStore.titleGenerationModel,
-//     mcpServersConfig: settingsStore.mcpServersConfig,
-//     disabledMcpServers: settingsStore.disabledMcpServers,
-//     disabledMcpTools: settingsStore.disabledMcpTools,
-//     availableMcpTools: settingsStore.availableMcpTools,
-//   };
-//   currentSection.value = 'api-keys';
-//   // 変更キーをリセット
-//   changedApiKeys.value = {};
-// };
-
 const onDialogHide = () => {
-  // リセット処理 (ダイアログが開かれるときに初期化されるので、ここでは不要かも)
-  // tempSettings は watch(dialogVisible) でリセットされる
+  // リセット処理
   currentSection.value = sections[0].id; // 最初のセクションに戻す
   changedApiKeys.value = {}; // APIキー変更もリセット
 };
 
-// const onSave = async () => {
-//   try {
-//     isSaving.value = true;
-
-//     // ストアのアクションに渡すデータを作成
-//     const settingsToSave = {
-//       ...tempSettings, // 他の設定項目 (apiKeys: boolean を含むが、これは無視される)
-//       changedApiKeys: changedApiKeys.value // 変更された実際のキー情報
-//     };
-
-//     // ストアの saveSettings アクションを呼び出し
-//     console.log('Saving settings:', settingsToSave);
-//     await settingsStore.saveSettings(settingsToSave); 
-
-//     // Close the dialog (emit is removed as store is the source of truth)
-//     dialogVisible.value = false;
-
-//   } catch (error) {
-//     console.error('Failed to save settings:', error);
-//     // TODO: エラー通知の実装
-//   } finally {
-//     isSaving.value = false;
-//   }
-// };
+// Helper function to prepare settings for saving
+function prepareSettingsForSave() {
+  const settingsToSave: Partial<GlobalSettings> & { changedApiKeys?: Record<string, string> } = {
+    ...deepClone(tempSettings),
+    changedApiKeys: changedApiKeys.value
+  };
+  // 保存対象外のプロパティを削除
+  delete (settingsToSave as any).availableMcpTools;
+  delete (settingsToSave as any).apiKeys;
+  return settingsToSave;
+}
 
 const onSave = async () => {
   try {
     isSaving.value = true;
 
-    // ストアのアクションに渡すデータを作成
-    // tempSettings の現在の値 (UIでの変更を含む) を渡す
-    // changedApiKeys も渡す
-    const settingsToSave: Partial<GlobalSettings> & { changedApiKeys?: Record<string, string> } = {
-      ...JSON.parse(JSON.stringify(tempSettings)), // tempSettings の現在の値をディープコピー
-      changedApiKeys: changedApiKeys.value // 変更されたAPIキー情報
-    };
-    // availableMcpTools は保存対象外なので削除
-    delete (settingsToSave as any).availableMcpTools;
-    // apiKeys (booleanの辞書) も保存対象外 (changedApiKeys を使うため)
-    delete (settingsToSave as any).apiKeys;
-
-
-    console.log('Saving settings:', JSON.parse(JSON.stringify(settingsToSave)));
+    const settingsToSave = prepareSettingsForSave();
     await settingsStore.saveSettings(settingsToSave);
 
-    dialogVisible.value = false; // 保存成功したらダイアログを閉じる (onDialogHide が呼ばれる)
+    // 保存成功後、tempSettingsを最新のストアの状態で更新
+    syncTempSettingsFromStore();
+
+    dialogVisible.value = false; // 保存成功したらダイアログを閉じる
 
   } catch (error) {
     console.error('Failed to save settings:', error);

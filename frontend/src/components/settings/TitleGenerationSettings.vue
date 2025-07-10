@@ -38,7 +38,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue';
+import { computed } from 'vue';
 import { MODELS } from '@/constants/models';
 import { useSettingsStore } from '@/store/settings';
 
@@ -55,28 +55,29 @@ const emit = defineEmits<{
 
 const settingsStore = useSettingsStore();
 
+// Helper function to capitalize vendor name
+function capitalizeVendorName(vendor: string): string {
+  return vendor.charAt(0).toUpperCase() + vendor.slice(1);
+}
+
+// Helper function to get default model for vendor
+function getDefaultModelForVendor(vendorId: string): string {
+  return Object.values(MODELS[vendorId] || {})[0]?.id || '';
+}
+
 const vendor = computed({
-    get: () => {
-        console.log('Getting vendor:', props.modelValue.vendor);
-        return props.modelValue.vendor;
-    },
+    get: () => props.modelValue.vendor,
     set: (value) => {
-        console.log('Setting vendor:', value);
-        const newModel = Object.values(MODELS[value] || {})[0]?.id || '';
         emit('update:modelValue', {
             vendor: value,
-            model: newModel
+            model: getDefaultModelForVendor(value)
         });
     }
 });
 
 const model = computed({
-    get: () => {
-        console.log('Getting model:', props.modelValue.model);
-        return props.modelValue.model;
-    },
+    get: () => props.modelValue.model,
     set: (value) => {
-        console.log('Setting model:', value);
         emit('update:modelValue', {
             vendor: vendor.value,
             model: value
@@ -88,7 +89,7 @@ const model = computed({
 const vendorOptions = computed(() => {
     return Object.keys(MODELS).map(id => ({
         id,
-        name: id.charAt(0).toUpperCase() + id.slice(1)
+        name: capitalizeVendorName(id)
     }));
 });
 
@@ -98,11 +99,6 @@ const availableModels = computed(() => {
     }
     return Object.values(MODELS[vendor.value] || {});
 });
-
-// Add watcher to debug props changes
-watch(() => props.modelValue, (newValue) => {
-    console.log('Props modelValue changed:', newValue);
-}, { deep: true });
 </script>
 
 <style scoped>

@@ -53,41 +53,22 @@
       @save="onSettingsSave"
     />
   </div>
+  <PrimeConfirmDialog />
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, computed, reactive, watch } from 'vue';
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
 import SidebarMenu from './components/SidebarMenu.vue';
 import ChatView from './views/ChatView.vue';
 import { useConversationStore } from './store/conversation';
 import { useSettingsStore } from './store/settings';
 import { usePersonaStore } from '@/store/persona';
-import { MODELS } from '@/constants/models';
+import PrimeConfirmDialog from 'primevue/confirmdialog'; // Import ConfirmDialog
 import GlobalSettingsDialog from '@/components/settings/GlobalSettingsDialog.vue';
-import type { GlobalSettings } from '@/types/settings';
 
 const conversationStore = useConversationStore();
 const settingsStore = useSettingsStore();
 const personaStore = usePersonaStore();
-
-const tempSettings = reactive<GlobalSettings>({
-  apiKeys: { ...settingsStore.apiKeys },
-  defaultVendor: settingsStore.defaultVendor,
-  defaultModel: settingsStore.defaultModel,
-  defaultTemperature: settingsStore.defaultTemperature,
-  defaultMaxTokens: settingsStore.defaultMaxTokens,
-  // defaultReasoningEffort: settingsStore.defaultReasoningEffort,
-  // defaultBudgetTokens: settingsStore.defaultBudgetTokens,
-  // defaultWebSearch: settingsStore.defaultWebSearch,
-  openrouterModels: settingsStore.openrouterModels,
-  titleGenerationVendor: settingsStore.titleGenerationVendor,
-  titleGenerationModel: settingsStore.titleGenerationModel,
-  mcpServersConfig: settingsStore.mcpServersConfig,
-  disabledMcpServers: settingsStore.disabledMcpServers,
-  disabledMcpTools: settingsStore.disabledMcpTools,
-  availableMcpTools: settingsStore.availableMcpTools,
-});
-
 
 
 const isSidebarHidden = ref(false);
@@ -142,43 +123,15 @@ const closeDrawerOnMobile = () => {
 };
 
 const openSettingsDialog = () => {
-  tempSettings.apiKeys = { ...settingsStore.apiKeys };
-  tempSettings.defaultVendor = settingsStore.defaultVendor;
-  tempSettings.defaultTemperature = settingsStore.defaultTemperature;
-  tempSettings.defaultMaxTokens = settingsStore.defaultMaxTokens;
-  tempSettings.defaultModel = settingsStore.defaultModel;
-  tempSettings.openrouterModels = settingsStore.openrouterModels;
-  // tempSettings.defaultReasoningEffort = settingsStore.defaultReasoningEffort;
-  // tempSettings.defaultBudgetTokens = settingsStore.defaultBudgetTokens;
-  // tempSettings.defaultWebSearch = settingsStore.defaultWebSearch;
-  tempSettings.titleGenerationVendor = settingsStore.titleGenerationVendor;
-  tempSettings.titleGenerationModel = settingsStore.titleGenerationModel;
   isSettingsDialogVisible.value = true;
 };
 
-const onSettingsSave = (settings: GlobalSettings) => {
+const onSettingsSave = () => {
   // 設定が保存された後の処理
   // 必要に応じて、他のコンポーネントに通知したり、状態を更新したりする
-  console.log('Settings saved:', settings);
+  console.log('Settings saved');
 };
 
-watch(
-  () => tempSettings.defaultVendor,
-  (newVendor) => {
-    const newModel = Object.values(MODELS[newVendor] || {})[0];
-    tempSettings.defaultModel = newModel ? newModel.id : MODELS.anthropic.CLAUDE_SONNET_4.id;
-  }
-);
-
-watch(
-  () => tempSettings.defaultModel,
-  (newModelId) => {
-    const model = Object.values(MODELS[tempSettings.defaultVendor] || {}).find((m) => m.id === newModelId);
-    if (model) {
-      tempSettings.defaultMaxTokens = Math.min(tempSettings.defaultMaxTokens, model.maxTokens);
-    }
-  }
-);
 
 const sidebarWidthStyle = computed(() => {
   if (isSidebarHidden.value) {

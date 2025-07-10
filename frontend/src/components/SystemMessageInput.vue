@@ -51,62 +51,70 @@ const emit = defineEmits(['update:system-message', 'update:is-custom-selected', 
 
 const personaStore = usePersonaStore();
 
-const allPersonas = computed(() => {
-  const customPersonaIndex = PERSONAS.findIndex(p => p.id === CUSTOM_PERSONA.id);
-  if (customPersonaIndex !== -1) {
-    const personas = [...PERSONAS];
-    personas.splice(customPersonaIndex, 1);
-    return [...personas, ...personaStore.userDefinedPersonas, CUSTOM_PERSONA];
-  } else {
-    return [...PERSONAS, ...personaStore.userDefinedPersonas];
+// Helper function to find persona by ID
+function findPersonaById(personaId: string) {
+  return allPersonas.value.find(p => p.id === personaId);
+}
+
+// Helper function to check if image is data URL
+function isDataUrl(url: string): boolean {
+  return url.startsWith('data:');
+}
+
+// Helper function to reorder personas with custom at the end
+function reorderPersonasWithCustomLast(personas: any[]) {
+  const customIndex = personas.findIndex(p => p.id === CUSTOM_PERSONA.id);
+  if (customIndex !== -1) {
+    const reordered = [...personas];
+    reordered.splice(customIndex, 1);
+    return [...reordered, ...personaStore.userDefinedPersonas, CUSTOM_PERSONA];
   }
-});
+  return [...personas, ...personaStore.userDefinedPersonas];
+}
+
+const allPersonas = computed(() => reorderPersonasWithCustomLast(PERSONAS));
 
 const selectedPersona = ref(props.isCustomSelected ? 'custom' : DEFAULT_PERSONA.id);
 const customSystemMessage = ref(props.isCustomSelected ? props.value : '');
 
-watch(
-  () => props.value,
-  (newValue) => {
-    if (props.isCustomSelected) {
-      customSystemMessage.value = newValue;
-    }
+// Watch for prop changes
+watch(() => props.value, (newValue) => {
+  if (props.isCustomSelected) {
+    customSystemMessage.value = newValue;
   }
-);
+});
 
-watch(
-  () => props.isCustomSelected,
-  (newValue) => {
-    if (newValue) {
-      selectedPersona.value = 'custom';
-    }
+watch(() => props.isCustomSelected, (isCustom) => {
+  if (isCustom) {
+    selectedPersona.value = 'custom';
   }
-);
+});
 
 function getPersonaImage(imagePath: string) {
-  if (imagePath.startsWith('data:')) {
-    return imagePath;
-  } else {
-    return new URL(`../assets/images/${imagePath}`, import.meta.url).href;
-  }
+  return isDataUrl(imagePath) 
+    ? imagePath 
+    : new URL(`../assets/images/${imagePath}`, import.meta.url).href;
 }
 
 function selectPersona(personaId: string) {
   selectedPersona.value = personaId;
-  const persona = allPersonas.value.find(p => p.id === personaId);
   emit('update:persona-id', personaId);
+  
   if (personaId === 'custom') {
     emit('update:system-message', customSystemMessage.value);
     emit('update:is-custom-selected', true);
-  } else if (persona) {
-    emit('update:system-message', persona.systemMessage);
-    emit('update:is-custom-selected', false);
+  } else {
+    const persona = findPersonaById(personaId);
+    if (persona) {
+      emit('update:system-message', persona.systemMessage);
+      emit('update:is-custom-selected', false);
+    }
   }
 }
 
 function getPersonaSystemMessage(personaId: string) {
-  const persona = allPersonas.value.find(p => p.id === personaId);
-  return persona ? persona.systemMessage : DEFAULT_PERSONA.systemMessage;
+  const persona = findPersonaById(personaId);
+  return persona?.systemMessage || DEFAULT_PERSONA.systemMessage;
 }
 
 watch(customSystemMessage, (newValue) => {

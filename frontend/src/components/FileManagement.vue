@@ -46,6 +46,46 @@ const toast = useToast();
 const previewVisible = ref(false);
 const previewContent = ref('');
 
+// File icon mapping
+const FILE_ICON_MAP: Record<string, string> = {
+  pdf: 'file-pdf',
+  txt: 'file-alt',
+  md: 'file-alt',
+  html: 'file-code',
+  js: 'file-code',
+  ts: 'file-code',
+  py: 'file-code',
+  java: 'file-code',
+  c: 'file-code',
+  cpp: 'file-code',
+  cs: 'file-code',
+  rb: 'file-code',
+  go: 'file-code',
+  swift: 'file-code',
+  kotlin: 'file-code',
+  php: 'file-code',
+  rs: 'file-code',
+  scala: 'file-code',
+  sql: 'file-code',
+  json: 'file-code',
+  xml: 'file-code',
+};
+
+// Helper function to validate file size
+function validateFileSize(file: File): void {
+  if (file.size > MAX_FILE_SIZE) {
+    throw new Error(`You may not upload files larger than 20mb.\nFilename: ${file.name}`);
+  }
+}
+
+// Helper function to format bytes to human readable size
+function formatBytes(bytes: number): string {
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  if (bytes === 0) return '0 Bytes';
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return `${parseFloat((bytes / Math.pow(1024, i)).toFixed(2))} ${sizes[i]}`;
+}
+
 const currentConversationFiles = computed(() => {
   const currentConversation = conversationStore.conversationList.find(
     (c) => c.conversationId === conversationStore.currentConversationId
@@ -54,24 +94,13 @@ const currentConversationFiles = computed(() => {
 });
 
 function getFileIcon(fileName: string) {
-  const extension = fileName.split('.').pop()?.toLowerCase();
-  switch (extension) {
-    case 'pdf':
-      return 'file-pdf';
-    case 'txt':
-    case 'md':
-      return 'file-alt';
-    default:
-      return 'file';
-  }
+  const extension = fileName.split('.').pop()?.toLowerCase() || '';
+  return FILE_ICON_MAP[extension] || 'file';
 }
 
 function getFileSize(fileContent: string) {
   const bytes = new Blob([fileContent]).size;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-  if (bytes === 0) return '0 Bytes';
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return `${parseFloat((bytes / Math.pow(1024, i)).toFixed(2))} ${sizes[i]}`;
+  return formatBytes(bytes);
 }
 
 async function deleteFile(fileName: string) {
@@ -83,50 +112,51 @@ function previewFile(fileName: string, fileContent: string) {
   previewVisible.value = true;
 }
 
-async function uploadFile(event: Event) {
-  const files = (event.target as HTMLInputElement).files;
-  if (files) {
-    try {
-      await processFiles(files);
-      (event.target as HTMLInputElement).value = "";
-    } catch (error) {
-      const errorMessage = (error as Error).message;
-      toast.add({ severity: 'error', summary: 'Error', detail: errorMessage, life: 10000 });
-    }
+async function handleFileUpload(files: FileList | null, clearInput?: () => void) {
+  if (!files || files.length === 0) return;
+  
+  try {
+    await processFiles(files);
+    clearInput?.();
+  } catch (error) {
+    const errorMessage = (error as Error).message;
+    toast.add({ severity: 'error', summary: 'Error', detail: errorMessage, life: 10000 });
   }
+}
+
+async function uploadFile(event: Event) {
+  const input = event.target as HTMLInputElement;
+  await handleFileUpload(input.files, () => {
+    input.value = '';
+  });
 }
 
 async function handleFileDrop(event: DragEvent) {
   event.preventDefault();
-  const files = event.dataTransfer?.files;
-  if (files) {
-    try {
-      await processFiles(files);
-      event.dataTransfer.clearData();
-    } catch (error) {
-      const errorMessage = (error as Error).message;
-      toast.add({ severity: 'error', summary: 'Error', detail: errorMessage, life: 10000 });
-    }
-  }
+  await handleFileUpload(event.dataTransfer?.files || null, () => {
+    event.dataTransfer?.clearData();
+  });
 }
 
 async function processFiles(files: FileList) {
   const fileContents: { [key: string]: string } = {};
 
   for (const file of Array.from(files)) {
-    if (file.size > MAX_FILE_SIZE) {
-      throw new Error(`You may not upload files larger than 20mb.\nFilename: ${file.name}`);
-    }
+    validateFileSize(file);
+    
     try {
       const fileContent = await fileService.extractTextFromFile(file);
       fileContents[file.name] = fileContent;
     } catch (error) {
-      console.error(`Error extracting text from file ${file.name}:`, error);
       throw new Error(`Error extracting text from file. \nFilename: ${file.name}\nError: ${error}`);
     }
   }
 
-  await conversationStore.updateConversationFiles(conversationStore.currentConversationId!, {
+  if (!conversationStore.currentConversationId) {
+    throw new Error('No active conversation selected');
+  }
+
+  await conversationStore.updateConversationFiles(conversationStore.currentConversationId, {
     ...currentConversationFiles.value,
     ...fileContents,
   });

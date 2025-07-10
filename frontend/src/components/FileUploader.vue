@@ -44,44 +44,100 @@ const fileInput = ref<HTMLInputElement | null>(null);
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 const toast = useToast();
 
+// Helper function to read file as data URL
+function readFileAsDataURL(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// Helper function to validate file size
+function validateFileSize(file: File): boolean {
+  if (file.size > MAX_FILE_SIZE) {
+    toast.add({ 
+      severity: 'error', 
+      summary: 'Error', 
+      detail: `You may not upload files larger than 20mb.\nFilename: ${file.name}`, 
+      life: 10000 
+    });
+    return false;
+  }
+  return true;
+}
+
+// Helper function to process non-image file
+async function processTextFile(file: File): Promise<{ filename: string; content: string } | null> {
+  try {
+    const content = await fileService.extractTextFromFile(file);
+    return { filename: file.name, content };
+  } catch (error) {
+    toast.add({ 
+      severity: 'error', 
+      summary: 'Error', 
+      detail: `Error extracting text from file. \nFilename: ${file.name}\nError: ${error}`, 
+      life: 10000 
+    });
+    return null;
+  }
+}
+
 const onFileUpload = async (event: Event) => {
-  const files = (event.target as HTMLInputElement).files;
-  if (files) {
-    const uploadedFiles = Array.from(files);
-    const uploadedImages: string[] = [];
-    const fileContents: { [key: string]: string } = {};
-    
-    for (const file of uploadedFiles) {
-      if (file.size > MAX_FILE_SIZE) {
-        toast.add({ severity: 'error', summary: 'Error', detail: `You may not upload files larger than 20mb.\nFilename: ${file.name}`, life: 10000 });
-        return;
-      }
-      if (file.type.startsWith('image/')) {
-        const reader = new FileReader();
-        reader.onload = () => {
-          uploadedImages.push(reader.result as string);
-          if (uploadedImages.length === uploadedFiles.filter(f => f.type.startsWith('image/')).length) {
-            emit('image-uploaded', uploadedImages);
-          }
-        };
-        reader.readAsDataURL(file);
-      } else {
-        try {
-          const fileContent = await fileService.extractTextFromFile(file);
-          fileContents[file.name] = fileContent;
-        } catch (error) {
-          console.error(`Error extracting text from file ${file.name}:`, error);
-          toast.add({ severity: 'error', summary: 'Error', detail: `Error extracting text from file. \nFilename: ${file.name}\nError: ${error}`, life: 10000 });
-        }
-      }
+  const input = event.target as HTMLInputElement;
+  const files = input.files;
+  if (!files || files.length === 0) return;
+
+  const uploadedFiles = Array.from(files);
+  
+  // Validate all files first
+  for (const file of uploadedFiles) {
+    if (!validateFileSize(file)) {
+      return;
     }
+  }
+
+  // Separate images and text files
+  const imageFiles = uploadedFiles.filter(f => f.type.startsWith('image/'));
+  const textFiles = uploadedFiles.filter(f => !f.type.startsWith('image/'));
+
+  // Process image files
+  if (imageFiles.length > 0) {
+    const imagePromises = imageFiles.map(file => readFileAsDataURL(file));
+    try {
+      const uploadedImages = await Promise.all(imagePromises);
+      emit('image-uploaded', uploadedImages);
+    } catch (error) {
+      toast.add({ 
+        severity: 'error', 
+        summary: 'Error', 
+        detail: 'Failed to process image files', 
+        life: 10000 
+      });
+    }
+  }
+
+  // Process text files
+  if (textFiles.length > 0) {
+    const textPromises = textFiles.map(file => processTextFile(file));
+    const results = await Promise.all(textPromises);
+    
+    const fileContents: { [key: string]: string } = {};
+    results.forEach(result => {
+      if (result) {
+        fileContents[result.filename] = result.content;
+      }
+    });
 
     if (Object.keys(fileContents).length > 0) {
       emit('file-uploaded', fileContents);
-      if (fileInput.value) {
-        fileInput.value.value = '';
-      }
     }
+  }
+
+  // Clear input
+  if (fileInput.value) {
+    fileInput.value.value = '';
   }
 };
 

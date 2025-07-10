@@ -109,31 +109,52 @@ const currentConversationSettings = computed<APISettings>(() => {
   };
 });
 
+// Helper functions
+function getModelByVendorAndId(vendor: string, modelId: string) {
+  if (vendor === 'openrouter') {
+    return settingsStore.openrouterModels.find(m => m.id === modelId);
+  }
+  return Object.values(MODELS[vendor] || {}).find((m) => m.id === modelId);
+}
+
+function readFileAsDataURL(file: File | Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function validateImage(dataURL: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => resolve(image.width > 0 && image.height > 0);
+    image.onerror = () => resolve(false);
+    image.src = dataURL;
+  });
+}
+
 const isMultimodalModel = computed(() => {
   const { vendor, model } = currentConversationSettings.value;
-  
-  let currentModel;
-  if (vendor === 'openrouter') {
-    // OpenRouterの場合は settingsStore からモデル情報を取得
-    currentModel = settingsStore.openrouterModels.find(m => m.id === model);
-  } else {
-    // それ以外のベンダーは従来のMODELS定数から取得
-    currentModel = Object.values(MODELS[vendor] || {}).find((m) => m.id === model);
-  }
-  
-  console.log(`Checking multimodal for ${vendor}/${model}:`, currentModel?.multimodal);
+  const currentModel = getModelByVendorAndId(vendor, model);
   return currentModel ? currentModel.multimodal : false;
 });
 
 const dragActive = ref(false);
 
 const sendMessage = () => {
-  if (!newMessage.value && uploadedImages.value.length === 0) return;
   if (!isApiKeySet.value) return;
-  if (!newMessage.value && uploadedImages.value.length !== 0) {
-    newMessage.value = "Please describe this image(s).";
-  }
-  emit('send-message', newMessage.value, uploadedImages.value);
+  
+  const hasMessage = !!newMessage.value;
+  const hasImages = uploadedImages.value.length > 0;
+  
+  if (!hasMessage && !hasImages) return;
+  
+  const messageToSend = hasMessage ? newMessage.value : "Please describe this image(s).";
+  emit('send-message', messageToSend, uploadedImages.value);
+  
+  // Clear inputs
   newMessage.value = '';
   uploadedImages.value = [];
 };
@@ -150,23 +171,18 @@ const onKeyDown = (event: KeyboardEvent) => {
 };
 
 const onFileUpload = async (fileContents: { [key: string]: string }) => {
-  console.log('Uploaded file contents:', fileContents);
+  const conversation = currentConversation.value;
+  if (!conversation) return;
 
-  const currentConversationId = conversationStore.currentConversationId;
-  if (currentConversationId) {
-    const conversation = conversationStore.conversationList.find(
-      conversation => conversation.conversationId === currentConversationId
-    );
+  const updatedFiles = {
+    ...conversation.files,
+    ...fileContents,
+  };
 
-    if (conversation) {
-      conversation.files = {
-        ...conversation.files,
-        ...fileContents,
-      };
-
-      await conversationStore.updateConversationFiles(currentConversationId, conversation.files);
-    }
-  }
+  await conversationStore.updateConversationFiles(
+    conversation.conversationId, 
+    updatedFiles
+  );
 };
 
 const onImageUpload = (images: string[]) => {
@@ -183,63 +199,67 @@ const removeImage = (index: number) => {
   uploadedImages.value.splice(index, 1);
 };
 
+// Process images from various sources (paste, drop)
+async function processImageFiles(files: (File | Blob)[]) {
+  if (!isMultimodalModel.value) return;
+  
+  const validImages: string[] = [];
+  
+  for (const file of files) {
+    if (file.type.startsWith('image/')) {
+      try {
+        const dataURL = await readFileAsDataURL(file);
+        if (await validateImage(dataURL)) {
+          validImages.push(dataURL);
+        }
+      } catch (error) {
+        console.warn('Invalid image:', error);
+      }
+    }
+  }
+  
+  if (validImages.length > 0) {
+    onImageUpload(validImages);
+  }
+}
+
 const onPaste = async (event: ClipboardEvent) => {
   const items = event.clipboardData?.items;
   if (!items) return;
 
-  const validImages: string[] = [];
-
+  const files: File[] = [];
   for (const item of Array.from(items)) {
-    if (item.type.indexOf('image') !== -1 && isMultimodalModel.value) {
+    if (item.type.startsWith('image/') && isMultimodalModel.value) {
       const blob = item.getAsFile();
-      if (blob) {
-        const reader = new FileReader();
-        reader.onload = async () => {
-          const dataURL = reader.result as string;
-          const image = new Image();
-          image.onload = () => {
-            if (image.width > 0 && image.height > 0) {
-              validImages.push(dataURL);
-            }
-          };
-          image.onerror = () => {
-            console.warn('Invalid image pasted.');
-          };
-          image.src = dataURL;
-        };
-        reader.readAsDataURL(blob);
-      }
+      if (blob) files.push(blob);
     }
   }
-
-  setTimeout(() => {
-    if (validImages.length > 0) {
-      onImageUpload(validImages);
-    }
-  }, 100);
+  
+  if (files.length > 0) {
+    await processImageFiles(files);
+  }
 };
+
+// Constants
+const MAX_TEXTAREA_HEIGHT_RATIO = 0.7;
 
 const adjustTextareaHeight = () => {
   const textarea = textareaRef.value;
-  if (textarea) {
-    scrollTop.value = textarea.scrollTop;
-    console.log(textarea.scrollTop)
+  if (!textarea) return;
+  
+  scrollTop.value = textarea.scrollTop;
+  textarea.style.height = 'auto';
+  textarea.style.height = textarea.scrollHeight + 'px';
 
-    textarea.style.height = 'auto';
-    textarea.style.height = textarea.scrollHeight + 'px';
+  const maxHeight = window.innerHeight * MAX_TEXTAREA_HEIGHT_RATIO;
 
-    const maxHeight = window.innerHeight * 0.7;
-
-    if (textarea.scrollHeight > maxHeight) {
-      textarea.style.height = maxHeight + 'px';
-      textarea.style.overflowY = 'auto';
-    } else {
-      textarea.style.overflowY = 'hidden';
-    }
-    textarea.scrollTop = scrollTop.value;
-    console.log(textarea.scrollTop)
-
+  if (textarea.scrollHeight > maxHeight) {
+    textarea.style.height = maxHeight + 'px';
+    textarea.style.overflowY = 'auto';
+  } else {
+    textarea.style.overflowY = 'hidden';
   }
+  textarea.scrollTop = scrollTop.value;
 };
 
 onMounted(() => {
@@ -262,27 +282,18 @@ const handleDragOver = (event: DragEvent) => {
   dragActive.value = true;
 };
 
-const handleDragLeave = (event: DragEvent) => {
+const handleDragLeave = () => {
   if (!isMultimodalModel.value) return;
   dragActive.value = false;
 };
 
-const handleDrop = (event: DragEvent) => {
+const handleDrop = async (event: DragEvent) => {
   if (!isMultimodalModel.value) return;
   dragActive.value = false;
+  
   const files = event.dataTransfer?.files;
   if (files && files.length > 0) {
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      if (file.type.startsWith('image/')) {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const dataURL = reader.result as string;
-          onImageUpload([dataURL]);
-        };
-        reader.readAsDataURL(file);
-      }
-    }
+    await processImageFiles(Array.from(files));
   }
 };
 </script>

@@ -1,4 +1,13 @@
-import type { OpenRouterModelsResponse, OpenRouterModel } from '@/types/openrouter';
+import type { OpenRouterModelsResponse, OpenRouterModel, OpenRouterModelPricing } from '@/types/openrouter';
+import type { Model } from '@/types/models';
+
+/**
+ * Extended Model type with additional OpenRouter-specific fields
+ */
+export interface OpenRouterCustomModel extends Omit<Model, 'supportsReasoning' | 'reasoningParameters' | 'unsupportsTemperature' | 'imageGeneration'> {
+  description: string;
+  pricing: OpenRouterModelPricing;
+}
 
 /**
  * OpenRouterサービスのインターフェース
@@ -16,16 +25,7 @@ export interface OpenRouterService {
    * @param model OpenRouterのモデル
    * @returns カスタムモデル形式
    */
-  convertToCustomModel(model: OpenRouterModel): {
-    id: string;
-    name: string;
-    contextWindow: number;
-    maxTokens: number;
-    multimodal: boolean;
-    description: string;
-    pricing: any;
-    supportFunctionCalling: boolean;
-  };
+  convertToCustomModel(model: OpenRouterModel): OpenRouterCustomModel;
 }
 
 /**

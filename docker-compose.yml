@@ -5,11 +5,11 @@ services:
       args:
         - VITE_API_BASE_URL=/api
     ports:
-      - "10000:80"
+      - "11000:80"
     depends_on:
       - backend
     networks:
-      - app-network
+      - app-network-new
 
   backend:
     build: ./backend
@@ -37,7 +37,7 @@ services:
       db:
         condition: service_healthy
     networks:
-      - app-network
+      - app-network-new
 
   db:
     image: postgres:15
@@ -46,7 +46,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data_new:/var/lib/postgresql/data
     # ポート公開（必要な場合のみ有効化）
     # ports:
     #   - "5432:5432"
@@ -56,7 +56,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - app-network
+      - app-network-new
 
   # MCPサーバーを実行するためのサービス
   mcp:
@@ -71,26 +71,26 @@ services:
     # Expose expected ports if needed for host access or documentation
     expose:
       - "3001" # Adjust based on your servers' ports
-      - "3002"
+      # - "3002"
     # Remove volume mount for server code - it's built into the image now
     # volumes:
     #   - ./mcp-servers:/mcp-servers
     environment:
       # Pass environment variables needed by ANY of the MCP servers
       - PORT_SERVER_1=3001 # Example: If servers need specific ports
-      - PORT_SERVER_2=3002
+      # - PORT_SERVER_2=3002
       # - EXAMPLE_API_KEY=${EXAMPLE_API_KEY}
       # - ANOTHER_CONFIG=${ANOTHER_CONFIG}
       - NODE_ENV=production # Often useful for Node apps
     entrypoint: ["/usr/local/bin/entrypoint.sh"]
     networks:
-      - app-network
+      - app-network-new
     # Add restart policy if desired
     restart: unless-stopped
 
 networks:
-  app-network:
+  app-network-new:
     driver: bridge
 
 volumes:
-  postgres_data:
+  postgres_data_new:

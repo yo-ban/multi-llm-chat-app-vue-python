@@ -178,9 +178,6 @@ class LLMServiceImpl implements LLMService {
         text,
         images,
       }));
-      console.log(API_BASE_URL);
-      console.log(API_MESSAGES_ENDPOINT);
-      console.log("API Settings:", settings);
 
       let systemMessage = system;
       // if (settings.websearch) {

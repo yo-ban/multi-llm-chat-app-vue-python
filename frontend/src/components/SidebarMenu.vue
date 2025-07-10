@@ -3,7 +3,7 @@
     <h3>Conversations</h3>
     <div class="conversation-sidebar">
       <div class="new-chat-container">
-        <button class="new-chat-button" @click="createNewConversation">
+        <button class="primary-button full-width new-chat-button" @click="createNewConversation">
           <font-awesome-icon icon="plus" />
           <span>New Chat</span>
         </button>
@@ -11,7 +11,7 @@
           <template #popper>
             import Conversation
           </template>
-          <button class="import-chat-button" @click="importConversation" title="Import Conversation">
+          <button class="primary-button icon-only import-chat-button" @click="importConversation" title="Import Conversation">
             <font-awesome-icon icon="upload" />
           </button>
         </VTooltip>
@@ -19,7 +19,7 @@
           <template #popper>
             Create Folder
           </template>
-          <button class="create-folder-button" @click="openCreateFolderDialog" title="Create Folder">
+          <button class="primary-button icon-only create-folder-button" @click="openCreateFolderDialog" title="Create Folder">
             <font-awesome-icon icon="folder-plus" />
           </button>
         </VTooltip>
@@ -63,7 +63,7 @@
                 <template #popper>
                   Rename
                 </template>
-                <button @click.stop="startEditFolderName(folder)" class="folder-action-button">
+                <button @click.stop="startEditFolderName(folder)" class="small-action-button folder-action-button">
                   <font-awesome-icon icon="edit" />
                 </button>
               </VTooltip>
@@ -71,7 +71,7 @@
                 <template #popper>
                   Delete
                 </template>
-                <button @click.stop="confirmDeleteFolder(folder.id)" class="folder-action-button">
+                <button @click.stop="confirmDeleteFolder(folder.id)" class="small-action-button folder-action-button">
                   <font-awesome-icon icon="trash" />
                 </button>
               </VTooltip>
@@ -123,7 +123,7 @@
                     <template #popper>
                       Rename
                     </template>
-                    <button @click.stop="startEditConversationTitle(conversation)" class="action-button edit-button">
+                    <button @click.stop="startEditConversationTitle(conversation)" class="small-action-button action-button edit-button">
                       <font-awesome-icon icon="edit" />
                     </button>
                   </VTooltip>
@@ -131,7 +131,7 @@
                     <template #popper>
                       Duplicate
                     </template>
-                    <button @click.stop="duplicateConversation(conversation)" class="action-button duplicate-button">
+                    <button @click.stop="duplicateConversation(conversation)" class="small-action-button action-button duplicate-button">
                       <font-awesome-icon icon="copy" />
                     </button>
                   </VTooltip>
@@ -139,7 +139,7 @@
                     <template #popper>
                       Generate Title
                     </template>
-                    <button @click.stop="reGenerateChatTitle(conversation.conversationId)" class="action-button generate-button">
+                    <button @click.stop="reGenerateChatTitle(conversation.conversationId)" class="small-action-button action-button generate-button">
                       <font-awesome-icon icon="refresh" />
                     </button>
                   </VTooltip>
@@ -148,7 +148,7 @@
                   <template #popper>
                     Delete
                   </template>
-                  <button @click.stop="confirmDeleteConversation(conversation.conversationId)" class="action-button delete-button">
+                  <button @click.stop="confirmDeleteConversation(conversation.conversationId)" class="small-action-button action-button delete-button">
                     <font-awesome-icon icon="trash" />
                   </button>
                 </VTooltip>
@@ -201,7 +201,7 @@
                 <template #popper>
                   Rename
                 </template>
-                <button @click.stop="startEditConversationTitle(conversation)" class="action-button edit-button">
+                <button @click.stop="startEditConversationTitle(conversation)" class="small-action-button action-button edit-button">
                   <font-awesome-icon icon="edit" />
                 </button>
               </VTooltip>
@@ -209,7 +209,7 @@
                 <template #popper>
                   Duplicate
                 </template>
-                <button @click.stop="duplicateConversation(conversation)" class="action-button duplicate-button">
+                <button @click.stop="duplicateConversation(conversation)" class="small-action-button action-button duplicate-button">
                   <font-awesome-icon icon="copy" />
                 </button>
               </VTooltip>
@@ -217,7 +217,7 @@
                 <template #popper>
                   Generate Title
                 </template>
-                <button @click.stop="reGenerateChatTitle(conversation.conversationId)" class="action-button generate-button">
+                <button @click.stop="reGenerateChatTitle(conversation.conversationId)" class="small-action-button action-button generate-button">
                   <font-awesome-icon icon="refresh" />
                 </button>
               </VTooltip>
@@ -226,7 +226,7 @@
               <template #popper>
                 Delete
               </template>
-              <button @click.stop="confirmDeleteConversation(conversation.conversationId)" class="action-button delete-button">
+              <button @click.stop="confirmDeleteConversation(conversation.conversationId)" class="small-action-button action-button delete-button">
                 <font-awesome-icon icon="trash" />
               </button>
             </VTooltip>
@@ -239,7 +239,7 @@
     <h3>My Assistant Roles</h3>
     <div class="persona-sidebar">
       <div class="new-persona-container">
-        <button class="add-persona-button" @click="openAddPersonaDialog">
+        <button class="primary-button full-width add-persona-button" @click="openAddPersonaDialog">
           <font-awesome-icon icon="plus" />
           Add New Role
         </button>
@@ -247,7 +247,7 @@
           <template #popper>
             Import Role
           </template>
-          <button class="import-persona-button" @click="importPersona" title="Import Persona">
+          <button class="primary-button icon-only import-persona-button" @click="importPersona" title="Import Persona">
             <font-awesome-icon icon="upload" />
           </button>
         </VTooltip>
@@ -309,7 +309,6 @@
     :persona="selectedPersona"
     @save="saveEditedPersona"
   />
-  <PrimeConfirmDialog />
   <PrimeDialog v-model:visible="createFolderDialog" header="Create Folder" :style="{ width: '300px' }">
     <div class="folder-dialog-content">
       <PrimeInputText v-model="newFolderName" placeholder="Folder Name" class="w-full" autofocus />
@@ -373,12 +372,12 @@ const selectedPersona = ref<UserDefinedPersona | undefined>(undefined);
 // 会話編集関連
 const editingConversationId = ref('');
 const editedConversationTitle = ref('');
-const conversationTitleInput = ref<any | null>(null);
+const conversationTitleInput = ref<HTMLInputElement[] | null>(null);
 
 // フォルダ編集関連
 const editingFolderId = ref('');
 const editedFolderName = ref('');
-const folderNameInput = ref<any | null>(null);
+const folderNameInput = ref<HTMLInputElement[] | null>(null);
 
 // フォルダダイアログ関連
 const createFolderDialog = ref(false);
@@ -492,21 +491,11 @@ async function handleFolderDrop(folderId: string, event: DragEvent) {
         const conversation = conversationList.value.find(c => c.conversationId === conversationId);
         if (conversation && conversation.folderId !== folderId) {
           await conversationStore.moveConversationToFolder(conversationId, folderId);
-          toast.add({
-            severity: 'success',
-            summary: 'Conversation Moved',
-            detail: 'Conversation has been moved to the folder',
-            life: 3000
-          });
+          showToast('success', 'Conversation Moved', 'Conversation has been moved to the folder');
         }
       } catch (error) {
         console.error('Error moving conversation:', error);
-        toast.add({
-          severity: 'error',
-          summary: 'Error',
-          detail: 'Failed to move conversation',
-          life: 3000
-        });
+        showToast('error', 'Error', 'Failed to move conversation');
       }
     }
   }
@@ -524,21 +513,11 @@ async function handleRootDrop(event: DragEvent) {
         const conversation = conversationList.value.find(c => c.conversationId === conversationId);
         if (conversation && conversation.folderId !== null) {
           await conversationStore.moveConversationToFolder(conversationId, null);
-          toast.add({
-            severity: 'success',
-            summary: 'Conversation Moved',
-            detail: 'Conversation has been moved to root',
-            life: 3000
-          });
+          showToast('success', 'Conversation Moved', 'Conversation has been moved to root');
         }
       } catch (error) {
         console.error('Error moving conversation:', error);
-        toast.add({
-          severity: 'error',
-          summary: 'Error',
-          detail: 'Failed to move conversation',
-          life: 3000
-        });
+        showToast('error', 'Error', 'Failed to move conversation');
       }
     }
   }
@@ -584,14 +563,13 @@ const exportPersona = (persona: UserDefinedPersona) => {
 };
 
 const confirmDeletePersona = (personaId: string) => {
-  confirm.require({
-    message: 'Are you sure you want to delete this role?',
-    header: 'Confirmation',
-    icon: 'pi pi-exclamation-triangle',
-    accept: () => {
+  showDeleteConfirmation(
+    'Are you sure you want to delete this role?',
+    'Confirmation',
+    () => {
       personaStore.deletePersona(personaId);
-    },
-  });
+    }
+  );
 };
 
 // ルートの会話（フォルダに属さない会話）を取得
@@ -623,12 +601,7 @@ async function createFolder() {
   if (newFolderName.value.trim()) {
     await conversationStore.createFolder(newFolderName.value.trim());
     closeCreateFolderDialog();
-    toast.add({
-      severity: 'success',
-      summary: 'Folder Created',
-      detail: 'New folder has been created',
-      life: 3000
-    });
+    showToast('success', 'Folder Created', 'New folder has been created');
   }
 }
 
@@ -636,16 +609,41 @@ function toggleFolder(folderId: string) {
   conversationStore.toggleFolderExpanded(folderId);
 }
 
+// 共通の編集フォーカス処理
+function focusAndSelectInput(inputRef: HTMLInputElement[] | null, selectAll: boolean = true) {
+  nextTick(() => {
+    if (inputRef && inputRef[0]) {
+      const input = inputRef[0];
+      input.focus();
+      if (selectAll) {
+        input.setSelectionRange(0, input.value.length);
+      } else {
+        input.setSelectionRange(0, 0);
+        input.scrollLeft = 0;
+      }
+    }
+  });
+}
+
+// 共通の削除確認ダイアログ表示
+function showDeleteConfirmation(message: string, header: string, onAccept: () => void | Promise<void>) {
+  confirm.require({
+    message,
+    header,
+    icon: 'pi pi-exclamation-triangle',
+    accept: onAccept,
+  });
+}
+
+// 共通のToastメッセージ表示
+function showToast(severity: 'success' | 'error' | 'info' | 'warn', summary: string, detail: string, life: number = 3000) {
+  toast.add({ severity, summary, detail, life });
+}
+
 function startEditFolderName(folder: ConversationFolder) {
   editingFolderId.value = folder.id;
   editedFolderName.value = folder.name;
-  nextTick(() => {
-    if (folderNameInput.value) {
-      const input = folderNameInput.value[0];
-      input.focus();
-      input.setSelectionRange(0, input.value.length);
-    }
-  });
+  focusAndSelectInput(folderNameInput.value, true);
 }
 
 function cancelFolderEdit() {
@@ -660,21 +658,15 @@ async function saveFolderName(folderId: string) {
 }
 
 function confirmDeleteFolder(folderId: string) {
-  confirm.require({
-    message: 'Are you sure you want to delete this folder? Conversations will be moved to root.',
-    header: 'Delete Folder',
-    icon: 'pi pi-exclamation-triangle',
-    accept: () => {
+  showDeleteConfirmation(
+    'Are you sure you want to delete this folder? Conversations will be moved to root.',
+    'Delete Folder',
+    () => {
       conversationStore.deleteFolder(folderId).then(() => {
-        toast.add({
-          severity: 'success',
-          summary: 'Folder Deleted',
-          detail: 'Folder and its contents have been deleted',
-          life: 3000
-        });
+        showToast('success', 'Folder Deleted', 'Folder and its contents have been deleted');
       });
     }
-  });
+  );
 }
 
 function createNewConversation() {
@@ -693,7 +685,7 @@ function importConversation() {
         await conversationStore.importConversation(file);
       } catch (error) {
         console.error('Error importing conversation:', error);
-        toast.add({ severity: 'error', summary: 'Error', detail: `Error importing conversation: ${error}`, life: 10000 });
+        showToast('error', 'Error', `Error importing conversation: ${error}`, 10000);
       }
     }
   };
@@ -714,12 +706,7 @@ function getPersonaIcon(personaId: string | undefined) {
 function startEditConversationTitle(conversation: Conversation) {
   editingConversationId.value = conversation.conversationId;
   editedConversationTitle.value = conversation.title;
-  nextTick(() => {
-    const input = conversationTitleInput.value[0];
-    input.focus();
-    input.setSelectionRange(0, 0);
-    input.scrollLeft = 0;
-  });
+  focusAndSelectInput(conversationTitleInput.value, false);
 }
 
 function cancelEdit(originalTitle: string) {
@@ -733,14 +720,13 @@ function saveConversationTitle(conversationId: string) {
 }
 
 const confirmDeleteConversation = (conversationId: string) => {
-  confirm.require({
-    message: 'Are you sure you want to delete this conversation?',
-    header: 'Confirmation',
-    icon: 'pi pi-exclamation-triangle',
-    accept: () => {
+  showDeleteConfirmation(
+    'Are you sure you want to delete this conversation?',
+    'Confirmation',
+    () => {
       deleteConversation(conversationId);
-    },
-  });
+    }
+  );
 };
 
 async function reGenerateChatTitle(conversationId: string) {
@@ -756,42 +742,22 @@ async function reGenerateChatTitle(conversationId: string) {
 function duplicateConversation(conversation: Conversation) {
   conversationStore.duplicateConversation(conversation.conversationId)
     .then(() => {
-      toast.add({ 
-        severity: 'success', 
-        summary: 'Conversation Duplicated', 
-        detail: 'The conversation has been duplicated successfully', 
-        life: 3000 
-      });
+      showToast('success', 'Conversation Duplicated', 'The conversation has been duplicated successfully');
     })
     .catch((error) => {
       console.error('Error duplicating conversation:', error);
-      toast.add({ 
-        severity: 'error', 
-        summary: 'Duplication Failed', 
-        detail: 'Failed to duplicate the conversation', 
-        life: 3000 
-      });
+      showToast('error', 'Duplication Failed', 'Failed to duplicate the conversation');
     });
 }
 
 function duplicatePersona(persona: UserDefinedPersona) {
   personaStore.duplicatePersona(persona.id)
     .then(() => {
-      toast.add({ 
-        severity: 'success', 
-        summary: 'Role Duplicated', 
-        detail: 'The assistant role has been duplicated successfully', 
-        life: 3000 
-      });
+      showToast('success', 'Role Duplicated', 'The assistant role has been duplicated successfully');
     })
     .catch((error) => {
       console.error('Error duplicating persona:', error);
-      toast.add({ 
-        severity: 'error', 
-        summary: 'Duplication Failed', 
-        detail: 'Failed to duplicate the assistant role', 
-        life: 3000 
-      });
+      showToast('error', 'Duplication Failed', 'Failed to duplicate the assistant role');
     });
 }
 
@@ -804,6 +770,63 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* Common button styles */
+.primary-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  background-color: #4a5f7d;
+  color: white;
+  border: 1px solid #253546;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  transition: background-color 0.3s, box-shadow 0.3s;
+  border-radius: 5px;
+  font-size: medium;
+  font-weight: 600;
+  font-family: inherit;
+  height: 40px;
+}
+
+.primary-button:hover {
+  background-color: #5a7190;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+}
+
+.primary-button:active {
+  background-color: #3d5166;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.primary-button.full-width {
+  flex: 1;
+  width: 100%;
+  white-space: nowrap;
+}
+
+.primary-button.icon-only {
+  width: 35px;
+}
+
+.small-action-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #fff;
+  padding: 5px;
+  border-radius: 5px;
+  transition: background-color 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 5px;
+}
+
+.small-action-button:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
 .sidebar-container {
   display: flex;
   flex-direction: column;
@@ -852,70 +875,11 @@ onUnmounted(() => {
   margin-bottom: 10px;
 }
 
-.new-chat-button {
-  flex: 1;
-  justify-content: center;
-  margin-right: 0px;
-  width: 100%; 
-  white-space: nowrap;
-  display: flex;
-  align-items: center;
-  padding: 10px;
-  background-color: #4a5f7d;
-  color: white;
-  border: 1px solid #253546;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  cursor: pointer;
-  transition: background-color 0.3s, box-shadow 0.3s;
-  border-radius: 5px;
-  font-size: medium;
-  font-weight: 600;
-  font-family: inherit;
-  height: 40px;
-}
-
-.new-chat-button:hover {
-  background-color: #5a7190;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
-}
-
-.new-chat-button:active {
-  background-color: #3d5166;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-}
-
 .new-chat-button svg {
   margin-right: 10px;
 }
 
-.import-chat-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 10px;
-  background-color: #4a5f7d;
-  color: white;
-  border: 1px solid #253546;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  cursor: pointer;
-  transition: background-color 0.3s, box-shadow 0.3s;
-  border-radius: 5px;
-  font-size: medium;
-  font-weight: 600;
-  font-family: inherit;
-  width: 35px;
-  height: 40px;
-}
-
-.import-chat-button:hover {
-  background-color: #5a7190;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
-}
-
-.import-chat-button:active {
-  background-color: #3d5166;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-}
+/* import-chat-button inherits from primary-button icon-only */
 
 .conversation-item {
   display: flex;
@@ -1004,23 +968,8 @@ onUnmounted(() => {
 }
 
 .action-button {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: #fff;
-  padding: 5px;
-  border-radius: 5px;
-  transition: background-color 0.3s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   width: 24px;
   height: 24px;
-  margin-left: 5px;
-}
-
-.action-button:hover {
-  background-color: rgba(255, 255, 255, 0.2);
 }
 
 .action-button:focus {
@@ -1040,38 +989,6 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   margin-bottom: 10px;
-}
-
-.add-persona-button {
-  flex: 1;
-  justify-content: center;
-  margin-right: 0px;
-  width: 100%; 
-  white-space: nowrap;
-  display: flex;
-  align-items: center;
-  padding: 10px;
-  background-color: #4a5f7d;
-  color: white;
-  border: 1px solid #253546;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  cursor: pointer;
-  transition: background-color 0.3s, box-shadow 0.3s;
-  border-radius: 5px;
-  font-size: medium;
-  font-weight: 600;
-  font-family: inherit;
-  height: 40px;
-}
-
-.add-persona-button:hover {
-  background-color: #5a7190;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
-}
-
-.add-persona-button:active {
-  background-color: #3d5166;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 .add-persona-button svg {
@@ -1185,63 +1102,9 @@ onUnmounted(() => {
   color: #c8d0e0;
 }
 
-.import-persona-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 10px;
-  background-color: #4a5f7d;
-  color: white;
-  border: 1px solid #253546;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  cursor: pointer;
-  transition: background-color 0.3s, box-shadow 0.3s;
-  border-radius: 5px;
-  font-size: medium;
-  font-weight: 600;
-  font-family: inherit;
-  width: 35px;
-  height: 40px;
-}
+/* import-persona-button inherits from primary-button icon-only */
 
-.import-persona-button:hover {
-  background-color: #5a7190;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
-}
-
-.import-persona-button:active {
-  background-color: #3d5166;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-}
-
-.create-folder-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 10px;
-  background-color: #4a5f7d;
-  color: white;
-  border: 1px solid #253546;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  cursor: pointer;
-  transition: background-color 0.3s, box-shadow 0.3s;
-  border-radius: 5px;
-  font-size: medium;
-  font-weight: 600;
-  font-family: inherit;
-  width: 35px;
-  height: 40px;
-}
-
-.create-folder-button:hover {
-  background-color: #5a7190;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
-}
-
-.create-folder-button:active {
-  background-color: #3d5166;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-}
+/* create-folder-button inherits from primary-button icon-only */
 
 .folder-container {
   margin-bottom: 10px;
@@ -1302,23 +1165,8 @@ onUnmounted(() => {
 }
 
 .folder-action-button {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: #fff;
-  padding: 5px;
-  border-radius: 5px;
-  transition: background-color 0.3s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   width: 20px;
   height: 20px;
-  margin-left: 5px;
-}
-
-.folder-action-button:hover {
-  background-color: rgba(255, 255, 255, 0.2);
 }
 
 .folder-conversations {

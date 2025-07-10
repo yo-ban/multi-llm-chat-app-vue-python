@@ -28,6 +28,9 @@
             <span v-if="localMcpServersConfig[serverName]?.type === 'http'">
               URL: {{ (localMcpServersConfig[serverName] as HttpServerConfig)?.url }}
             </span>
+            <span v-if="localMcpServersConfig[serverName]?.type === 'streamable-http'">
+              URL: {{ (localMcpServersConfig[serverName] as StreamableHttpServerConfig)?.url }}
+            </span>
           </div>
           <div class="item-toggle">
             <label :for="'server-toggle-' + serverName">Enable Server:</label>
@@ -116,7 +119,7 @@
         <div v-if="currentServerEditData.type === 'streamable-http'">
           <div class="field">
             <label for="streamable-http-url">Server URL *</label>
-            <PrimeInputText id="streamable-http-url" v-model="currentHttpConfig.url" placeholder="e.g., http://localhost:8000" />
+            <PrimeInputText id="streamable-http-url" v-model="currentStreamableHttpConfig.url" placeholder="e.g., http://localhost:8000/mcp" />
           </div>
           <!-- Add fields for authentication etc. if needed -->
         </div>
@@ -135,13 +138,11 @@
       </template>
     </PrimeDialog>
 
-    <PrimeConfirmDialog />
-
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, reactive, nextTick } from 'vue';
+import { ref, computed, watch, reactive } from 'vue';
 import type { PropType } from 'vue';
 import PrimeInputSwitch from 'primevue/inputswitch';
 import PrimeAccordion from 'primevue/accordion';
@@ -150,7 +151,6 @@ import PrimeDialog from 'primevue/dialog';
 import PrimeDropdown from 'primevue/dropdown';
 import PrimeInputText from 'primevue/inputtext';
 import PrimeTextarea from 'primevue/textarea';
-import PrimeConfirmDialog from 'primevue/confirmdialog'; // Import ConfirmDialog
 import { useConfirm } from "primevue/useconfirm"; // Import useConfirm
 
 // Import MCP types
@@ -223,68 +223,29 @@ const envJsonError = ref('');
 
 // --- Computed Properties ---
 const serverNames = computed(() => Object.keys(localMcpServersConfig.value).sort());
-const serverTypes = ref(['stdio', 'http']);
+const serverTypes = ref(['stdio', 'http', 'streamable-http']);
 
 // Group available tools by server name
 const groupedAvailableTools = computed(() => {
   const groups: Record<string, { serverName: string; tools: CanonicalToolDefinition[] }> = {};
-  const mcpPrefix = "mcp-"; // Assuming this prefix convention
 
   props.availableMcpTools.forEach(tool => {
-    if (tool.name.startsWith(mcpPrefix)) {
-      // Extract server name (handle hyphens in server name)
-      const nameWithoutPrefix = tool.name.substring(mcpPrefix.length);
-      let serverName = '';
-      let toolShortName = nameWithoutPrefix; // Default if no server found
-
-      // Find the longest matching server key
-      let bestMatch = '';
-      for (const configuredServerName in localMcpServersConfig.value) {
-        if (nameWithoutPrefix.startsWith(configuredServerName + '-')) {
-          if (configuredServerName.length > bestMatch.length) {
-            bestMatch = configuredServerName;
-          }
-        }
-      }
-
-      if (bestMatch) {
-        serverName = bestMatch;
-      } else {
-        // Fallback if no configured server matches prefix (should ideally not happen)
-        serverName = 'Unknown Server';
-        console.warn(`Could not determine server for tool: ${tool.name}`);
-      }
-
-
-      if (!groups[serverName]) {
-        groups[serverName] = { serverName: serverName, tools: [] };
-      }
-      groups[serverName].tools.push(tool);
-    } else {
-      // Handle tools without the expected prefix if necessary
-      if (!groups['Built-in Tools']) {
-        groups['Built-in Tools'] = { serverName: 'Built-in Tools', tools: [] };
-      }
-      groups['Built-in Tools'].tools.push(tool);
+    const serverName = extractServerNameFromTool(tool.name);
+    
+    if (!groups[serverName]) {
+      groups[serverName] = { serverName, tools: [] };
     }
+    groups[serverName].tools.push(tool);
   });
 
   // Sort groups so that Built-in Tools are always first
   return Object.values(groups).sort((a, b) => {
-    if (a.serverName === 'Built-in Tools') {
-      return -1;
-    }
-    if (b.serverName === 'Built-in Tools') {
-      return 1;
-    }
+    if (a.serverName === 'Built-in Tools') return -1;
+    if (b.serverName === 'Built-in Tools') return 1;
     return a.serverName.localeCompare(b.serverName);
   });
 });
 
-// Default open accordion tabs (all)
-// const defaultOpenAccordionTabs = computed(() => {
-//   return groupedAvailableTools.value.map((_, index) => index);
-// });
 
 // Check if server data in dialog is valid for saving
 const isServerDataValid = computed(() => {
@@ -296,6 +257,10 @@ const isServerDataValid = computed(() => {
   }
   if (data.type === 'http') {
     const config = data.config as Partial<HttpServerConfig>;
+    return !!config.url;
+  }
+  if (data.type === 'streamable-http') {
+    const config = data.config as Partial<StreamableHttpServerConfig>;
     return !!config.url;
   }
   return false;
@@ -319,6 +284,71 @@ const currentHttpConfig = computed(() => {
   return {}; // http でない場合は空オブジェクト
 });
 
+// Streamable HTTP 設定への安全なアクセス用 computed
+const currentStreamableHttpConfig = computed(() => {
+  if (currentServerEditData.type === 'streamable-http') {
+    // ここで Partial<StreamableHttpServerConfig> にキャスト
+    return currentServerEditData.config as Partial<StreamableHttpServerConfig>;
+  }
+  return {}; // streamable-http でない場合は空オブジェクト
+});
+
+// --- Helper Functions ---
+
+// Deep clone helper
+function deepClone<T>(obj: T): T {
+  return JSON.parse(JSON.stringify(obj));
+}
+
+// Parse environment string to object
+function parseEnvString(envString: string): Record<string, string> | null {
+  try {
+    const parsedEnv = JSON.parse(envString || '{}');
+    if (typeof parsedEnv === 'object' && parsedEnv !== null && !Array.isArray(parsedEnv)) {
+      return Object.entries(parsedEnv).reduce((acc, [key, value]) => {
+        acc[key] = String(value);
+        return acc;
+      }, {} as Record<string, string>);
+    }
+  } catch (e) {
+    // Invalid JSON
+  }
+  return null;
+}
+
+// Extract server name from tool name
+function extractServerNameFromTool(toolName: string): string {
+  const mcpPrefix = "mcp-";
+  if (!toolName.startsWith(mcpPrefix)) {
+    return 'Built-in Tools';
+  }
+  
+  const nameWithoutPrefix = toolName.substring(mcpPrefix.length);
+  
+  // Find the longest matching server key
+  let bestMatch = '';
+  for (const configuredServerName in localMcpServersConfig.value) {
+    if (nameWithoutPrefix.startsWith(configuredServerName + '-')) {
+      if (configuredServerName.length > bestMatch.length) {
+        bestMatch = configuredServerName;
+      }
+    }
+  }
+  
+  return bestMatch || 'Unknown Server';
+}
+
+// Toggle item in a set-based array
+function toggleItemInArray(array: string[], item: string, shouldInclude: boolean): string[] {
+  const set = new Set(array);
+  if (shouldInclude) {
+    set.add(item);
+  } else {
+    set.delete(item);
+  }
+  return Array.from(set);
+}
+
 // --- Methods ---
 
 // Helper to format command for display
@@ -333,51 +363,35 @@ const formatCommand = (config: ServerConfig | undefined): string => {
 const isServerDisabled = (serverName: string): boolean => {
   return localDisabledMcpServers.value.includes(serverName);
 };
+
 const toggleServerEnabled = (serverName: string, isEnabled: boolean) => {
-  const currentDisabled = new Set(localDisabledMcpServers.value);
-  if (isEnabled) {
-    currentDisabled.delete(serverName);
-  } else {
-    currentDisabled.add(serverName);
-  }
-  // Emit update using computed setter
-  localDisabledMcpServers.value = Array.from(currentDisabled);
+  localDisabledMcpServers.value = toggleItemInArray(localDisabledMcpServers.value, serverName, !isEnabled);
 };
 
 // Tool Enable/Disable
 const isToolDisabled = (toolName: string): boolean => {
   return localDisabledMcpTools.value.includes(toolName);
 };
+
 const toggleToolEnabled = (toolName: string, isEnabled: boolean) => {
-  const currentDisabled = new Set(localDisabledMcpTools.value);
-  if (isEnabled) {
-    currentDisabled.delete(toolName);
-  } else {
-    currentDisabled.add(toolName);
-  }
-  // Emit update using computed setter
-  localDisabledMcpTools.value = Array.from(currentDisabled);
+  localDisabledMcpTools.value = toggleItemInArray(localDisabledMcpTools.value, toolName, !isEnabled);
 };
 
 // Get short name for tool (remove server prefix)
 const getToolShortName = (fullToolName: string): string => {
   const mcpPrefix = "mcp-";
-  if (fullToolName.startsWith(mcpPrefix)) {
-    const nameWithoutPrefix = fullToolName.substring(mcpPrefix.length);
-    // Find the longest matching server key
-    let bestMatch = '';
-    for (const configuredServerName in localMcpServersConfig.value) {
-      if (nameWithoutPrefix.startsWith(configuredServerName + '-')) {
-        if (configuredServerName.length > bestMatch.length) {
-          bestMatch = configuredServerName;
-        }
-      }
-    }
-    if (bestMatch) {
-      return nameWithoutPrefix.substring(bestMatch.length + 1);
-    }
+  if (!fullToolName.startsWith(mcpPrefix)) {
+    return fullToolName;
   }
-  return fullToolName; // Fallback
+  
+  const nameWithoutPrefix = fullToolName.substring(mcpPrefix.length);
+  const serverName = extractServerNameFromTool(fullToolName);
+  
+  if (serverName && serverName !== 'Unknown Server' && serverName !== 'Built-in Tools') {
+    return nameWithoutPrefix.substring(serverName.length + 1);
+  }
+  
+  return fullToolName;
 };
 
 // Server Dialog Logic
@@ -409,12 +423,19 @@ const openEditServerDialog = (serverName: string) => {
   // Deep copy config and handle specific fields for editing
   if (serverToEdit.type === 'stdio') {
     const stdioConfig = serverToEdit as StdioServerConfig;
-    currentServerEditData.config = JSON.parse(JSON.stringify(stdioConfig));
+    currentServerEditData.config = deepClone(stdioConfig);
     currentServerEditData.argsString = stdioConfig.args?.join('\n') ?? '';
     currentServerEditData.envString = stdioConfig.env ? JSON.stringify(stdioConfig.env, null, 2) : '{}';
   } else if (serverToEdit.type === 'http') {
-    currentServerEditData.config = JSON.parse(JSON.stringify(serverToEdit as HttpServerConfig));
+    const httpConfig = serverToEdit as HttpServerConfig;
+    currentServerEditData.config = deepClone(httpConfig);
     // argsString/envString are not relevant for http type
+    currentServerEditData.argsString = '';
+    currentServerEditData.envString = '{}';
+  } else if (serverToEdit.type === 'streamable-http') {
+    const streamableHttpConfig = serverToEdit as StreamableHttpServerConfig;
+    currentServerEditData.config = deepClone(streamableHttpConfig);
+    // argsString/envString are not relevant for streamable-http type
     currentServerEditData.argsString = '';
     currentServerEditData.envString = '{}';
   }
@@ -442,12 +463,10 @@ const confirmDeleteServer = (serverName: string) => {
 const deleteServer = (serverName: string) => {
   const newConfig = { ...localMcpServersConfig.value };
   delete newConfig[serverName];
-  localMcpServersConfig.value = newConfig; // Update via computed setter
+  localMcpServersConfig.value = newConfig;
 
   // Also remove from disabled list if it exists there
-  const currentDisabled = new Set(localDisabledMcpServers.value);
-  currentDisabled.delete(serverName);
-  localDisabledMcpServers.value = Array.from(currentDisabled);
+  localDisabledMcpServers.value = toggleItemInArray(localDisabledMcpServers.value, serverName, false);
 };
 
 // saveServer メソッド内の修正 (finalConfig を作成する部分)
@@ -458,31 +477,28 @@ const saveServer = () => {
   let finalConfig: ServerConfig;
 
   if (currentServerEditData.type === 'stdio') {
-    // currentStdioConfig computed property を使用
     const args = currentServerEditData.argsString.split('\n').map(s => s.trim()).filter(s => s);
-    let env: Record<string, string> | null = null;
-    try {
-      const parsedEnv = JSON.parse(currentServerEditData.envString || '{}');
-      if (typeof parsedEnv === 'object' && parsedEnv !== null && !Array.isArray(parsedEnv)) {
-        env = Object.entries(parsedEnv).reduce((acc, [key, value]) => {
-          acc[key] = String(value);
-          return acc;
-        }, {} as Record<string, string>);
-      } else { throw new Error("Parsed environment variables is not a valid object."); }
-      envJsonError.value = '';
-    } catch (e) { return; }
+    const env = parseEnvString(currentServerEditData.envString);
+    
+    if (envJsonError.value) return; // Don't save if env is invalid
 
     finalConfig = {
       type: 'stdio',
-      command: currentStdioConfig.value.command || '', // computed から取得
+      command: currentStdioConfig.value.command || '',
       args: args,
       env: env,
     };
-  } else { // type === 'http'
+  } else if (currentServerEditData.type === 'http') {
     // currentHttpConfig computed property を使用
     finalConfig = {
       type: 'http',
       url: currentHttpConfig.value.url || '', // computed から取得
+    };
+  } else {
+    // currentStreamableHttpConfig computed property を使用
+    finalConfig = {
+      type: 'streamable-http',
+      url: currentStreamableHttpConfig.value.url || '', // computed から取得
     };
   }
 
@@ -518,39 +534,42 @@ watch(() => currentServerEditData.envString, (newEnvString) => {
     envJsonError.value = '';
     return;
   }
+  
   if (!newEnvString || newEnvString.trim() === '{}' || newEnvString.trim() === '') {
     envJsonError.value = ''; // Allow empty or '{}'
     return;
   }
-  try {
-    const parsed = JSON.parse(newEnvString);
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      envJsonError.value = 'Must be a valid JSON object (e.g., {"KEY": "value"}).';
-    } else {
-      // Optional: Check if all values are strings (or can be stringified)
-      // for (const key in parsed) {
-      //     if (typeof parsed[key] !== 'string') {
-      //         // Potentially warn or auto-convert later during save
-      //     }
-      // }
-      envJsonError.value = ''; // Valid JSON object
-    }
-  } catch (e) {
-    envJsonError.value = 'Invalid JSON format.';
+  
+  const env = parseEnvString(newEnvString);
+  if (env === null) {
+    envJsonError.value = 'Invalid JSON format or not a valid object.';
+  } else {
+    envJsonError.value = '';
   }
 });
 
 
-// Reset specific config fields when type changes
+// Reset specific config fields when type changes (only when adding new server)
 watch(() => currentServerEditData.type, (newType) => {
+  // Skip resetting config if we're editing an existing server
+  if (editingServerName.value) {
+    return;
+  }
+  
   if (newType === 'stdio') {
     // config を Partial<StdioServerConfig> として初期化
     currentServerEditData.config = { type: 'stdio', command: '', args: [], env: {} };
     currentServerEditData.envString = '{}';
     envJsonError.value = '';
-  } else { // http
+  } else if (newType === 'http') { // http
     // config を Partial<HttpServerConfig> として初期化
     currentServerEditData.config = { type: 'http', url: '' };
+    currentServerEditData.argsString = '';
+    currentServerEditData.envString = '{}';
+    envJsonError.value = '';
+  } else {
+    // config を Partial<StreamableHttpServerConfig> として初期化
+    currentServerEditData.config = { type: 'streamable-http', url: '' };
     currentServerEditData.argsString = '';
     currentServerEditData.envString = '{}';
     envJsonError.value = '';
@@ -561,10 +580,6 @@ watch(() => currentServerEditData.type, (newType) => {
 </script>
 
 <style scoped>
-.mcp-settings {
-  /* padding: 16px; Inherited from parent potentially */
-}
-
 .mcp-section {
   margin-bottom: 24px;
   padding: 16px;

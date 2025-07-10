@@ -70,28 +70,27 @@ export const useSettingsStore = defineStore('settings', {
       try {
         // バックエンドに送信するペイロードを作成
         // changedApiKeys を apiKeys として含める
+        const { availableMcpTools, ...stateWithoutTools } = this.$state; // availableMcpToolsを除外
         const payloadToSend = {
-          ...this.$state, // 現在のストアの状態をベースに
+          ...stateWithoutTools, // 現在のストアの状態をベースに（availableMcpTools除く）
           ...adjustedSettings, // 他の変更された設定をマージ
           changedApiKeys: adjustedSettings.changedApiKeys || {}, // 変更されたAPIキーを設定
-          // availableMcpTools は送信不要
           mcpServersConfig: adjustedSettings.mcpServersConfig ?? this.mcpServersConfig,
           disabledMcpServers: adjustedSettings.disabledMcpServers ?? this.disabledMcpServers,
           disabledMcpTools: adjustedSettings.disabledMcpTools ?? this.disabledMcpTools,
         };
-        // availableMcpTools は送信不要
-        delete (payloadToSend as any).availableMcpTools;
 
         // バックエンドAPIは SettingsCreate 型 (apiKeys: Dict[str, str]) を期待している
         const savedSettingsResponse = await backendStorageService.saveGlobalSettings(payloadToSend); // API呼び出し
 
-        // APIから返却された最新の状態 (apiKeys: boolean) でストアを更新
+        // APIから返却された最新の状態でストアを更新
+        // ネストされたオブジェクトは完全に置き換える必要があるため、個別に設定
+        this.mcpServersConfig = savedSettingsResponse.mcpServersConfig || {};
+        this.apiKeys = savedSettingsResponse.apiKeys || DEFAULT_GLOBAL_SETTINGS.apiKeys;
+        
+        // その他のフィールド（配列や単純な値）をpatch
         this.$patch({
           ...savedSettingsResponse,
-          // boolean の辞書でストアを更新
-          apiKeys: savedSettingsResponse.apiKeys || DEFAULT_GLOBAL_SETTINGS.apiKeys,
-          // MCP設定を更新
-          mcpServersConfig: savedSettingsResponse.mcpServersConfig || {},
           disabledMcpServers: savedSettingsResponse.disabledMcpServers || [],
           disabledMcpTools: savedSettingsResponse.disabledMcpTools || [],
           availableMcpTools: savedSettingsResponse.availableMcpTools || [], // 最新のツールリストで更新

@@ -261,7 +261,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed, nextTick } from 'vue';
+import { ref, watch, computed, nextTick, type Ref } from 'vue';
 import { MODELS } from '@/constants/models';
 import type { APISettings } from '@/types/api';
 import type { Model } from '@/types/models';
@@ -411,16 +411,17 @@ const reasoningEffortOptions = ref([
 // Add new ref to track whether the dialog is open
 const isModelDialogOpen = ref(false);
 
+// Common toast function
+function showToast(severity: 'success' | 'error' | 'warn' | 'info', summary: string, detail: string, life: number = 3000) {
+  toast.add({ severity, summary, detail, life });
+}
+
 // APIキーのチェック関数を追加
 const checkApiKey = (vendor: string) => {
   const apiKey = settingsStore.apiKeys[vendor];
   if (!apiKey) {
-    toast.add({
-      severity: 'warn',
-      summary: 'API Key Required',
-      detail: `Please set up your ${vendor.toUpperCase()} API key in Global Settings to use this vendor.`,
-      life: 5000
-    });
+    showToast('warn', 'API Key Required', 
+      `Please set up your ${vendor.toUpperCase()} API key in Global Settings to use this vendor.`, 5000);
     return false;
   }
   return true;
@@ -482,19 +483,7 @@ watch(
   (newSettings) => {
     if (newSettings) {  
       console.log('Settings updated from props:', newSettings);
-      // Directly assign values from props, don't reset maxTokens here
-      localSettings.value = {
-        vendor: newSettings.vendor,
-        model: newSettings.model,
-        temperature: selectedModel.value?.unsupportsTemperature ? undefined : (newSettings.temperature ?? settingsStore.defaultTemperature),
-        maxTokens: newSettings.maxTokens,
-        reasoningParameterType: newSettings.reasoningParameterType,
-        reasoningEffort: newSettings.reasoningEffort,
-        budgetTokens: newSettings.budgetTokens,
-        toolUse: newSettings.toolUse,
-        multimodal: newSettings.multimodal,
-        imageGeneration: newSettings.imageGeneration
-      };
+      syncLocalSettingsFromProps();
       // Update displayedModel based on the initial settings
       // Need to ensure selectedModel recomputes first. Using nextTick might be safest.
       nextTick(() => {
@@ -508,14 +497,9 @@ watch(
 watch(
   () => localSettings.value.model,
   (newModelId, oldModelId) => {
-    if (newModelId === oldModelId || !localSettings.value) return; // localSettings が初期化されていることを確認
+    if (newModelId === oldModelId || !localSettings.value) return;
 
-    let model;
-    if (localSettings.value.vendor === 'openrouter') {
-      model = settingsStore.openrouterModels.find(m => m.id === newModelId);
-    } else {
-      model = Object.values(MODELS[localSettings.value.vendor] || {}).find((m) => m.id === newModelId);
-    }
+    const model = getModelByIdAndVendor(newModelId, localSettings.value.vendor);
 
     if (model) {
       console.log('Model changed (watcher):', {
@@ -537,24 +521,8 @@ watch(
       localSettings.value.multimodal = model.multimodal || false;
       localSettings.value.imageGeneration = model.imageGeneration || false;
 
-      // Handle reasoning parameters based on model type
-      if (model.supportsReasoning && model.reasoningParameters) {
-        if (model.reasoningParameters.type === 'effort') {
-          // If switching to an 'effort' type model
-          localSettings.value.reasoningEffort = model.reasoningParameters.effort || 'medium';
-          // Clear budgetTokens as it's not used by this model type
-          localSettings.value.budgetTokens = undefined;
-        } else if (model.reasoningParameters.type === 'budget') {
-          // If switching to a 'budget' type model
-          localSettings.value.budgetTokens = model.reasoningParameters.budgetTokens || Math.min(4096, model.maxTokens);
-          // Clear reasoningEffort as it's not used by this model type
-          localSettings.value.reasoningEffort = undefined;
-        }
-      } else {
-        // Model doesn't support reasoning, clear both parameters
-        localSettings.value.reasoningEffort = undefined;
-        localSettings.value.budgetTokens = undefined;
-      }
+      // Handle reasoning parameters
+      updateReasoningParameters(model);
 
       // Ensure maxTokens doesn't exceed the model's limit
       localSettings.value.maxTokens = Math.min(localSettings.value.maxTokens || model.maxTokens, model.maxTokens);
@@ -576,7 +544,7 @@ watch(
 
 watch(
   () => settingsStore.openrouterModels,
-  (newModels) => {
+  () => {
     if (localSettings.value.vendor === 'openrouter') {
       // Use validateModelSelection to check and get a valid model ID
       const validModelId = settingsStore.validateModelSelection(localSettings.value.model, localSettings.value.vendor);
@@ -591,7 +559,7 @@ watch(
 );
 
 // Add a new watcher to handle model updates when the selected model changes
-watch(selectedModel, (newModel) => {
+watch(selectedModel, () => {
   if (localSettings.value.vendor === 'openrouter') {
     // Use the validateModelSelection method here too
     const validModelId = settingsStore.validateModelSelection(localSettings.value.model, localSettings.value.vendor);
@@ -602,18 +570,78 @@ watch(selectedModel, (newModel) => {
 }, { immediate: true });
 
 const hasFiles = computed(() => {
-  const currentConversation = conversationStore.conversationList.find(
-    (c) => c.conversationId === conversationStore.currentConversationId
-  );
+  const currentConversation = getCurrentConversation();
   return currentConversation ? Object.keys(currentConversation.files || {}).length > 0 : false;
 });
 
 const fileCount = computed(() => {
-  const currentConversation = conversationStore.conversationList.find(
-    (c) => c.conversationId === conversationStore.currentConversationId
-  );
+  const currentConversation = getCurrentConversation();
   return currentConversation ? Object.keys(currentConversation.files || {}).length : 0;
 });
+
+// Helper functions for common patterns
+function getCurrentConversation() {
+  return conversationStore.conversationList.find(
+    (c) => c.conversationId === conversationStore.currentConversationId
+  );
+}
+
+function syncLocalSettingsFromProps() {
+  if (!props.settings) return;
+  
+  localSettings.value = {
+    vendor: props.settings.vendor,
+    model: props.settings.model,
+    temperature: selectedModel.value?.unsupportsTemperature ? undefined : (props.settings.temperature ?? settingsStore.defaultTemperature),
+    maxTokens: props.settings.maxTokens,
+    reasoningParameterType: props.settings.reasoningParameterType,
+    reasoningEffort: props.settings.reasoningEffort,
+    budgetTokens: props.settings.budgetTokens,
+    toolUse: props.settings.toolUse,
+    multimodal: props.settings.multimodal,
+    imageGeneration: props.settings.imageGeneration
+  };
+}
+
+function createDialog(visibleRef: Ref<boolean>, localValueRef?: Ref<any>, propValue?: any) {
+  return {
+    open() {
+      if (localValueRef && propValue !== undefined) {
+        localValueRef.value = propValue;
+      }
+      visibleRef.value = true;
+    },
+    close() {
+      visibleRef.value = false;
+      if (localValueRef && propValue !== undefined) {
+        localValueRef.value = propValue;
+      }
+    }
+  };
+}
+
+function updateReasoningParameters(model: Model) {
+  if (model.supportsReasoning && model.reasoningParameters) {
+    if (model.reasoningParameters.type === 'effort') {
+      localSettings.value.reasoningEffort = model.reasoningParameters.effort || 'medium';
+      localSettings.value.budgetTokens = undefined;
+    } else if (model.reasoningParameters.type === 'budget') {
+      localSettings.value.budgetTokens = model.reasoningParameters.budgetTokens || Math.min(4096, model.maxTokens);
+      localSettings.value.reasoningEffort = undefined;
+    }
+  } else {
+    localSettings.value.reasoningEffort = undefined;
+    localSettings.value.budgetTokens = undefined;
+  }
+}
+
+function getModelByIdAndVendor(modelId: string, vendor: string) {
+  if (vendor === 'openrouter') {
+    return settingsStore.openrouterModels.find(m => m.id === modelId);
+  } else {
+    return Object.values(MODELS[vendor] || {}).find((m) => m.id === modelId);
+  }
+}
 
 async function exportConversation() {
   await conversationStore.exportConversation(chatStore.messages);
@@ -627,6 +655,11 @@ function toggleMenu(event: Event) {
   menu.value.toggle(event);
 }
 
+// Dialog management using helper
+const modelSettingsDialog = createDialog(modelSettingsDialogVisible);
+const conversationSettingsDialog = createDialog(conversationSettingsDialogVisible, localHistoryLength, props.historyLength);
+const systemMessageDialog = createDialog(systemMessageDialogVisible, localSystemMessage, props.systemMessage);
+
 function openModelSettingsDialog() {
   // Ensure we're using the current conversation settings when opening the dialog
   localSettings.value = JSON.parse(JSON.stringify(props.settings));
@@ -634,25 +667,13 @@ function openModelSettingsDialog() {
   
   // Now open the dialog
   isModelDialogOpen.value = true;
-  modelSettingsDialogVisible.value = true;
+  modelSettingsDialog.open();
 }
 
-// ダイアログを閉じる際のロジック
 function closeModelSettingsDialog() {
   isModelDialogOpen.value = false;
-  modelSettingsDialogVisible.value = false;
-  localSettings.value = {
-    vendor: props.settings.vendor,
-    model: props.settings.model,
-    temperature: props.settings.temperature,
-    maxTokens: props.settings.maxTokens,
-    reasoningParameterType: props.settings.reasoningParameterType,
-    reasoningEffort: props.settings.reasoningEffort,
-    budgetTokens: props.settings.budgetTokens,
-    toolUse: props.settings.toolUse,
-    multimodal: props.settings.multimodal,
-    imageGeneration: props.settings.imageGeneration
-  };
+  modelSettingsDialog.close();
+  syncLocalSettingsFromProps();
   displayedModel.value = selectedModel.value;
 }
 
@@ -663,14 +684,12 @@ function saveModelSettings() {
 }
 
 function openConversationSettingsDialog() {
-  localHistoryLength.value = props.historyLength;
   localSystemMessage.value = props.systemMessage;  
-  conversationSettingsDialogVisible.value = true;
+  conversationSettingsDialog.open();
 }
 
 function closeConversationSettingsDialog() {
-  conversationSettingsDialogVisible.value = false;
-  localHistoryLength.value = props.historyLength;
+  conversationSettingsDialog.close();
   localSystemMessage.value = props.systemMessage;  
 }
 
@@ -680,50 +699,54 @@ async function saveConversationSettings() {
 }
 
 function openSystemMessageDialog() {
-  localSystemMessage.value = props.systemMessage;
-  systemMessageDialogVisible.value = true;
+  systemMessageDialog.open();
 }
 
 function closeSystemMessageDialog() {
-  systemMessageDialogVisible.value = false;
-  localSystemMessage.value = props.systemMessage;
+  systemMessageDialog.close();
 }
 
 function saveSystemMessage() {
   emit('update:system-message', localSystemMessage.value);
   displayedModel.value = selectedModel.value;
-  systemMessageDialogVisible.value = false;
+  closeSystemMessageDialog();
 }
 
 
-// ヘッダーのドロップダウンでの変更時に即座に保存
-function onVendorChange() {
-  // APIキーが設定されているかチェック
-  if (!checkApiKey(localSettings.value.vendor)) {
-    // APIキーが設定されていない場合は、設定ダイアログを開く
-    // openModelSettingsDialog(); 
-    // Revert vendor change if API key is missing? Needs careful consideration.
-    // For now, proceed but reset max tokens based on potentially changed model.
+// Common function for handling model selection changes
+function handleModelSelectionChange(source: 'header' | 'dialog', isVendorChange: boolean = false) {
+  if (isVendorChange && source === 'header') {
+    // APIキーが設定されているかチェック
+    if (!checkApiKey(localSettings.value.vendor)) {
+      // APIキーが設定されていない場合の処理
+    }
   }
 
-  // Important: Wait for Vue's reactivity cycle so selectedModel is updated
   nextTick(() => {
-    // Set maxTokens to the maximum for the (potentially new default) model
-    localSettings.value.maxTokens = selectedModel.value.maxTokens;
-    console.log(`Header Vendor changed. Max tokens set to: ${localSettings.value.maxTokens} for model ${selectedModel.value.id}`);
-    displayedModel.value = selectedModel.value; 
-    emit('update:settings', { ...localSettings.value }); 
+    const model = selectedModel.value;
+    localSettings.value.maxTokens = model.maxTokens;
+    
+    if (source === 'dialog') {
+      updateReasoningParameters(model);
+    }
+    
+    console.log(`${source} ${isVendorChange ? 'Vendor' : 'Model'} changed. Max tokens set to: ${localSettings.value.maxTokens} for model ${model.id}`);
+    displayedModel.value = model;
+    
+    if (source === 'header') {
+      emit('update:settings', { ...localSettings.value });
+    }
   });
+}
+
+// ヘッダーのドロップダウンでの変更時に即座に保存
+function onVendorChange() {
+  handleModelSelectionChange('header', true);
 }
 
 // ヘッダーの Model ドロップダウン変更ハンドラ
 function onModelChange() {
-  nextTick(() => {
-    localSettings.value.maxTokens = selectedModel.value.maxTokens;
-    console.log(`Header Model changed. Max tokens set to: ${localSettings.value.maxTokens} for model ${selectedModel.value.id}`);
-    displayedModel.value = selectedModel.value; 
-    emit('update:settings', { ...localSettings.value }); 
-  });
+  handleModelSelectionChange('header', false);
 }
 
 function onToolUseChange() {
@@ -737,49 +760,11 @@ const isToolUseAvailable = computed(() => {
 
 // --- Add and Implement Dialog Handlers ---
 function onDialogVendorChange() {
-  nextTick(() => {
-    localSettings.value.maxTokens = selectedModel.value.maxTokens;
-    console.log(`Dialog Vendor changed. Max tokens set to: ${localSettings.value.maxTokens} for model ${selectedModel.value.id}`);
-    // DO NOT EMIT settings update here
-  });
+  handleModelSelectionChange('dialog', true);
 }
 
 function onDialogModelChange() {
-  nextTick(() => {
-    // Get the selected model
-    let model;
-    if (localSettings.value.vendor === 'openrouter') {
-      model = settingsStore.openrouterModels.find(m => m.id === localSettings.value.model);
-    } else {
-      model = Object.values(MODELS[localSettings.value.vendor] || {}).find((m) => m.id === localSettings.value.model);
-    }
-
-    if (model) {
-      // Update reasoning parameters based on model type
-      if (model.supportsReasoning && model.reasoningParameters) {
-        if (model.reasoningParameters.type === 'effort') {
-          // If switching to an 'effort' type model
-          localSettings.value.reasoningEffort = model.reasoningParameters.effort || 'medium';
-          // Clear budgetTokens as it's not used by this model type
-          localSettings.value.budgetTokens = undefined;
-        } else if (model.reasoningParameters.type === 'budget') {
-          // If switching to a 'budget' type model
-          localSettings.value.budgetTokens = model.reasoningParameters.budgetTokens || Math.min(4096, model.maxTokens);
-          // Clear reasoningEffort as it's not used by this model type
-          localSettings.value.reasoningEffort = undefined;
-        }
-      } else {
-        // Model doesn't support reasoning, clear both parameters
-        localSettings.value.reasoningEffort = undefined;
-        localSettings.value.budgetTokens = undefined;
-      }
-
-      // Update max tokens
-      localSettings.value.maxTokens = model.maxTokens;
-      console.log(`Dialog Model changed. Max tokens set to: ${localSettings.value.maxTokens} for model ${model.id}`);
-    }
-    // DO NOT EMIT settings update here
-  });
+  handleModelSelectionChange('dialog', false);
 }
 </script>
 

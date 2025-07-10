@@ -60,50 +60,47 @@ const props = defineProps<{
   modelValue: { [key: string]: boolean } // isSet の Map を受け取る
 }>();
 
-// カスタムイベントを定義
 const emit = defineEmits<{
   'update:changedKeys': [{ [key: string]: string }]
-  'reset': [] // リセットイベントを追加
+  'reset': []
 }>();
 
-// ローカルでユーザーの入力を保持する状態 (実際のキーまたはプレースホルダー)
 const localApiKeysInput = ref<{ [key: string]: string }>({});
-// 変更されたキーのみを保持する状態 (実際のキーまたは空文字)
 const changedKeys = ref<{ [key: string]: string }>({});
-// マスク用プレースホルダー
 const maskedPlaceholder = '********';
+
+// Helper function to ensure vendor is string
+function toVendorKey(vendor: string | number): string {
+  return String(vendor);
+}
+
+// Helper function to check if key is visible
+function isKeyMasked(vendor: string, localValue: string): boolean {
+  return localValue === maskedPlaceholder && !isKeyVisible.value[vendor];
+}
 
 const isKeyVisible = ref<{ [key: string]: boolean }>({});
 const isValidating = ref<{ [key: string]: boolean }>({});
 const validationErrors = ref<{ [key: string]: string }>({});
 
-// 入力フィールドのタイプを決定
 const getInputType = (vendor: string | number) => {
-    const key = String(vendor);
-    // キーが表示可能状態 or プレースホルダーでない場合 は 'text'
-    if (isKeyVisible.value[key] || localApiKeysInput.value[key] !== maskedPlaceholder) {
-        return 'text';
-    }
-    // それ以外（マスク状態）は 'password'
-    return 'password';
+    const key = toVendorKey(vendor);
+    return (isKeyVisible.value[key] || localApiKeysInput.value[key] !== maskedPlaceholder) 
+      ? 'text' 
+      : 'password';
 };
 
-// プレースホルダーを決定
 const getPlaceholder = (vendor: string | number) => {
-    const key = String(vendor);
-    // 設定済み（プレースホルダー表示中）かつキー非表示状態なら空
-    if (localApiKeysInput.value[key] === maskedPlaceholder && !isKeyVisible.value[key]) {
-        return `${formatVendorName(vendor)} API Key is configured`;
-    }
-    // 未設定またはキー表示状態なら具体的なプレースホルダー
-    return `Enter ${formatVendorName(vendor)} API Key`;
+    const key = toVendorKey(vendor);
+    return isKeyMasked(key, localApiKeysInput.value[key])
+      ? `${formatVendorName(vendor)} API Key is configured`
+      : `Enter ${formatVendorName(vendor)} API Key`;
 };
 
-// フォーカス時にプレースホルダーを実際の入力値に切り替え
 const onInputFocus = (vendor: string | number) => {
-    const key = String(vendor);
+    const key = toVendorKey(vendor);
     if (localApiKeysInput.value[key] === maskedPlaceholder) {
-        localApiKeysInput.value[key] = ''; // 入力のためにクリア
+        localApiKeysInput.value[key] = '';
     }
 };
 
@@ -127,29 +124,24 @@ watch(
   { deep: true }
 );
 
-// APIキー入力ハンドラ
 const onApiKeyInput = (vendor: string | number) => {
-  const key = String(vendor);
+  const key = toVendorKey(vendor);
   const currentValue = localApiKeysInput.value[key];
 
-  // ユーザーが手動でプレースホルダーと同じ文字列を入力することは想定しない
-  // もし入力値が空になったら変更リストにも空を反映 (クリアボタンと同様)
   if (currentValue === '') {
       changedKeys.value[key] = '';
   } else if (currentValue && currentValue !== maskedPlaceholder) {
       changedKeys.value[key] = currentValue;
   } else {
-      // プレースホルダーが表示されている場合（通常フォーカスが外れた時）は変更リストから削除
       delete changedKeys.value[key];
   }
 };
 
-// APIキークリア処理
 const clearApiKey = (vendor: string | number) => {
-  const key = String(vendor);
-  localApiKeysInput.value[key] = ''; // ローカル入力をクリア
-  changedKeys.value[key] = ''; // 変更リストに空文字を設定（削除シグナル）
-  isKeyVisible.value[key] = false; // マスク状態に戻す
+  const key = toVendorKey(vendor);
+  localApiKeysInput.value[key] = '';
+  changedKeys.value[key] = '';
+  isKeyVisible.value[key] = false;
   validationErrors.value[key] = '';
 };
 
@@ -174,19 +166,6 @@ watch(
   { deep: true, immediate: true }
 );
 
-// リセットを処理するイベントリスナーを追加
-watch(
-  () => props,
-  () => {
-    // 親コンポーネントから'reset'イベントをリッスン
-    const onReset = () => {
-      changedKeys.value = {};
-    };
-    
-    // 親から'reset'イベントが来たときにローカルの変更をリセット
-    onReset();
-  }
-);
 </script>
 
 <style scoped>

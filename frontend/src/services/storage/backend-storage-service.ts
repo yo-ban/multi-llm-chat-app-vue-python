@@ -53,8 +53,6 @@ class BackendStorageServiceImpl implements BackendStorageService {
 
   async saveGlobalSettings(settings: Partial<GlobalSettings> & { changedApiKeys?: { [key: string]: string } }): Promise<GlobalSettings> {
     try {
-      console.log('Saving settings to backend:', JSON.stringify(settings));
-
       const response = await fetch(`${API_BASE_URL}/settings`, {
         method: 'PUT',
         headers: {
@@ -87,7 +85,7 @@ class BackendStorageServiceImpl implements BackendStorageService {
 
       // Get the saved settings from response 
       const savedData: GlobalSettings = await response.json(); // boolean の apiKeys を含むレスポンス
-      console.log('Settings saved successfully. Response:', JSON.stringify(savedData));
+      console.log('Settings saved successfully.'); // Response:', JSON.stringify(savedData));
       return savedData;
     } catch (error) {
       console.error('Network or other error saving global settings:', error);
