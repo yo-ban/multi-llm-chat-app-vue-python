@@ -402,6 +402,13 @@ const displayedModel = ref(selectedModel.value);
 const localHistoryLength = ref(props.historyLength || 0);
 const localSystemMessage = ref(props.systemMessage || '');
 
+// Sync localSystemMessage with props when conversation changes
+watch(() => props.systemMessage, (newValue) => {
+  if (!conversationSettingsDialogVisible.value && !systemMessageDialogVisible.value) {
+    localSystemMessage.value = newValue || '';
+  }
+});
+
 const reasoningEffortOptions = ref([
   { label: 'Low', value: 'low' },
   { label: 'Medium', value: 'medium' },
@@ -658,7 +665,7 @@ function toggleMenu(event: Event) {
 // Dialog management using helper
 const modelSettingsDialog = createDialog(modelSettingsDialogVisible);
 const conversationSettingsDialog = createDialog(conversationSettingsDialogVisible, localHistoryLength, props.historyLength);
-const systemMessageDialog = createDialog(systemMessageDialogVisible, localSystemMessage, props.systemMessage);
+const systemMessageDialog = createDialog(systemMessageDialogVisible);
 
 function openModelSettingsDialog() {
   // Ensure we're using the current conversation settings when opening the dialog
@@ -684,13 +691,11 @@ function saveModelSettings() {
 }
 
 function openConversationSettingsDialog() {
-  localSystemMessage.value = props.systemMessage;  
   conversationSettingsDialog.open();
 }
 
 function closeConversationSettingsDialog() {
   conversationSettingsDialog.close();
-  localSystemMessage.value = props.systemMessage;  
 }
 
 async function saveConversationSettings() {

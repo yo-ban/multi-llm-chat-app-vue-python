@@ -181,21 +181,12 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       multimodal: true,
       supportsReasoning: false,
       supportFunctionCalling: true,
-    },
-    OPENAI_GPT_4_O: {
-      id: 'gpt-4o',
-      name: 'GPT-4o',
-      contextWindow: 128000,
-      maxTokens: 16384,
-      multimodal: true,
-      supportsReasoning: false,
-      supportFunctionCalling: true,
     }
   },
   google: {
-    GEMINI_2_5_PRO_PREVIEW_06_05: {
-      id: 'gemini-2.5-pro-preview-06-05',
-      name: 'Gemini 2.5 Pro Preview 06-05',
+    GEMINI_2_5_PRO: {
+      id: 'gemini-2.5-pro',
+      name: 'Gemini 2.5 Pro',
       contextWindow: 1048576,
       maxTokens: 65536,
       multimodal: true,
@@ -207,9 +198,9 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
         budgetTokens: 4096,
       },
     },
-    GEMINI_2_5_FLASH_PREVIEW_05_20:{
-      id: 'gemini-2.5-flash-preview-05-20',
-      name: 'Gemini 2.5 Flash Preview 05-20',
+    GEMINI_2_5_FLASH:{
+      id: 'gemini-2.5-flash',
+      name: 'Gemini 2.5 Flash',
       contextWindow: 1048576,
       maxTokens: 65536,
       multimodal: true,
@@ -221,14 +212,19 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
         budgetTokens: 4096,
       },
     },
-    GEMINI_2_5_PRO_PREVIEW: {
-      id: 'gemini-2.5-pro-preview-03-25',
-      name: 'Gemini 2.5 Pro Preview 03-25',
+    GEMINI_2_5_FLASH_LITE_PREVIEW_06_17:{
+      id: 'gemini-2.5-flash-lite-preview-06-17',
+      name: 'Gemini 2.5 Flash Lite Preview 06-17',
       contextWindow: 1048576,
       maxTokens: 65536,
       multimodal: true,
       supportFunctionCalling: true,
       supportsReasoning: true,
+      reasoningParameters: {
+        type: 'budget',
+        budgetTokenLimit: 24576,
+        budgetTokens: 4096,
+      },
     },
     GEMINI_2_0_FLASH_EXP_IMAGE_GENERATION: {
       id: 'gemini-2.0-flash-exp-image-generation',
@@ -240,15 +236,6 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       supportFunctionCalling: true,
       supportsReasoning: false,
     },
-    GEMINI_2_5_PRO_EXP: {
-      id: 'gemini-2.5-pro-exp-03-25',
-      name: 'Gemini 2.5 Pro Experimental 03-25',
-      contextWindow: 1048576,
-      maxTokens: 65536,
-      multimodal: true,
-      supportFunctionCalling: true,
-      supportsReasoning: true,
-    },
     GEMINI_2_0_FLASH: {
       id: 'gemini-2.0-flash',
       name: 'Gemini 2.0 Flash',
@@ -257,9 +244,31 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       multimodal: true,
       supportFunctionCalling: true,
       supportsReasoning: false,
+    },
+    GEMINI_2_5_PRO_EXP: {
+      id: 'gemini-2.5-pro-exp-03-25',
+      name: 'Gemini 2.5 Pro Experimental 03-25',
+      contextWindow: 1048576,
+      maxTokens: 65536,
+      multimodal: true,
+      supportFunctionCalling: true,
+      supportsReasoning: true,
     }
   },
   xai: {
+    XAI_GROK_4: {
+      id: 'grok-4-latest',
+      name: 'Grok 4',
+      contextWindow: 256000,
+      maxTokens: 131072,
+      multimodal: false,
+      supportFunctionCalling: true,
+      supportsReasoning: true,
+      reasoningParameters: {
+        type: 'effort',
+        effort: 'high',
+      },
+    },
     XAI_GROK_3_MINI_BETA: {
       id: 'grok-3-mini-beta',
       name: 'Grok 3 Mini Beta',

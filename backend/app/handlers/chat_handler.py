@@ -300,7 +300,9 @@ class ChatHandler:
         image_generation: bool = False
     ) -> Any:
         """Handle Anthropic API requests"""
-        anthropic = AsyncAnthropic(api_key=self.api_key)
+        anthropic = AsyncAnthropic(
+            api_key=self.api_key
+        )
         anthropic_messages = await prepare_anthropic_messages(messages)
 
         params = {
@@ -327,6 +329,7 @@ class ChatHandler:
 
             model = model.replace("-thinking", "")
             params["model"] = model
+            params["temperature"] = 1.0
 
         response = None
 
