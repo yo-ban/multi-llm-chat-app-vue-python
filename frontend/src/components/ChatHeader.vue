@@ -228,13 +228,42 @@
           </div>
         </div>
         <div class="settings-section">
+          <h3 class="settings-section-header">Persona</h3>
+          <div class="settings-item">
+            <label for="persona-select" class="settings-label">Select Persona:</label>
+            <div class="settings-control">
+              <PrimeDropdown
+                id="persona-select"
+                v-model="localPersonaId"
+                :options="personaOptions"
+                optionLabel="name"
+                optionValue="id"
+                placeholder="Select a persona"
+                class="persona-dropdown"
+                @change="onPersonaChange"
+              >
+                <template #option="slotProps">
+                  <div class="persona-option">
+                    <img v-if="slotProps.option.image" :src="slotProps.option.image" :alt="slotProps.option.name" class="persona-option-image" />
+                    <span>{{ slotProps.option.name }}</span>
+                  </div>
+                </template>
+              </PrimeDropdown>
+            </div>
+          </div>
+        </div>
+        <div class="settings-section">
           <h3 class="settings-section-header">System Message</h3>
           <div class="settings-item">
             <div class="settings-control">
-              <div class="system-message-container">
-                <textarea id="system-message" v-model="localSystemMessage" rows="10" class="settings-textarea" readonly></textarea>
-              </div>
-              <PrimeButton label="Edit" @click="openSystemMessageDialog" class="edit-button" />
+              <textarea 
+                id="system-message" 
+                v-model="localSystemMessage" 
+                rows="10" 
+                class="settings-textarea"
+                @input="onSystemMessageInput"
+              ></textarea>
+              <small class="system-message-hint">Edit the system message above. Changing the text will automatically set the persona to "Custom".</small>
             </div>
           </div>
         </div>
@@ -246,28 +275,19 @@
         </div>
       </template>
     </PrimeDialog>
-    <PrimeDialog v-model:visible="systemMessageDialogVisible" modal header="Edit System Message" :style="{ width: '600px' }" :closable="false" :draggable="false">
-      <div class="system-message-dialog-content">
-        <textarea v-model="localSystemMessage" rows="10" class="system-message-textarea"></textarea>
-      </div>
-      <template #footer>
-        <div class="system-message-dialog-footer">
-          <PrimeButton label="Cancel" icon="pi pi-times" @click="closeSystemMessageDialog" class="p-button-text" />
-          <PrimeButton label="Save" icon="pi pi-check" @click="saveSystemMessage" class="p-button-primary"/>
-        </div>
-      </template>
-    </PrimeDialog>
 </div>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, computed, nextTick, type Ref } from 'vue';
 import { MODELS } from '@/constants/models';
+import { PERSONAS } from '@/constants/personas';
 import type { APISettings } from '@/types/api';
 import type { Model } from '@/types/models';
 import { useConversationStore } from '@/store/conversation';
 import { useChatStore } from '@/store/chat';
 import { useSettingsStore } from '@/store/settings';
+import { usePersonaStore } from '@/store/persona';
 import { useToast } from 'primevue/usetoast';
 
 const props = defineProps({
@@ -297,7 +317,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['update:settings', 'update:history-length', 'open-file-management', 'update:system-message', 'regenerate-conversation-title', 'refresh-context-window']);
+const emit = defineEmits(['update:settings', 'update:history-length', 'open-file-management', 'update:system-message', 'update:persona-id', 'regenerate-conversation-title', 'refresh-context-window']);
 
 const menu = ref();
 const items = ref([
@@ -332,12 +352,12 @@ const items = ref([
 
 const modelSettingsDialogVisible = ref(false);
 const conversationSettingsDialogVisible = ref(false);
-const systemMessageDialogVisible = ref(false);
 
-const localPersonaId = ref(props.personaId);
+const localPersonaId = ref(props.personaId || 'custom');
 const conversationStore = useConversationStore();
 const chatStore = useChatStore();
 const settingsStore = useSettingsStore();
+const personaStore = usePersonaStore();
 const toast = useToast();
 
 const localSettings = ref<APISettings>(JSON.parse(JSON.stringify(props.settings)));
@@ -402,10 +422,27 @@ const displayedModel = ref(selectedModel.value);
 const localHistoryLength = ref(props.historyLength || 0);
 const localSystemMessage = ref(props.systemMessage || '');
 
+// Computed property for persona options
+const personaOptions = computed(() => {
+  const options = [
+    { id: 'custom', name: 'Custom', image: null },
+    ...PERSONAS.map(p => ({ id: p.id, name: p.name, image: p.image })),
+    ...personaStore.userDefinedPersonas.map(p => ({ id: p.id, name: p.name, image: p.image }))
+  ];
+  return options;
+});
+
 // Sync localSystemMessage with props when conversation changes
 watch(() => props.systemMessage, (newValue) => {
-  if (!conversationSettingsDialogVisible.value && !systemMessageDialogVisible.value) {
+  if (!conversationSettingsDialogVisible.value) {
     localSystemMessage.value = newValue || '';
+  }
+});
+
+// Sync localPersonaId with props when conversation changes
+watch(() => props.personaId, (newValue) => {
+  if (!conversationSettingsDialogVisible.value) {
+    localPersonaId.value = newValue || 'custom';
   }
 });
 
@@ -423,6 +460,33 @@ function showToast(severity: 'success' | 'error' | 'warn' | 'info', summary: str
   toast.add({ severity, summary, detail, life });
 }
 
+// Handle persona selection change
+function onPersonaChange() {
+  if (localPersonaId.value === 'custom') {
+    // Don't change the system message for custom
+    return;
+  }
+  
+  // Find the selected persona and update system message
+  const allPersonas = [...PERSONAS, ...personaStore.userDefinedPersonas];
+  const selectedPersona = allPersonas.find(p => p.id === localPersonaId.value);
+  
+  if (selectedPersona) {
+    localSystemMessage.value = selectedPersona.systemMessage;
+  }
+}
+
+// Handle system message input
+function onSystemMessageInput() {
+  // If user manually edits the message, set persona to custom
+  const allPersonas = [...PERSONAS, ...personaStore.userDefinedPersonas];
+  const matchingPersona = allPersonas.find(p => p.systemMessage === localSystemMessage.value && p.id === localPersonaId.value);
+  
+  if (!matchingPersona && localPersonaId.value !== 'custom') {
+    localPersonaId.value = 'custom';
+  }
+}
+
 // APIキーのチェック関数を追加
 const checkApiKey = (vendor: string) => {
   const apiKey = settingsStore.apiKeys[vendor];
@@ -434,13 +498,6 @@ const checkApiKey = (vendor: string) => {
   return true;
 };
 
-watch(
-  () => props.personaId,
-  (newPersonaId) => {
-    localPersonaId.value = newPersonaId;
-    console.log('Received Persona:', newPersonaId);
-  }
-);
 
 watch(
   () => localSettings.value.vendor,
@@ -664,8 +721,6 @@ function toggleMenu(event: Event) {
 
 // Dialog management using helper
 const modelSettingsDialog = createDialog(modelSettingsDialogVisible);
-const conversationSettingsDialog = createDialog(conversationSettingsDialogVisible, localHistoryLength, props.historyLength);
-const systemMessageDialog = createDialog(systemMessageDialogVisible);
 
 function openModelSettingsDialog() {
   // Ensure we're using the current conversation settings when opening the dialog
@@ -691,32 +746,23 @@ function saveModelSettings() {
 }
 
 function openConversationSettingsDialog() {
-  conversationSettingsDialog.open();
+  conversationSettingsDialogVisible.value = true;
 }
 
 function closeConversationSettingsDialog() {
-  conversationSettingsDialog.close();
+  conversationSettingsDialogVisible.value = false;
+  // Reset local state to match the conversation
+  localHistoryLength.value = props.historyLength;
+  localSystemMessage.value = props.systemMessage;
+  localPersonaId.value = props.personaId || 'custom';
 }
 
 async function saveConversationSettings() {
   emit('update:history-length', localHistoryLength.value);
+  emit('update:system-message', localSystemMessage.value);
+  emit('update:persona-id', localPersonaId.value);
   closeConversationSettingsDialog();
 }
-
-function openSystemMessageDialog() {
-  systemMessageDialog.open();
-}
-
-function closeSystemMessageDialog() {
-  systemMessageDialog.close();
-}
-
-function saveSystemMessage() {
-  emit('update:system-message', localSystemMessage.value);
-  displayedModel.value = selectedModel.value;
-  closeSystemMessageDialog();
-}
-
 
 // Common function for handling model selection changes
 function handleModelSelectionChange(source: 'header' | 'dialog', isVendorChange: boolean = false) {
@@ -987,6 +1033,21 @@ function onDialogModelChange() {
   font-size: 14px;
 }
 
+.system-message-edit {
+  width: 100%;
+}
+
+.edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.system-message-display {
+  width: 100%;
+}
+
 :deep(.menu-item) {
   &:focus {
     outline: 2px solid var(--primary-color);
@@ -1038,5 +1099,29 @@ function onDialogModelChange() {
 
 :deep(.p-inputnumber.p-invalid .p-inputtext) {
   border-color: var(--red-500) !important;
+}
+
+.persona-dropdown {
+  width: 100%;
+}
+
+.persona-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.persona-option-image {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.system-message-hint {
+  color: var(--text-color-secondary);
+  font-size: 0.875rem;
+  margin-top: 4px;
+  display: block;
 }
 </style>

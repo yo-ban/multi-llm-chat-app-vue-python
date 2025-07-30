@@ -8,7 +8,8 @@
       :system-message="currentConversationSystemMessage"
       @update:settings="updateSettings"
       @update:history-length="updateHistoryLength"
-      @update:system-message="updateSystemMessageManualy"
+      @update:system-message="updateSystemMessageManually"
+      @update:persona-id="updatePersonaIdManually"
       @open-file-management="openFileManagement"
       @regenerate-conversation-title="reGenerateChatTitle"
     />
@@ -394,11 +395,16 @@ function updateSystemMessage(newSystemMessage: string) {
   systemMessage.value = newSystemMessage;
 }
 
-async function updateSystemMessageManualy(newSystemMessage: string) {
+async function updateSystemMessageManually(newSystemMessage: string) {
   const currentConversationId = conversationStore.currentConversationId;
   if (currentConversationId) {
       await conversationStore.updateConversationSystem(currentConversationId, newSystemMessage, currentPersonaId.value);
   }
+}
+
+async function updatePersonaIdManually(newPersonaId: string) {
+  currentPersonaId.value = newPersonaId;
+  // Persona ID is saved together with system message
 }
 
 function fixStreamingMessages() {
