@@ -40,3 +40,4 @@ temp
 *.tsbuildinfo
 stats.html
 backend/api copy.py
+.serena
