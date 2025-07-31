@@ -493,8 +493,10 @@ async function sendMessage() {
     // Prepare API settings with proper handling of temperature and reasoning support
     const apiSettings = {
       ...currentConversationSettings.value,
-      isReasoningSupported: selectedModel.value.supportsReasoning || false,
+      // Don't override isReasoningSupported - use the value from conversation settings
+      // which is already managed by the settings dialog
     };
+    
 
     // Only include temperature if the model supports it
     if (selectedModel.value.unsupportsTemperature) {

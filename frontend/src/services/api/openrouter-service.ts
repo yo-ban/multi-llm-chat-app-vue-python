@@ -66,7 +66,12 @@ class OpenRouterServiceImpl implements OpenRouterService {
     const modalityInput = model.architecture.modality.split('->')[0];
     const isMultimodal = modalityInput.includes('image');
 
-    console.log(`Model ${model.id} modality: ${model.architecture.modality}, isMultimodal: ${isMultimodal}`);
+    // supported_parametersにtoolsとtool_choiceがあるかチェック
+    const supportsToolUse = model.supported_parameters
+      ? model.supported_parameters.includes('tools') && model.supported_parameters.includes('tool_choice')
+      : false;
+
+    console.log(`Model ${model.id} modality: ${model.architecture.modality}, isMultimodal: ${isMultimodal}, supportsToolUse: ${supportsToolUse}`);
 
     return {
       id: model.id,
@@ -76,7 +81,7 @@ class OpenRouterServiceImpl implements OpenRouterService {
       multimodal: isMultimodal,
       description: model.description || '',
       pricing: model.pricing,
-      supportFunctionCalling: false  // デフォルトでは無効
+      supportFunctionCalling: supportsToolUse
     };
   }
 }

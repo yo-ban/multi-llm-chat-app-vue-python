@@ -33,6 +33,7 @@ export interface OpenRouterModel {
     pricing: OpenRouterModelPricing;
     top_provider: OpenRouterModelTopProvider;
     per_request_limits: PerRequestLimits | null;
+    supported_parameters?: string[];
 }
 
 export interface OpenRouterModelsResponse {

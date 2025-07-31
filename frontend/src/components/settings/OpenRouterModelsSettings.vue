@@ -40,8 +40,12 @@
               <span class="detail-value">{{ model.multimodal ? 'Yes' : 'No' }}</span>
             </div>
             <div class="detail-item">
-              <span class="detail-label">Function Calling:</span>
+              <span class="detail-label">Tool Use:</span>
               <span class="detail-value">{{ model.supportFunctionCalling ? 'Yes' : 'No' }}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Reasoning:</span>
+              <span class="detail-value">{{ model.supportsReasoning ? 'Yes' : 'No' }}</span>
             </div>
           </div>
         </div>
@@ -132,7 +136,17 @@
               v-model="editingModel.supportFunctionCalling"
               :binary="true"
             />
-            <span>Supports Function Calling (Web Search)</span>
+            <span>Supports Tool Use (Web Search)</span>
+          </label>
+        </div>
+
+        <div class="form-field">
+          <label class="checkbox-label">
+            <PrimeCheckbox
+              v-model="editingModel.supportsReasoning"
+              :binary="true"
+            />
+            <span>Supports Reasoning</span>
           </label>
         </div>
       </div>
@@ -226,7 +240,8 @@ async function fetchModelInfo(modelId: string) {
         contextWindow: customModel.contextWindow,
         maxTokens: customModel.maxTokens,
         multimodal: customModel.multimodal,
-        supportFunctionCalling: customModel.supportFunctionCalling
+        supportFunctionCalling: customModel.supportFunctionCalling,
+        supportsReasoning: editingModel.value.supportsReasoning // Preserve user's reasoning setting
       };
     } else {
       errorMessage.value = 'Model not found in OpenRouter API';
@@ -260,10 +275,22 @@ const removeModel = (index: number) => {
 // モデルの保存
 const saveModel = () => {
   const models = [...localModels.value];
-  if (editingIndex.value === -1) {
-    models.push({ ...editingModel.value });
+  const modelToSave = { ...editingModel.value };
+  
+  // supportsReasoningがtrueの場合、reasoningParametersを設定
+  if (modelToSave.supportsReasoning) {
+    modelToSave.reasoningParameters = {
+      type: 'effort',
+      effort: 'medium'
+    };
   } else {
-    models[editingIndex.value] = { ...editingModel.value };
+    modelToSave.reasoningParameters = undefined;
+  }
+  
+  if (editingIndex.value === -1) {
+    models.push(modelToSave);
+  } else {
+    models[editingIndex.value] = modelToSave;
   }
   localModels.value = models;
   closeModelDialog();

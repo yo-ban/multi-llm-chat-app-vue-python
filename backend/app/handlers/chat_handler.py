@@ -737,7 +737,10 @@ class ChatHandler:
             "temperature": temperature,
             "extra_body": { 
                 "provider": {
+                    "sort": 'throughput',
                     "order": [
+                        "Z.AI",
+                        "Groq",
                         "DeepInfra",
                         "Parasail"
                     ],
@@ -748,8 +751,10 @@ class ChatHandler:
             }
         }
 
-        if temperature is not None and not is_reasoning_supported:
-            completion_args["temperature"] = temperature
+        log_info(f"OpenRouter Model:{model}, Reasoning:{is_reasoning_supported}, ReasoningEffort:{reasoning_effort}")
+
+        # if temperature is not None and not is_reasoning_supported:
+        #     completion_args["temperature"] = temperature
             
         if is_reasoning_supported and reasoning_effort:
             completion_args["reasoning_effort"] = reasoning_effort
