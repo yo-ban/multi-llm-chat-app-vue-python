@@ -329,7 +329,6 @@ class ChatHandler:
 
             model = model.replace("-thinking", "")
             params["model"] = model
-            params["temperature"] = 1.0
 
         response = None
 
