@@ -104,6 +104,7 @@ async def gemini_stream_generator(
                             part = event.candidates[0].content.parts[0]
 
                             if part.inline_data:
+                                log_info("Processing inline image data")
                                 async for inline_chunk in _yield_inline_image(part.inline_data):
                                     yield inline_chunk
 
@@ -688,6 +689,8 @@ async def anthropic_stream_generator(
         usage = {}
         tool_input_json = ""
         partial_text = ""
+        partial_thinking_text = ""
+        thinking_signature = ""
         current_tool_name = None
         current_tool_id = None
         should_continue = True
@@ -723,6 +726,9 @@ async def anthropic_stream_generator(
                 elif event.type == "content_block_delta":
                     if event.delta.type == "thinking_delta":
                         print(f"{event.delta.thinking}", end="", flush=True)
+                        partial_thinking_text += event.delta.thinking
+                    elif event.delta.type == "signature_delta":
+                        thinking_signature = event.delta.signature
                     elif event.delta.type == "text_delta":
                         yield f"data: {json.dumps({'text': event.delta.text})}\n\n"
                         partial_text += event.delta.text
@@ -755,6 +761,16 @@ async def anthropic_stream_generator(
                                 if tool_result:
                                     # Use the running parameters which contain the full conversation context
                                     tool_use_content = []
+
+                                    # if partial_thinking_text is not none, add thinking block to tool_use_content
+                                    if partial_thinking_text:
+                                        tool_use_content.append(
+                                            {
+                                                "type": "thinking",
+                                                "thinking": partial_thinking_text,
+                                                "signature": thinking_signature
+                                            }
+                                        )
 
                                     # if partial_text is not none, add text block to tool_use_content
                                     if partial_text:
@@ -827,6 +843,8 @@ async def anthropic_stream_generator(
                                         yield f"data: {json.dumps({'text': '\n\n'})}\n\n"
 
                                     partial_text = ""
+                                    partial_thinking_text = ""
+                                    thinking_signature = ""
 
                                     # Break the inner loop to start processing the new response
                                     break

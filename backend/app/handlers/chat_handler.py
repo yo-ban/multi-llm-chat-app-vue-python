@@ -328,6 +328,7 @@ class ChatHandler:
                 }
 
             model = model.replace("-thinking", "")
+            params.pop("temperature", None) # remove temperature if present
             params["model"] = model
 
         response = None
@@ -440,6 +441,7 @@ class ChatHandler:
                     # include_thoughts=True
                 )
 
+        log_info("Image generation flag: " + str(image_generation))
         if image_generation:
             completion_args["response_modalities"] = [
                 "IMAGE",

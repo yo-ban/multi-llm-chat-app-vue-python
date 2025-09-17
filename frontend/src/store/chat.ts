@@ -29,7 +29,7 @@ export const useChatStore = defineStore('chat', {
           lastMessage.streamedText = text;
           if (image) {
             if (!lastMessage.images) {
-              lastMessage.images = [];
+              lastMessage.images = [image];
             } else {
               lastMessage.images = [...lastMessage.images, image];
             }

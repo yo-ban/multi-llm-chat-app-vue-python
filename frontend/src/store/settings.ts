@@ -10,7 +10,7 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
     acc[vendor] = false; // デフォルトは未設定 (false)
     return acc;
   }, {} as { [key: string]: boolean }),
-  defaultTemperature: 0.7,
+  defaultTemperature: 1.0,
   defaultMaxTokens: 4096,
   defaultVendor: 'anthropic',
   defaultModel: MODELS.anthropic.CLAUDE_SONNET_4.id,

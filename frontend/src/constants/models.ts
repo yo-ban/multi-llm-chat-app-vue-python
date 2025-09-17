@@ -199,14 +199,14 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
         budgetTokens: 4096,
       },
     },
-    GEMINI_2_0_FLASH_EXP_IMAGE_GENERATION: {
-      id: 'gemini-2.0-flash-exp-image-generation',
-      name: 'Gemini 2.0 Flash (Image Generation) Experimental',
+    GEMINI_2_5_FLASH_IMAGE_PREVIEW: {
+      id: 'gemini-2.5-flash-image-preview',
+      name: 'Gemini 2.5 Flash Image Preview',
       contextWindow: 32768,
-      maxTokens: 8192,
+      maxTokens: 32768,
       multimodal: true,
       imageGeneration: true,
-      supportFunctionCalling: true,
+      supportFunctionCalling: false,
       supportsReasoning: false,
     },
     GEMINI_2_0_FLASH: {
@@ -223,6 +223,19 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
     XAI_GROK_4: {
       id: 'grok-4-latest',
       name: 'Grok 4',
+      contextWindow: 256000,
+      maxTokens: 131072,
+      multimodal: false,
+      supportFunctionCalling: true,
+      supportsReasoning: true,
+      reasoningParameters: {
+        type: 'effort',
+        effort: 'high',
+      },
+    },
+    XAI_GROK_CODE_FAST_1: {
+      id: 'grok-code-fast-1',
+      name: 'Grok Code Fast 1',
       contextWindow: 256000,
       maxTokens: 131072,
       multimodal: false,

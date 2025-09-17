@@ -240,7 +240,7 @@ class LLMServiceImpl implements LLMService {
         images,
       }));
 
-      const temperature = 0.7;
+      const temperature = 1.0;
       const maxTokens = 512;
       const vendor = settingsStore.titleGenerationVendor;
       const model = settingsStore.titleGenerationModel;
