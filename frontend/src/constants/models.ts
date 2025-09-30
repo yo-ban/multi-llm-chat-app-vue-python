@@ -3,11 +3,11 @@ import type { ReasoningParameters } from '@/types/reasoning';
 
 export const MODELS: { [key: string]: { [key: string]: Model } } = {
   anthropic: {
-    CLAUDE_SONNET_4: {
-      id: 'claude-sonnet-4-20250514',
-      name: 'Claude Sonnet 4',
+    CLAUDE_SONNET_4_5:{
+      id: 'claude-sonnet-4-5-20250929',
+      name: 'Claude Sonnet 4.5',
       contextWindow: 200000,
-      maxTokens: 32000,
+      maxTokens: 64000,
       multimodal: true,
       supportFunctionCalling: true,
       supportsReasoning: false,
@@ -21,9 +21,23 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
       supportFunctionCalling: true,
       supportsReasoning: false,
     },
-    CLAUDE_SONNET_4_THINKING: {
-      id: 'claude-sonnet-4-20250514-thinking',
-      name: 'Claude Sonnet 4 (with Thinking)',
+    CLAUDE_SONNET_4_5_THINKING:{
+      id: 'claude-sonnet-4-5-20250929-thinking',
+      name: 'Claude Sonnet 4.5 (with Thinking)',
+      contextWindow: 200000,
+      maxTokens: 64000,
+      multimodal: true,
+      supportFunctionCalling: true,
+      supportsReasoning: true,
+      reasoningParameters: {
+        type: 'budget',
+        budgetTokenLimit: 31999,
+        budgetTokens: 4096,
+      } as ReasoningParameters,
+    },
+    CLAUDE_OPUS_4_1_THINKING: {
+      id: 'claude-opus-4-1-20250805-thinking',
+      name: 'Claude Opus 4.1 (with Thinking)',
       contextWindow: 200000,
       maxTokens: 32000,
       multimodal: true,
@@ -35,11 +49,20 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
         budgetTokens: 4096,
       },
     },
-    CLAUDE_OPUS_4_1_THINKING: {
-      id: 'claude-opus-4-1-20250805-thinking',
-      name: 'Claude Opus 4.1 (with Thinking)',
+    CLAUDE_SONNET_4: {
+      id: 'claude-sonnet-4-20250514',
+      name: 'Claude Sonnet 4',
       contextWindow: 200000,
-      maxTokens: 32000,
+      maxTokens: 64000,
+      multimodal: true,
+      supportFunctionCalling: true,
+      supportsReasoning: false,
+    },
+    CLAUDE_SONNET_4_THINKING: {
+      id: 'claude-sonnet-4-20250514-thinking',
+      name: 'Claude Sonnet 4 (with Thinking)',
+      contextWindow: 200000,
+      maxTokens: 64000,
       multimodal: true,
       supportFunctionCalling: true,
       supportsReasoning: true,
