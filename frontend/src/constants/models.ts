@@ -49,18 +49,18 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
         budgetTokens: 4096,
       },
     },
-    CLAUDE_SONNET_4: {
-      id: 'claude-sonnet-4-20250514',
-      name: 'Claude Sonnet 4',
+    CLAUDE_HAIKU_4_5: {
+      id: 'claude-haiku-4-5-20251001',
+      name: 'Claude Haiku 4.5',
       contextWindow: 200000,
       maxTokens: 64000,
       multimodal: true,
       supportFunctionCalling: true,
       supportsReasoning: false,
     },
-    CLAUDE_SONNET_4_THINKING: {
-      id: 'claude-sonnet-4-20250514-thinking',
-      name: 'Claude Sonnet 4 (with Thinking)',
+    CLAUDE_HAIKU_4_5_THINKING: {
+      id: 'claude-haiku-4-5-20251001-thinking',
+      name: 'Claude Haiku 4.5 (with Thinking)',
       contextWindow: 200000,
       maxTokens: 64000,
       multimodal: true,
@@ -72,14 +72,6 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
         budgetTokens: 4096,
       },
     },
-    CLAUDE_3_HAIKU: {
-      id: 'claude-3-haiku-20240307',
-      name: 'Claude 3 Haiku',
-      contextWindow: 200000,
-      maxTokens: 4096,
-      multimodal: true,
-      supportsReasoning: false,
-    }
   },
   openai: {
     OPENAI_GPT_5: {
