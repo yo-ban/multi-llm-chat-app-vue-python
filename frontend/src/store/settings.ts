@@ -13,10 +13,10 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   defaultTemperature: 1.0,
   defaultMaxTokens: 4096,
   defaultVendor: 'anthropic',
-  defaultModel: MODELS.anthropic.CLAUDE_SONNET_4.id,
+  defaultModel: MODELS.anthropic.CLAUDE_HAIKU_4_5.id,
   openrouterModels: [],
   titleGenerationVendor: 'anthropic',
-  titleGenerationModel: MODELS.anthropic.CLAUDE_3_HAIKU.id,
+  titleGenerationModel: MODELS.anthropic.CLAUDE_HAIKU_4_5.id,
   // --- MCP Defaults ---
   mcpServersConfig: {},
   disabledMcpServers: [],

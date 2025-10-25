@@ -157,7 +157,7 @@ const currentConversationSettings = computed<APISettings>(() => {
   if (!currentConversation.value) {
     return {
       vendor: 'anthropic',
-      model: MODELS.anthropic.CLAUDE_SONNET_4.id,
+      model: MODELS.anthropic.CLAUDE_HAIKU_4_5.id,
       maxTokens: 4096,
       temperature: 0.5,
     };
@@ -287,7 +287,7 @@ const selectedModel = computed(() => {
   } else {
     // Standard vendor model lookup
     const vendorModels = MODELS[vendor] || {};
-    result = Object.values(vendorModels).find(m => m.id === model) || MODELS.anthropic.CLAUDE_SONNET_4;
+    result = Object.values(vendorModels).find(m => m.id === model) || MODELS.anthropic.CLAUDE_HAIKU_4_5;
   }
   
   // Cache the result
