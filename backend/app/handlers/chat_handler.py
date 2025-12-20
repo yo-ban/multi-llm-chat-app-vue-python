@@ -42,6 +42,7 @@ from poly_mcp_client.models import CanonicalToolDefinition # 型ヒントのた�
 
 from app.misc_utils.image_utils import upload_image_to_gemini
 from app.domain.messages.schemas import ChatRequest
+from app.message_utils.reasoning_params import build_gemini_thinking_config_kwargs
 from app.function_calling.definitions import (
     get_tool_definitions, 
     get_gemini_tool_definitions, 
@@ -82,6 +83,7 @@ class ChatHandler:
         reasoning_effort: Optional[str] = None,
         is_reasoning_supported: bool = False,
         reasoning_parameter_type: Optional[str] = None,
+        reasoning_level: Optional[str] = None,
         budget_tokens: Optional[int] = None,
         multimodal: bool = False,
         image_generation: bool = False
@@ -184,6 +186,7 @@ class ChatHandler:
         reasoning_effort: Optional[str] = None,
         is_reasoning_supported: bool = False,
         reasoning_parameter_type: Optional[str] = None,
+        reasoning_level: Optional[str] = None,
         budget_tokens: Optional[int] = None,
         multimodal: bool = False,
         image_generation: bool = False
@@ -295,6 +298,7 @@ class ChatHandler:
         reasoning_effort: Optional[str] = None,
         is_reasoning_supported: bool = False,
         reasoning_parameter_type: Optional[str] = None,
+        reasoning_level: Optional[str] = None,
         budget_tokens: Optional[int] = None,
         multimodal: bool = False,
         image_generation: bool = False
@@ -333,6 +337,12 @@ class ChatHandler:
 
         response = None
 
+        # if "opus-4-5" in model:
+        #     params["betas"] = ["effort-2025-11-24"]
+        #     params["output_config"] = {
+        #         "effort": reasoning_effort
+        #     }
+ 
         if toolUse and enabled_tools:
             params["tools"] = get_anthropic_tool_definitions(canonical_tools=enabled_tools)
             if "claude-3-7" in model:
@@ -395,6 +405,7 @@ class ChatHandler:
         reasoning_effort: Optional[str] = None,
         is_reasoning_supported: bool = False,
         reasoning_parameter_type: Optional[str] = None,
+        reasoning_level: Optional[str] = None,
         budget_tokens: Optional[int] = None,
         multimodal: bool = False,
         image_generation: bool = False
@@ -435,11 +446,13 @@ class ChatHandler:
         }
 
         if is_reasoning_supported:
-            if reasoning_parameter_type == "budget" and budget_tokens is not None:
-                completion_args["thinking_config"] = ThinkingConfig(
-                    thinking_budget=budget_tokens,
-                    # include_thoughts=True
-                )
+            thinking_config_kwargs = build_gemini_thinking_config_kwargs(
+                reasoning_parameter_type=reasoning_parameter_type,
+                budget_tokens=budget_tokens,
+                reasoning_level=reasoning_level,
+            )
+            if thinking_config_kwargs:
+                completion_args["thinking_config"] = ThinkingConfig(**thinking_config_kwargs)
 
         log_info("Image generation flag: " + str(image_generation))
         if image_generation:
@@ -612,6 +625,7 @@ class ChatHandler:
         reasoning_effort: Optional[str] = None,
         is_reasoning_supported: bool = False,
         reasoning_parameter_type: Optional[str] = None,
+        reasoning_level: Optional[str] = None,
         budget_tokens: Optional[int] = None,
         multimodal: bool = False,
         image_generation: bool = False
@@ -718,6 +732,7 @@ class ChatHandler:
         reasoning_effort: Optional[str] = None,
         is_reasoning_supported: bool = False,
         reasoning_parameter_type: Optional[str] = None,
+        reasoning_level: Optional[str] = None,
         budget_tokens: Optional[int] = None,
         multimodal: bool = False,
         image_generation: bool = False
@@ -901,6 +916,7 @@ class ChatHandler:
                 reasoning_effort=chat_request.reasoningEffort,
                 is_reasoning_supported=chat_request.isReasoningSupported,
                 reasoning_parameter_type=chat_request.reasoningParameterType,
+                reasoning_level=chat_request.reasoningLevel,
                 budget_tokens=chat_request.budgetTokens,
                 multimodal=chat_request.multimodal,
                 image_generation=chat_request.imageGeneration,

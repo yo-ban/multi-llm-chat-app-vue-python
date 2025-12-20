@@ -186,6 +186,24 @@
               </small>
             </div>
           </div>
+          <!-- Gemini Thinking Level 設定 -->
+          <div class="settings-item" v-if="selectedModel.supportsReasoning && selectedModel.reasoningParameters?.type === 'level'">
+            <label for="reasoning-level" class="settings-label">Reasoning Level:</label>
+            <div class="settings-control">
+              <PrimeDropdown
+                id="reasoning-level"
+                v-model="localSettings.reasoningLevel"
+                :options="reasoningLevelOptions"
+                optionLabel="label"
+                optionValue="value"
+                placeholder="Select Reasoning Level"
+                class="settings-dropdown"
+              />
+              <small class="parameter-description">
+                Controls the Gemini ThinkingConfig level (Low or High) available for this model.
+              </small>
+            </div>
+          </div>
         </div>
       </div>
       <template #footer>
@@ -452,6 +470,27 @@ const reasoningEffortOptions = ref([
   { label: 'High', value: 'high' },
 ]);
 
+const reasoningLevelOptions = computed(() => {
+  const model = selectedModel.value;
+  const defaultOptions = ['low', 'high'];
+  if (model?.reasoningParameters?.type === 'level') {
+    const rawLevels = model.reasoningParameters.levels && model.reasoningParameters.levels.length > 0
+      ? model.reasoningParameters.levels
+      : defaultOptions;
+    return rawLevels.map((value) => {
+      const normalized = value.trim().toLowerCase();
+      return {
+        label: normalized.charAt(0).toUpperCase() + normalized.slice(1),
+        value: normalized,
+      };
+    });
+  }
+  return defaultOptions.map((value) => ({
+    label: value.charAt(0).toUpperCase() + value.slice(1),
+    value,
+  }));
+});
+
 // Add new ref to track whether the dialog is open
 const isModelDialogOpen = ref(false);
 
@@ -652,7 +691,7 @@ function getCurrentConversation() {
 
 function syncLocalSettingsFromProps() {
   if (!props.settings) return;
-  
+
   localSettings.value = {
     vendor: props.settings.vendor,
     model: props.settings.model,
@@ -661,6 +700,8 @@ function syncLocalSettingsFromProps() {
     reasoningParameterType: props.settings.reasoningParameterType,
     reasoningEffort: props.settings.reasoningEffort,
     budgetTokens: props.settings.budgetTokens,
+    reasoningLevel: props.settings.reasoningLevel,
+    isReasoningSupported: props.settings.isReasoningSupported,
     toolUse: props.settings.toolUse,
     multimodal: props.settings.multimodal,
     imageGeneration: props.settings.imageGeneration
@@ -689,14 +730,33 @@ function updateReasoningParameters(model: Model) {
     if (model.reasoningParameters.type === 'effort') {
       localSettings.value.reasoningEffort = model.reasoningParameters.effort || 'medium';
       localSettings.value.budgetTokens = undefined;
+      localSettings.value.reasoningLevel = undefined;
     } else if (model.reasoningParameters.type === 'budget') {
       localSettings.value.budgetTokens = model.reasoningParameters.budgetTokens || Math.min(4096, model.maxTokens);
       localSettings.value.reasoningEffort = undefined;
+      localSettings.value.reasoningLevel = undefined;
+    } else if (model.reasoningParameters.type === 'level') {
+      const normalizedLevel = normalizeReasoningLevel(
+        model.reasoningParameters.level,
+        model.reasoningParameters.levels
+      );
+      localSettings.value.reasoningLevel = normalizedLevel;
+      localSettings.value.reasoningEffort = undefined;
+      localSettings.value.budgetTokens = undefined;
     }
   } else {
     localSettings.value.reasoningEffort = undefined;
     localSettings.value.budgetTokens = undefined;
+    localSettings.value.reasoningLevel = undefined;
   }
+}
+
+function normalizeReasoningLevel(level?: string, supportedLevels?: string[]): 'low' | 'high' {
+  const fallback = supportedLevels && supportedLevels.length > 0
+    ? supportedLevels[0]
+    : 'high';
+  const normalized = (level || fallback || 'high').trim().toLowerCase();
+  return normalized === 'low' ? 'low' : 'high';
 }
 
 function getModelByIdAndVendor(modelId: string, vendor: string) {

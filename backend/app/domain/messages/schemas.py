@@ -31,8 +31,9 @@ class ChatRequest(BaseModel):
     system: str = ""
     stream: bool = True
     isReasoningSupported: bool = False
-    reasoningParameterType: Optional[str] = None  # 'effort', 'budget'
+    reasoningParameterType: Optional[str] = None  # 'effort', 'budget', 'level'
     reasoningEffort: Optional[str] = None  # 'low', 'medium', 'high'
+    reasoningLevel: Optional[str] = None  # 'low', 'high' (Gemini thinking level)
     budgetTokens: Optional[int] = None
     toolUse: bool = False
     multimodal: bool = False

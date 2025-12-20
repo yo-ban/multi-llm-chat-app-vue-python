@@ -1,6 +1,8 @@
-export type ReasoningParameterType = 'effort' | 'budget';
+export type ReasoningParameterType = 'effort' | 'budget' | 'level';
 
 export type ReasoningEffortType = 'low' | 'medium' | 'high';
+
+export type ReasoningLevelType = 'low' | 'high';
 
 export interface EffortReasoningParams {
   type: 'effort';
@@ -13,4 +15,10 @@ export interface BudgetReasoningParams {
   budgetTokens: number;
 }
 
-export type ReasoningParameters = EffortReasoningParams | BudgetReasoningParams;
+export interface LevelReasoningParams {
+  type: 'level';
+  level: ReasoningLevelType;
+  levels?: ReasoningLevelType[];
+}
+
+export type ReasoningParameters = EffortReasoningParams | BudgetReasoningParams | LevelReasoningParams;

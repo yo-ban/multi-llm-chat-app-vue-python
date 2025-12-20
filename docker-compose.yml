@@ -66,7 +66,7 @@ services:
       # Pass the list of repositories as a build argument
       args:
         # Replace with your actual repository URLs, space-separated
-        - MCP_REPOS=https://github.com/yo-ban/svg-preview-mcp.git # https://github.com/yo-ban/url-image-mcp.git # 
+        - MCP_REPOS= #https://github.com/yo-ban/svg-preview-mcp.git # https://github.com/yo-ban/url-image-mcp.git # 
     container_name: mcp-server-container
     # Expose expected ports if needed for host access or documentation
     expose:

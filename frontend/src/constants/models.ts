@@ -3,6 +3,20 @@ import type { ReasoningParameters } from '@/types/reasoning';
 
 export const MODELS: { [key: string]: { [key: string]: Model } } = {
   anthropic: {
+    CLAUDE_OPUS_4_5: {
+      id: 'claude-opus-4-5-20251101',
+      name: 'Claude Opus 4.5',
+      contextWindow: 200000,
+      maxTokens: 64000,
+      multimodal: true,
+      supportFunctionCalling: true,
+      supportsReasoning: true,
+      reasoningParameters: {
+        type: 'budget',
+        budgetTokenLimit: 31999,
+        budgetTokens: 4096,
+      }  as ReasoningParameters,
+    },
     CLAUDE_SONNET_4_5:{
       id: 'claude-sonnet-4-5-20250929',
       name: 'Claude Sonnet 4.5',
@@ -172,6 +186,20 @@ export const MODELS: { [key: string]: { [key: string]: Model } } = {
     }
   },
   google: {
+    GEMINI_3_PRO_PREVIEW: {
+      id: 'gemini-3-pro-preview',
+      name: 'Gemini 3 Pro Preview',
+      contextWindow: 2097152,
+      maxTokens: 131072,
+      multimodal: true,
+      supportFunctionCalling: true,
+      supportsReasoning: true,
+      reasoningParameters: {
+        type: 'level',
+        level: 'high',
+        levels: ['low', 'high'],
+      } as ReasoningParameters,
+    },
     GEMINI_2_5_PRO: {
       id: 'gemini-2.5-pro',
       name: 'Gemini 2.5 Pro',

@@ -207,6 +207,7 @@ class LLMServiceImpl implements LLMService {
           reasoningParameterType: settings.reasoningParameterType,
           reasoningEffort: settings.reasoningParameterType === 'effort' ? settings.reasoningEffort : undefined,
           budgetTokens: settings.reasoningParameterType === 'budget' ? settings.budgetTokens : undefined,
+          reasoningLevel: settings.reasoningParameterType === 'level' ? settings.reasoningLevel : undefined,
           multimodal: settings.multimodal,
           imageGeneration: settings.imageGeneration
         }),

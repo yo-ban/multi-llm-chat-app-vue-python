@@ -1,4 +1,4 @@
-import type { ReasoningEffortType, ReasoningParameterType } from './reasoning';
+import type { ReasoningEffortType, ReasoningLevelType, ReasoningParameterType } from './reasoning';
 
 export interface APISettings {
   vendor: string;
@@ -9,6 +9,8 @@ export interface APISettings {
   reasoningEffort?: ReasoningEffortType;
   /** Reasoning のための開始トークン予算（該当する場合に送信）。 */
   budgetTokens?: number;
+  /** Gemini ThinkingConfig level. */
+  reasoningLevel?: ReasoningLevelType;
   /** 選択されたモデルが Reasoning をサポートしているかどうかのフラグ。 */
   isReasoningSupported?: boolean;
   /** オプション：バックエンドがどのパラメータセット（'effort' or 'budget'）を適用するか判断するのに役立ちます。 */

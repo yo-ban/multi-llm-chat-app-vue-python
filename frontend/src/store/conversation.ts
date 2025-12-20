@@ -80,6 +80,9 @@ export const useConversationStore = defineStore('conversation', {
           modelId = settingsStore.validateModelSelection(modelId, settingsStore.defaultVendor);
         }
         const model = settingsStore.getModelById(modelId);
+        const defaultReasoningLevel = model?.reasoningParameters?.type === 'level'
+          ? (model.reasoningParameters.level || model.reasoningParameters.levels?.[0] || 'high')
+          : undefined;
         const newConversation: Conversation = {
           conversationId: newConversationId,
           title: 'New Chat',
@@ -93,6 +96,7 @@ export const useConversationStore = defineStore('conversation', {
             temperature: model?.unsupportsTemperature ? undefined : settingsStore.defaultTemperature,
             reasoningEffort: settingsStore.getEffectiveReasoningEffort(modelId),
             budgetTokens: model?.reasoningParameters?.type === 'budget' ? model.reasoningParameters.budgetTokens : undefined,
+            reasoningLevel: defaultReasoningLevel,
             isReasoningSupported: model?.supportsReasoning,
             reasoningParameterType: model?.reasoningParameters?.type,
             toolUse: false, //settingsStore.toolUse,

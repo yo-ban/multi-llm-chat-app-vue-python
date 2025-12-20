@@ -120,11 +120,13 @@ export const useSettingsStore = defineStore('settings', {
       const model = this.getModelById(modelId);
       if (!model?.supportsReasoning || !model.reasoningParameters) {
         return undefined;
-      } else if (model.reasoningParameters.type === 'budget') {
-        return undefined;
-      } else {
-        return model.reasoningParameters.effort;
       }
+
+      if (model.reasoningParameters.type !== 'effort') {
+        return undefined;
+      }
+
+      return model.reasoningParameters.effort;
     },
 
     // Check if a given modelId is valid for the specified vendor

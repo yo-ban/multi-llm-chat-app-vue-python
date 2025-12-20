@@ -29,6 +29,7 @@ This application provides a chat interface for interacting with multiple Large L
 - **Image Support**:
     - Handle image inputs for multimodal models.
     - Generate images using specific models (e.g., Gemini 2.0 Flash Experimental).
+- **Reasoning Controls**: Choose reasoning effort presets, set Anthropic/OpenAI reasoning budgets, and toggle Gemini 3 Pro Preview thinking levels (LOW/HIGH) directly from the chat header.
 - **Web Search Integration**: Enable web search capabilities for enhanced responses
 - **File Processing**: Upload and extract text from various file formats (PDF, HTML, Markdown, etc.).
 - **MCP Server Integration**: Connects to Model Context Protocol (MCP) compliant servers to leverage local tools and data sources.
